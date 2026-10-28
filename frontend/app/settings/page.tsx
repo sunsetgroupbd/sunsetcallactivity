@@ -232,49 +232,33 @@ function SettingsContent() {
 
         {/* ── Daily Performance Targets Section ───────────────────────────── */}
         <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Target className="w-5 h-5 text-emerald-700" />
-                Daily KPI Target Configurations
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Configure employee daily quota thresholds and benchmarks used for leaderboard tracking.
-              </p>
-            </div>
-
-            <Button variant="primary" size="sm" onClick={openCreateTarget}>
-              <Plus className="w-3.5 h-3.5 mr-1" />
-              Set Target
-            </Button>
-          </div>
-
           <Card>
-              <CardHeader>
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <Sliders className="w-4 h-4 text-emerald-700" />
-                    Target Threshold Configurations
-                  </CardTitle>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Target values used to calculate achievement percentages and leaderboard scores
-                  </p>
-                </div>
-                <Button variant="primary" size="sm" onClick={openCreateTarget}>
-                  <Plus className="w-3.5 h-3.5 mr-1" />
-                  Set Target
-                </Button>
-              </CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between gap-3 p-4 sm:p-5">
+              <div>
+                <CardTitle className="text-sm sm:text-base font-bold flex items-center gap-2 text-slate-900">
+                  <Target className="w-4 h-4 text-emerald-700" />
+                  Daily KPI Targets
+                </CardTitle>
+                <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
+                  Quotas & leaderboard benchmarks
+                </p>
+              </div>
+              <Button variant="primary" size="sm" onClick={openCreateTarget} className="shrink-0">
+                <Plus className="w-3.5 h-3.5 mr-1" />
+                Set Target
+              </Button>
+            </CardHeader>
 
-              {/* ── Mobile App Cards View (< md) ─────────────────────────────── */}
-              <div className="md:hidden space-y-3 p-3 sm:p-4">
-                {loading ? (
-                  <div className="py-8 text-center text-slate-400 text-xs">Loading targets...</div>
-                ) : !Array.isArray(targets) || targets.length === 0 ? (
-                  <div className="py-8 text-center text-slate-400 text-xs">
-                    No custom targets configured yet. Global defaults are active.
-                  </div>
-                ) : (
+            {/* ── Mobile App Cards View (< md) ─────────────────────────────── */}
+            <div className="md:hidden space-y-3 p-3 sm:p-4">
+              {loading ? (
+                <div className="py-8 text-center text-slate-400 text-xs">Loading targets...</div>
+              ) : !Array.isArray(targets) || targets.length === 0 ? (
+                <div className="py-6 px-4 text-center text-slate-500 text-xs bg-slate-50/50 rounded-xl border border-slate-200/80 space-y-1">
+                  <p className="font-semibold text-slate-700">No Custom Targets</p>
+                  <p className="text-[11px] text-slate-400">Global defaults are active for all staff.</p>
+                </div>
+              ) : (
                   targets.map((t) => {
                     const emp = employees.find((e) => e.id === t.employee_id);
                     return (
@@ -424,14 +408,14 @@ function SettingsContent() {
                     <tr className="bg-slate-100/70 border-b border-slate-200 text-slate-700 text-[11px] font-semibold">
                       <th className="py-2.5 px-4">Scope</th>
                       <th className="py-2.5 px-3">Date</th>
-                      <th className="py-2.5 px-3 text-right">Dialed Calls</th>
+                      <th className="py-2.5 px-3 text-right">Dialed</th>
                       <th className="py-2.5 px-3 text-right">Connected</th>
-                      <th className="py-2.5 px-3 text-right">Outdoor Visits</th>
-                      <th className="py-2.5 px-3 text-right">Meeting Time</th>
-                      <th className="py-2.5 px-3 text-right">New Sales (BDT)</th>
-                      <th className="py-2.5 px-3 text-right">TB Target (BDT)</th>
-                      <th className="py-2.5 px-3 text-right">EMI Target (BDT)</th>
-                      <th className="py-2.5 px-3 text-right">Action</th>
+                      <th className="py-2.5 px-3 text-right">Visits</th>
+                      <th className="py-2.5 px-3 text-right">Meetings</th>
+                      <th className="py-2.5 px-3 text-right">New Sales</th>
+                      <th className="py-2.5 px-3 text-right">TB Target</th>
+                      <th className="py-2.5 px-3 text-right">EMI Target</th>
+                      <th className="py-2.5 px-3 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">

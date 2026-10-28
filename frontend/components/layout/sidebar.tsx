@@ -14,6 +14,7 @@ import {
   Settings,
   X,
   BellRing,
+  LogOut,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useNoticesBadge } from "@/lib/use-notices-badge";
@@ -26,7 +27,7 @@ interface SidebarProps {
 
 export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname();
-  const { user, isAdmin, isSubAdmin } = useAuth();
+  const { user, isAdmin, isSubAdmin, logout } = useAuth();
   const { unreadCount, pendingReviewCount } = useNoticesBadge();
 
   const navigation = [
@@ -147,6 +148,14 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                 {user.role} • @{user.username}
               </p>
             </div>
+            <button
+              onClick={() => logout()}
+              title="Logout"
+              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors shrink-0"
+              aria-label="Sign out"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
         </div>
       )}

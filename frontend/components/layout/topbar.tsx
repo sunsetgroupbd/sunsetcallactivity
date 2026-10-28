@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Menu, LogOut, Calendar, ShieldCheck, User as UserIcon } from "lucide-react";
+import { Menu, Calendar, ShieldCheck, User as UserIcon } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { formatReadableDate, getDhakaToday, formatEmployeeId } from "@/lib/utils";
 import { NotificationBell } from "./notification-bell";
@@ -13,7 +13,7 @@ interface TopbarProps {
 }
 
 export function Topbar({ title, subtitle, onOpenMobileMenu }: TopbarProps) {
-  const { user, logout, isAdmin } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [todayDhaka, setTodayDhaka] = React.useState("");
 
   React.useEffect(() => {
@@ -86,15 +86,6 @@ export function Topbar({ title, subtitle, onOpenMobileMenu }: TopbarProps) {
                 )}
               </span>
             </div>
-
-            <button
-              onClick={() => logout()}
-              title="Logout"
-              className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"
-              aria-label="Sign out"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
           </div>
         )}
       </div>

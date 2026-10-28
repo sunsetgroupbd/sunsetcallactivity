@@ -305,8 +305,8 @@ export default function NoticesPage() {
 
   return (
     <DashboardLayout
-      title="Corporate Notice Board"
-      subtitle="Official company circulars, management memos, and executive announcements"
+      title="Notice Board"
+      subtitle="Company circulars & announcements"
     >
       <div className="space-y-6">
         {/* ── Status Feedback Alert ────────────────────────────────────────── */}

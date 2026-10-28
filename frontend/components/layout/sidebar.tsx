@@ -38,8 +38,8 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
     { name: "Notice Board", href: "/notices", icon: BellRing },
     ...(isAdmin
       ? [
-          { name: "Employees", href: "/employees", icon: UserCheck, adminOnly: true },
-          { name: "Settings", href: "/settings", icon: Settings, adminOnly: true },
+          { name: "Employees", href: "/employees", icon: UserCheck },
+          { name: "Settings", href: "/settings", icon: Settings },
         ]
       : []),
   ];
@@ -120,11 +120,6 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                   <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full">
                     {pendingReviewCount}
                   </span>
-                </span>
-              )}
-              {item.adminOnly && (
-                <span className="ml-auto text-[10px] font-semibold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">
-                  Admin
                 </span>
               )}
             </Link>

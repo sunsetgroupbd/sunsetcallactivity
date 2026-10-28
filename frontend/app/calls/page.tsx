@@ -1667,12 +1667,11 @@ function DailyCallActivityContent() {
                 <span className="p-1 rounded bg-amber-100 text-amber-800">
                   <Flame className="w-4 h-4 text-orange-600" />
                 </span>
-                Hot & Follow-Up Client Directory
+                Hot & Follow-Up Leads
               </CardTitle>
               <p className="text-xs text-slate-500 mt-0.5">
-                Record specific customer names, phone numbers, and next follow-up dates for high priority leads.
+                Key contacts & follow-up schedules
               </p>
-
             </div>
             {!isLocked && (
               <Button
@@ -1682,28 +1681,28 @@ function DailyCallActivityContent() {
                 className="flex items-center gap-1.5 text-xs font-bold"
               >
                 <UserPlus className="w-3.5 h-3.5" />
-                + Add Client Lead
+                Add Client Lead
               </Button>
             )}
           </CardHeader>
 
           <CardContent className="p-0">
             {clientContacts.length === 0 ? (
-              <div className="p-6 text-center text-slate-500 text-xs">
-                <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                <p className="font-semibold text-slate-700">No priority clients logged yet today</p>
+              <div className="p-5 text-center text-slate-500 text-xs">
+                <Users className="w-7 h-7 text-slate-300 mx-auto mb-1.5" />
+                <p className="font-semibold text-slate-700">No Priority Clients Logged</p>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  Click &quot;+ Add Client Lead&quot; to note down key customer names, contact numbers, and follow-up schedules.
+                  Log high priority leads & follow-ups here.
                 </p>
                 {!isLocked && (
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={openAddClientModal}
-                    className="mt-3 text-xs"
+                    className="mt-2.5 text-xs"
                   >
                     <UserPlus className="w-3.5 h-3.5 mr-1 text-green-700" />
-                    Add First Client Lead
+                    Add Client Lead
                   </Button>
                 )}
               </div>

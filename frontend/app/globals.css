@@ -34,11 +34,52 @@ input::placeholder, textarea::placeholder {
   opacity: 1;
 }
 
+@page {
+  size: A4 portrait;
+  margin: 10mm 12mm 12mm 12mm;
+}
+
 @media print {
-  body {
+  html, body {
+    width: 100% !important;
+    min-width: 760px !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    font-size: 11px !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
+
+  /* Force desktop-like sheet width during mobile print */
+  .print-page-sheet {
+    width: 100% !important;
+    min-width: 760px !important;
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Prevent page breaks across cards, headers, tables, and signature blocks */
+  .break-inside-avoid,
+  tr,
+  th,
+  td {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  table {
+    width: 100% !important;
+    table-layout: auto !important;
+    border-collapse: collapse !important;
+  }
+
+  thead {
+    display: table-header-group !important;
+  }
 }
+
 
 

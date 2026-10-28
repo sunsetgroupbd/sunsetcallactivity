@@ -341,10 +341,10 @@ function PrintablePeriodSummaryContent() {
       </div>
 
       {/* ── Official Printable Document Sheet (A4 Container) ───────────────────── */}
-      <div className="max-w-5xl mx-auto my-6 bg-white border border-slate-300 p-8 sm:p-10 shadow-sm print:border-none print:shadow-none print:p-0 print:m-0 print:max-w-none text-slate-900 text-xs">
+      <div className="print-page-sheet max-w-5xl mx-auto my-6 bg-white border border-slate-300 p-8 sm:p-10 shadow-sm print:border-none print:shadow-none print:p-0 print:m-0 print:max-w-none text-slate-900 text-xs">
         {/* Document Letterhead */}
         <div className="border-b-2 border-emerald-800 pb-4 mb-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:flex-row print:items-center print:justify-between">
             <div className="flex items-center gap-3.5">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -362,7 +362,7 @@ function PrintablePeriodSummaryContent() {
               </div>
             </div>
 
-            <div className="text-left sm:text-right text-[11px] text-slate-600 space-y-0.5 print:text-[10px]">
+            <div className="text-left sm:text-right text-[11px] text-slate-600 space-y-0.5 print:text-[10px] print:text-right">
               <div>
                 <span className="font-semibold text-slate-700">Period: </span>
                 <span className="font-bold text-slate-900 font-mono">
@@ -397,7 +397,7 @@ function PrintablePeriodSummaryContent() {
             Period Performance Aggregate
           </h2>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs print:grid-cols-4">
             {/* Box 1: Calls */}
             <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
@@ -694,7 +694,7 @@ function PrintablePeriodSummaryContent() {
 
         {/* ── 5. Official Verification & Authorization Signatures ─────────── */}
         <div className="pt-6 border-t border-slate-300 break-inside-avoid">
-          <div className="grid grid-cols-3 gap-6 text-center text-[11px] text-slate-600">
+          <div className="grid grid-cols-3 gap-6 text-center text-[11px] text-slate-600 print:grid-cols-3">
             <div>
               <div className="border-b border-slate-400 pb-1 mb-1.5 h-12 flex items-end justify-center font-serif text-slate-800 italic">
                 {currentUser?.full_name || "Sales Coordinator"}

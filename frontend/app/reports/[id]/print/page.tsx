@@ -280,10 +280,10 @@ function PrintableReportContent() {
       </div>
 
       {/* ── Official Printable Document Sheet (A4 Container) ───────────────────── */}
-      <div className="max-w-5xl mx-auto bg-white border border-slate-300 p-8 sm:p-10 shadow-sm print:border-none print:shadow-none print:p-0 print:max-w-none text-slate-900 text-xs">
+      <div className="print-page-sheet max-w-5xl mx-auto bg-white border border-slate-300 p-8 sm:p-10 shadow-sm print:border-none print:shadow-none print:p-0 print:max-w-none text-slate-900 text-xs">
         {/* Document Header */}
         <div className="border-b-2 border-green-800 pb-4 mb-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:flex-row print:items-center print:justify-between">
             <div className="flex items-center gap-3.5">
               {/* Sunset Group Logo in Small Size */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -311,7 +311,7 @@ function PrintableReportContent() {
           </div>
 
           {/* Meta Bar */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-5 pt-4 border-t border-slate-200">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-5 pt-4 border-t border-slate-200 print:grid-cols-4">
             <div>
               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Staff Officer</span>
               <span className="text-xs font-bold text-slate-900">{report.employee_name || `Employee #${report.employee_id}`}</span>
@@ -341,7 +341,7 @@ function PrintableReportContent() {
             <CheckCircle2 className="w-3.5 h-3.5 text-green-700" />
             Executive Performance Summary (KPIs)
           </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 print:grid-cols-4">
             <div className="border border-slate-300 rounded p-2.5 bg-slate-50/60">
               <span className="text-[10px] font-bold text-slate-600 uppercase block">Calls Dialed / Connected</span>
               <div className="text-base font-extrabold text-slate-900 mt-1">
@@ -616,7 +616,7 @@ function PrintableReportContent() {
         </div>
 
         {/* Official Sign-off & Management Authorization Block */}
-        <div className="pt-8 border-t-2 border-slate-300 grid grid-cols-3 gap-6 text-center text-[11px] text-slate-700">
+        <div className="pt-8 border-t-2 border-slate-300 grid grid-cols-3 gap-6 text-center text-[11px] text-slate-700 print:grid-cols-3 break-inside-avoid">
           <div>
             <div className="h-14 border-b border-dashed border-slate-400 mb-2" />
             <p className="font-bold text-slate-900">{report.employee_name || "Reporting Employee"}</p>

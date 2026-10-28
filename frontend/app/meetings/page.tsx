@@ -853,16 +853,6 @@ function MeetingTimeDailyContent() {
                   />
                 </div>
 
-                <div className="h-4 w-px bg-slate-200 hidden sm:block" />
-
-                <div className="text-xs text-slate-600 flex items-center gap-1.5 flex-wrap">
-                  <span className="text-slate-400">Employee: </span>
-                  <span className="font-semibold text-slate-900">{report?.employee_name || (isSupervisor ? "Select Employee" : user?.full_name)}</span>
-                  <span className="font-mono text-[10px] font-bold bg-green-50 text-green-800 border border-green-200 px-1.5 py-0.2 rounded">
-                    {formatEmployeeId(report?.employee_id || selectedEmpId || user?.id)}
-                  </span>
-                </div>
-
                 <Badge variant={isLocked ? "success" : "warning"}>
                   {isLocked ? "Finalized / Submitted" : "Draft (Editable)"}
                 </Badge>

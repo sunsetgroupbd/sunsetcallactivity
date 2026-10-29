@@ -86,18 +86,18 @@ class UserRepository:
 
     async def get_next_employee_id(self) -> int:
         """
-        Generate year-based numeric employee ID: YYYY001, YYYY002, etc. (e.g. 2026001).
-        Automatically updates year when calendar year changes (e.g. 2026001 -> 2027001 in 2027).
+        Generate year-based numeric employee ID with 4 digits after the year: YYYY0001, YYYY0002, etc. (e.g. 20260001).
+        Automatically updates year when calendar year changes (e.g. 20260001 -> 20270001 in 2027).
         """
         from datetime import datetime, timezone, timedelta
         from sqlalchemy import func
 
         # Business timezone: Asia/Dhaka is UTC+6
         dhaka_year = (datetime.now(timezone.utc) + timedelta(hours=6)).year
-        base_id = dhaka_year * 1000  # e.g. 2026000
-        max_id_limit = (dhaka_year + 1) * 1000  # e.g. 2027000
+        base_id = dhaka_year * 10000  # e.g. 20260000
+        max_id_limit = (dhaka_year + 1) * 10000  # e.g. 20270000
 
-        # Find maximum existing ID in this year's range (e.g. 2026001 - 2026999)
+        # Find maximum existing ID in this year's 8-digit range (e.g. 20260001 - 20269999)
         stmt = select(func.max(User.id)).where(
             User.id >= base_id,
             User.id < max_id_limit,
@@ -107,6 +107,23 @@ class UserRepository:
 
         if max_id is not None and max_id >= (base_id + 1):
             return max_id + 1
+
+        # Check existing 7-digit IDs from old 3-digit scheme (e.g. 2026001 - 2026999)
+        old_base_id = dhaka_year * 1000
+        old_max_limit = (dhaka_year + 1) * 1000
+        stmt_old = select(func.max(User.id)).where(
+            User.id >= old_base_id,
+            User.id < old_max_limit,
+        )
+        try:
+            res_old = await self.db.execute(stmt_old)
+            old_max = res_old.scalar_one_or_none()
+        except Exception:
+            old_max = None
+
+        if old_max is not None and old_max >= (old_base_id + 1):
+            seq = old_max - old_base_id
+            return base_id + seq + 1
 
         # Check legacy short IDs (< 100000) created in the current year
         year_start = datetime(dhaka_year, 1, 1)

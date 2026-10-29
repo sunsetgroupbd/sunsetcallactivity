@@ -87,8 +87,8 @@ export function formatReadableDate(dateStr: string): string {
 }
 
 /**
- * Format numeric user ID into standardized year-based numeric employee code (e.g. 2026001, 2026006, 2027001).
- * Only numbers, automatically incorporates the employee creation year or current year.
+ * Format numeric user ID into standardized year-based numeric employee code with 4 digits after year (e.g. 20260001, 20260006, 20270001).
+ * Total 8 digits: YYYY + 4-digit sequence (0001..9999).
  */
 export function formatEmployeeId(
   id: number | null | undefined,
@@ -96,9 +96,18 @@ export function formatEmployeeId(
 ): string {
   if (!id || id <= 0) return "";
 
-  // If already a full year-based numeric ID (e.g. 2026001, 2027005)
-  if (id >= 2000000) {
-    return String(id);
+  // If already an 8-digit year-based numeric ID (e.g. 20260001, 20270005)
+  if (id >= 20000000 && id < 30000000) {
+    const year = Math.floor(id / 10000);
+    const seq = id % 10000;
+    return `${year}${String(seq).padStart(4, "0")}`;
+  }
+
+  // If previously formatted as a 7-digit ID (e.g. 2026001, 2026002)
+  if (id >= 2000000 && id < 3000000) {
+    const year = Math.floor(id / 1000);
+    const seq = id % 1000;
+    return `${year}${String(seq).padStart(4, "0")}`;
   }
 
   // Determine year: from createdAtOrYear, or fallback to current calendar year
@@ -113,6 +122,6 @@ export function formatEmployeeId(
     year = new Date().getFullYear();
   }
 
-  return `${year}${String(id).padStart(3, "0")}`;
+  return `${year}${String(id).padStart(4, "0")}`;
 }
 

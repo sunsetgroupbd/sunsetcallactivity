@@ -470,7 +470,7 @@ function ReportsContent() {
                   <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
                     type="text"
-                    placeholder="Search by Employee Name, ID (2026001), Report ID (REP-00021), or date..."
+                    placeholder="Search by Employee Name, ID (20260001), Report ID (REP-00021), or date..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full pl-9 pr-8 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-600/30 focus:border-green-600 focus:outline-none bg-white font-medium text-slate-800 placeholder:text-slate-400 shadow-sm"

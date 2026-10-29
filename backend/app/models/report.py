@@ -32,7 +32,7 @@ class DailyActivityReport(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     employee_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+        ForeignKey("users.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False, index=True
     )
     report_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)

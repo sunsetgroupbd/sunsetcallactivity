@@ -28,7 +28,7 @@ class DailyTargets(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     employee_id: Mapped[int | None] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+        ForeignKey("users.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=True, index=True
     )
     effective_from: Mapped[date] = mapped_column(Date, nullable=False, index=True)
 

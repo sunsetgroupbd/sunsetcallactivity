@@ -17,6 +17,7 @@ import {
   Star,
   Target,
   User as UserIcon,
+  AlertTriangle,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import {
@@ -100,6 +101,7 @@ export default function EmployeesPage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
 
   // Form states
+  const [employeeIdInput, setEmployeeIdInput] = useState("");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -160,8 +162,34 @@ export default function EmployeesPage() {
     );
   }, [employees, search]);
 
+  // Check if entered custom Employee ID conflicts with any other existing employee
+  const duplicateEmployee = useMemo(() => {
+    const trimmed = employeeIdInput.trim();
+    if (!trimmed) return null;
+    const numericInput = parseInt(trimmed, 10);
+    if (isNaN(numericInput) || numericInput <= 0) return null;
+
+    return employees.find((e) => {
+      // Exclude current employee being edited
+      if (editingEmployee && e.id === editingEmployee.id) return false;
+
+      // Check raw ID match
+      if (e.id === numericInput) return true;
+
+      // Check formatted employee ID match (e.g. 20260001)
+      const formatted = formatEmployeeId(e.id, e.created_at);
+      if (formatted === trimmed) return true;
+
+      const formattedNum = parseInt(formatted, 10);
+      if (!isNaN(formattedNum) && formattedNum === numericInput) return true;
+
+      return false;
+    });
+  }, [employeeIdInput, employees, editingEmployee]);
+
   const openCreateModal = () => {
     setEditingEmployee(null);
+    setEmployeeIdInput("");
     setFullName("");
     setEmail("");
     setPhone("");
@@ -175,6 +203,7 @@ export default function EmployeesPage() {
 
   const openEditModal = (emp: User) => {
     setEditingEmployee(emp);
+    setEmployeeIdInput(formatEmployeeId(emp.id, emp.created_at));
     setFullName(emp.full_name);
     setEmail(emp.email);
     setPhone(emp.phone || "");
@@ -191,9 +220,18 @@ export default function EmployeesPage() {
     setFormSubmitting(true);
     setFormError(null);
 
+    if (duplicateEmployee) {
+      setFormError(
+        `Employee ID "${employeeIdInput.trim()}" is already assigned to ${duplicateEmployee.full_name} (@${duplicateEmployee.username}). Please choose a unique ID.`
+      );
+      setFormSubmitting(false);
+      return;
+    }
+
     try {
       if (editingEmployee) {
         const payload: {
+          id?: number;
           full_name: string;
           email: string;
           role: UserRole;
@@ -211,9 +249,22 @@ export default function EmployeesPage() {
           payload.password = password.trim();
         }
 
+        const trimmedId = employeeIdInput.trim();
+        if (trimmedId) {
+          const parsedId = parseInt(trimmedId, 10);
+          if (isNaN(parsedId) || parsedId <= 0) {
+            setFormError("Employee ID must be a valid positive number.");
+            setFormSubmitting(false);
+            return;
+          }
+          if (parsedId !== editingEmployee.id) {
+            payload.id = parsedId;
+          }
+        }
+
         const updated = await api.employees.update(editingEmployee.id, payload);
         setEmployees((prev) =>
-          prev.map((item) => (item.id === updated.id ? updated : item))
+          prev.map((item) => (item.id === editingEmployee.id ? updated : item))
         );
         setStatusMessage({
           type: "success",
@@ -225,7 +276,20 @@ export default function EmployeesPage() {
           setFormSubmitting(false);
           return;
         }
+
+        let parsedId: number | undefined = undefined;
+        const trimmedId = employeeIdInput.trim();
+        if (trimmedId) {
+          parsedId = parseInt(trimmedId, 10);
+          if (isNaN(parsedId) || parsedId <= 0) {
+            setFormError("Employee ID must be a valid positive number.");
+            setFormSubmitting(false);
+            return;
+          }
+        }
+
         const created = await api.employees.create({
+          id: parsedId,
           full_name: fullName.trim(),
           email: email.trim(),
           username: username.trim(),
@@ -612,19 +676,56 @@ export default function EmployeesPage() {
               </div>
             )}
 
-            {editingEmployee ? (
-              <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between text-xs">
-                <span className="font-semibold text-slate-600">Employee ID:</span>
-                <span className="font-mono font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-300">
-                  {formatEmployeeId(editingEmployee.id, editingEmployee.created_at)}
+            {/* Employee ID Field (Editable with duplicate warning) */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                  Employee ID {editingEmployee ? "(Editable)" : "(Optional)"}
+                </label>
+                <span className="text-[10px] text-slate-400 font-medium">
+                  {editingEmployee
+                    ? "Unique numeric code (e.g. 20260001)"
+                    : "Leave blank to auto-generate"}
                 </span>
               </div>
-            ) : (
-              <div className="p-2.5 bg-green-50/50 border border-green-200 rounded-lg text-[11px] text-green-900 flex items-center justify-between">
-                <span>Employee ID:</span>
-                <span className="font-semibold font-mono text-green-800">Auto-assigned by system</span>
+
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder={
+                    editingEmployee
+                      ? "e.g. 20260001"
+                      : "Auto-assigned (or enter custom e.g. 20260001)"
+                  }
+                  value={employeeIdInput}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, "");
+                    setEmployeeIdInput(val);
+                  }}
+                  className={`w-full font-mono font-bold text-xs px-3 py-2 border rounded-lg focus:outline-none transition-colors ${
+                    duplicateEmployee
+                      ? "border-rose-400 bg-rose-50/50 text-rose-900 focus:ring-2 focus:ring-rose-500/20"
+                      : "border-slate-300 bg-white text-slate-800 focus:ring-2 focus:ring-green-600/20 focus:border-green-600"
+                  }`}
+                />
               </div>
-            )}
+
+              {/* Duplicate Warning Banner */}
+              {duplicateEmployee && (
+                <div className="p-2.5 bg-rose-50 border border-rose-300 rounded-lg flex items-start gap-2 text-xs text-rose-900 animate-in fade-in">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold">Duplicate Employee ID Warning:</span> ID{" "}
+                    <span className="font-mono font-bold underline">
+                      {employeeIdInput.trim()}
+                    </span>{" "}
+                    is already assigned to{" "}
+                    <span className="font-semibold">{duplicateEmployee.full_name}</span>{" "}
+                    (@{duplicateEmployee.username}). Please enter a unique ID.
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
@@ -744,7 +845,13 @@ export default function EmployeesPage() {
               >
                 Cancel
               </Button>
-              <Button type="submit" variant="primary" size="sm" loading={formSubmitting}>
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                loading={formSubmitting}
+                disabled={formSubmitting || !!duplicateEmployee}
+              >
                 {editingEmployee ? "Update Employee" : "Create Account"}
               </Button>
             </div>

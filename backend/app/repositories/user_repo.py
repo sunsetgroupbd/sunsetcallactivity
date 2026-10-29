@@ -156,6 +156,83 @@ class UserRepository:
         await self.db.refresh(user)
         return user
 
+    async def change_employee_id(self, old_id: int, new_id: int) -> User:
+        """
+        Safely update an employee's numeric ID from old_id to new_id,
+        updating all referencing records (reports, targets, notices) in sync.
+        """
+        from sqlalchemy import text
+        from app.core.config import settings
+
+        user = await self.get_by_id(old_id)
+        if not user:
+            raise ValueError(f"User {old_id} not found")
+
+        # Double check new_id does not exist
+        existing = await self.get_by_id(new_id)
+        if existing and existing.id != old_id:
+            raise ValueError(f"Employee ID {new_id} is already in use by {existing.full_name}")
+
+        is_sqlite = settings.is_sqlite
+        if is_sqlite:
+            await self.db.execute(text("PRAGMA foreign_keys = OFF;"))
+            try:
+                await self.db.execute(
+                    text("UPDATE users SET id = :new_id WHERE id = :old_id"),
+                    {"new_id": new_id, "old_id": old_id},
+                )
+                await self.db.execute(
+                    text("UPDATE daily_activity_reports SET employee_id = :new_id WHERE employee_id = :old_id"),
+                    {"new_id": new_id, "old_id": old_id},
+                )
+                await self.db.execute(
+                    text("UPDATE daily_targets SET employee_id = :new_id WHERE employee_id = :old_id"),
+                    {"new_id": new_id, "old_id": old_id},
+                )
+                await self.db.execute(
+                    text("UPDATE notices SET created_by_id = :new_id WHERE created_by_id = :old_id"),
+                    {"new_id": new_id, "old_id": old_id},
+                )
+                await self.db.execute(
+                    text("UPDATE notices SET approved_by_id = :new_id WHERE approved_by_id = :old_id"),
+                    {"new_id": new_id, "old_id": old_id},
+                )
+                await self.db.flush()
+            finally:
+                await self.db.execute(text("PRAGMA foreign_keys = ON;"))
+        else:
+            try:
+                await self.db.execute(text("SET session_replication_role = 'replica';"))
+                await self.db.execute(
+                    text("UPDATE users SET id = :new_id WHERE id = :old_id"),
+                    {"new_id": new_id, "old_id": old_id},
+                )
+                await self.db.execute(
+                    text("UPDATE daily_activity_reports SET employee_id = :new_id WHERE employee_id = :old_id"),
+                    {"new_id": new_id, "old_id": old_id},
+                )
+                await self.db.execute(
+                    text("UPDATE daily_targets SET employee_id = :new_id WHERE employee_id = :old_id"),
+                    {"new_id": new_id, "old_id": old_id},
+                )
+                await self.db.execute(
+                    text("UPDATE notices SET created_by_id = :new_id WHERE created_by_id = :old_id"),
+                    {"new_id": new_id, "old_id": old_id},
+                )
+                await self.db.execute(
+                    text("UPDATE notices SET approved_by_id = :new_id WHERE approved_by_id = :old_id"),
+                    {"new_id": new_id, "old_id": old_id},
+                )
+                await self.db.flush()
+            finally:
+                await self.db.execute(text("SET session_replication_role = 'origin';"))
+
+        self.db.expire_all()
+        updated_user = await self.get_by_id(new_id)
+        if not updated_user:
+            raise ValueError(f"User {new_id} could not be re-fetched after ID update")
+        return updated_user
+
     async def delete(self, user: User) -> None:
         from app.models.report import DailyActivityReport
         from app.models.targets import DailyTargets

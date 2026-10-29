@@ -572,6 +572,7 @@ export const api = {
       return request<User>(`/employees/${userId}`);
     },
     create: async (data: {
+      id?: number;
       full_name: string;
       email: string;
       phone?: string | null;
@@ -587,6 +588,7 @@ export const api = {
     update: async (
       userId: number,
       data: Partial<{
+        id?: number;
         full_name: string;
         email: string;
         phone?: string | null;

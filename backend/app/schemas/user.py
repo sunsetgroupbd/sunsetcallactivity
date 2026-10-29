@@ -20,9 +20,11 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str = Field(..., min_length=8, max_length=128)
+    id: Optional[int] = Field(None, description="Optional custom numeric Employee ID")
 
 
 class UserUpdate(BaseModel):
+    id: Optional[int] = Field(None, description="Optional updated numeric Employee ID")
     full_name: Optional[str] = Field(None, max_length=200)
     email: Optional[str] = Field(None, max_length=255)
     phone: Optional[str] = Field(None, max_length=50)

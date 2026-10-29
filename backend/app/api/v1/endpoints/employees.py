@@ -46,11 +46,19 @@ async def create_employee(
     db: AsyncSession = Depends(get_db),
 ):
     repo = UserRepository(db)
+    if data.id is not None:
+        existing_id = await repo.get_by_id(data.id)
+        if existing_id:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Employee ID {data.id} is already in use by {existing_id.full_name} (@{existing_id.username})"
+            )
     if await repo.get_by_email(data.email):
         raise HTTPException(status_code=409, detail="Email already registered")
     if await repo.get_by_username(data.username):
         raise HTTPException(status_code=409, detail="Username already taken")
     user = User(
+        id=data.id,
         full_name=data.full_name,
         email=data.email,
         phone=data.phone,
@@ -92,6 +100,21 @@ async def update_employee(
     if current_admin.role == UserRole.SUB_ADMIN and user.role == UserRole.ADMIN and current_admin.id != user.id:
         raise HTTPException(status_code=403, detail="Sub-admin cannot modify an administrator account")
     update_data = data.model_dump(exclude_unset=True)
+
+    # Check if custom Employee ID is changing
+    new_id = update_data.pop("id", None)
+    if new_id is not None and new_id != user_id:
+        existing = await repo.get_by_id(new_id)
+        if existing and existing.id != user_id:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Employee ID {new_id} is already in use by {existing.full_name} (@{existing.username})"
+            )
+        try:
+            user = await repo.change_employee_id(user_id, new_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+
     if "password" in update_data:
         update_data["password_hash"] = hash_password(update_data.pop("password"))
     for field, value in update_data.items():

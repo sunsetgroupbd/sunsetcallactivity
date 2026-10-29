@@ -3,7 +3,10 @@ from __future__ import annotations
 
 import enum
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from app.models.user import User
 
 from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -46,14 +49,14 @@ class Notice(Base):
         Enum(NoticePriority, name="noticepriority"), default=NoticePriority.NORMAL, nullable=False
     )
 
-    created_by_id: Mapped[Optional[int]] = mapped_column(
-        Integer, ForeignKey("users.id", ondelete="SET NULL", onupdate="CASCADE"), nullable=True
+    created_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL", onupdate="CASCADE"), nullable=True
     )
-    approved_by_id: Mapped[Optional[int]] = mapped_column(
-        Integer, ForeignKey("users.id", ondelete="SET NULL", onupdate="CASCADE"), nullable=True
+    approved_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL", onupdate="CASCADE"), nullable=True
     )
-    approval_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    approved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    approval_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -63,10 +66,10 @@ class Notice(Base):
     )
 
     # ── Relationships ─────────────────────────────────────────────────────────
-    created_by: Mapped[Optional["User"]] = relationship(  # noqa: F821
+    created_by: Mapped[User | None] = relationship(
         "User", foreign_keys=[created_by_id], lazy="joined"
     )
-    approved_by: Mapped[Optional["User"]] = relationship(  # noqa: F821
+    approved_by: Mapped[User | None] = relationship(
         "User", foreign_keys=[approved_by_id], lazy="joined"
     )
 

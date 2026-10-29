@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.models.user import User
 
 from sqlalchemy import Date, DateTime, ForeignKey, Numeric, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -54,7 +58,7 @@ class DailyTargets(Base):
     )
 
     # ── Relationship ──────────────────────────────────────────────────────────
-    employee: Mapped["User | None"] = relationship(  # noqa: F821
+    employee: Mapped[User | None] = relationship(
         "User", back_populates="targets"
     )
 

@@ -3,6 +3,13 @@ from __future__ import annotations
 
 import enum
 from datetime import date, datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.models.user import User
+    from app.models.call_activity import CallActivityEntry
+    from app.models.meeting_activity import MeetingActivityEntry
+    from app.models.sales_collection import SalesCollectionEntry
 
 from sqlalchemy import (
     Date,
@@ -55,20 +62,20 @@ class DailyActivityReport(Base):
     )
 
     # ── Relationships ─────────────────────────────────────────────────────────
-    employee: Mapped["User"] = relationship("User", back_populates="reports")  # noqa: F821
-    call_entries: Mapped[list["CallActivityEntry"]] = relationship(  # noqa: F821
+    employee: Mapped[User] = relationship("User", back_populates="reports")
+    call_entries: Mapped[list[CallActivityEntry]] = relationship(
         "CallActivityEntry",
         back_populates="report",
         cascade="all, delete-orphan",
         lazy="select",
     )
-    meeting_entries: Mapped[list["MeetingActivityEntry"]] = relationship(  # noqa: F821
+    meeting_entries: Mapped[list[MeetingActivityEntry]] = relationship(
         "MeetingActivityEntry",
         back_populates="report",
         cascade="all, delete-orphan",
         lazy="select",
     )
-    sales_collection_entries: Mapped[list["SalesCollectionEntry"]] = relationship(  # noqa: F821
+    sales_collection_entries: Mapped[list[SalesCollectionEntry]] = relationship(
         "SalesCollectionEntry",
         back_populates="report",
         cascade="all, delete-orphan",

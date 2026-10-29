@@ -54,7 +54,9 @@ app.include_router(api_router, prefix="/api/v1")
 import os
 from fastapi.staticfiles import StaticFiles
 
-uploads_dir = os.path.join(os.getcwd(), "uploads")
+# Keep uploads inside backend/uploads even if process starts from root workspace
+backend_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+uploads_dir = os.path.join(backend_root, "uploads")
 os.makedirs(uploads_dir, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 

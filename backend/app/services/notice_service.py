@@ -14,7 +14,8 @@ from app.models.user import User, UserRole
 from app.repositories.notice_repo import NoticeRepository
 from app.schemas.notice import NoticeApproval, NoticeRead
 
-UPLOAD_DIR = os.path.join(os.getcwd(), "uploads", "notices")
+backend_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+UPLOAD_DIR = os.path.join(backend_root, "uploads", "notices")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 

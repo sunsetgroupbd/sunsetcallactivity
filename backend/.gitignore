@@ -35,3 +35,6 @@ alembic/versions/__pycache__/
 # Logs
 *.log
 logs/
+
+# Local static uploads
+uploads/

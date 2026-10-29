@@ -18,6 +18,8 @@ import {
   Target,
   User as UserIcon,
   AlertTriangle,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import {
@@ -107,6 +109,7 @@ export default function EmployeesPage() {
   const [phone, setPhone] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [role, setRole] = useState<UserRole>("employee");
   const [isActive, setIsActive] = useState(true);
   const [formSubmitting, setFormSubmitting] = useState(false);
@@ -195,6 +198,7 @@ export default function EmployeesPage() {
     setPhone("");
     setUsername("");
     setPassword("");
+    setShowPassword(false);
     setRole("employee");
     setIsActive(true);
     setFormError(null);
@@ -209,6 +213,7 @@ export default function EmployeesPage() {
     setPhone(emp.phone || "");
     setUsername(emp.username);
     setPassword("");
+    setShowPassword(false);
     setRole(emp.role);
     setIsActive(emp.is_active);
     setFormError(null);
@@ -266,6 +271,7 @@ export default function EmployeesPage() {
         setEmployees((prev) =>
           prev.map((item) => (item.id === editingEmployee.id ? updated : item))
         );
+        await loadEmployees();
         setStatusMessage({
           type: "success",
           text: `Employee account "${updated.full_name}" updated successfully.`,
@@ -298,6 +304,7 @@ export default function EmployeesPage() {
           role,
         });
         setEmployees((prev) => [created, ...prev]);
+        await loadEmployees();
         setStatusMessage({
           type: "success",
           text: `New employee "${created.full_name}" added successfully.`,
@@ -790,13 +797,27 @@ export default function EmployeesPage() {
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                   {editingEmployee ? "Reset Password (Optional)" : "Password *"}
                 </label>
-                <input
-                  type="password"
-                  placeholder={editingEmployee ? "Leave blank to keep unchanged" : "••••••••"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full border border-slate-300 rounded px-3 py-2 text-xs font-semibold text-slate-800 placeholder:text-slate-500 focus:ring-1 focus:ring-green-600 focus:outline-none"
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    placeholder={editingEmployee ? "Leave blank to keep unchanged" : "••••••••"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full border border-slate-300 rounded px-3 py-2 pr-9 text-xs font-semibold text-slate-800 placeholder:text-slate-500 focus:ring-1 focus:ring-green-600 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-0.5 rounded focus:outline-none"
+                    title={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="w-4 h-4 text-slate-500" />
+                    ) : (
+                      <Eye className="w-4 h-4 text-slate-500" />
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
 

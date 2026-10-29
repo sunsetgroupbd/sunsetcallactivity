@@ -61,6 +61,27 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
                     EXCEPTION
                         WHEN undefined_object THEN NULL;
                     END $$;
+
+                    DO $$
+                    BEGIN
+                        ALTER TABLE daily_activity_reports DROP CONSTRAINT IF EXISTS daily_activity_reports_employee_id_fkey;
+                        ALTER TABLE daily_activity_reports ADD CONSTRAINT daily_activity_reports_employee_id_fkey 
+                            FOREIGN KEY (employee_id) REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE;
+
+                        ALTER TABLE daily_targets DROP CONSTRAINT IF EXISTS daily_targets_employee_id_fkey;
+                        ALTER TABLE daily_targets ADD CONSTRAINT daily_targets_employee_id_fkey 
+                            FOREIGN KEY (employee_id) REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE;
+
+                        ALTER TABLE notices DROP CONSTRAINT IF EXISTS notices_created_by_id_fkey;
+                        ALTER TABLE notices ADD CONSTRAINT notices_created_by_id_fkey 
+                            FOREIGN KEY (created_by_id) REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE;
+
+                        ALTER TABLE notices DROP CONSTRAINT IF EXISTS notices_approved_by_id_fkey;
+                        ALTER TABLE notices ADD CONSTRAINT notices_approved_by_id_fkey 
+                            FOREIGN KEY (approved_by_id) REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE;
+                    EXCEPTION
+                        WHEN OTHERS THEN NULL;
+                    END $$;
                 """))
     except Exception as exc:
         logger.warning("ensure_schema_updates warning (non-fatal): %s", exc)

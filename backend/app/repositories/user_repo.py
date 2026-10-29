@@ -202,30 +202,40 @@ class UserRepository:
                 await self.db.execute(text("PRAGMA foreign_keys = ON;"))
         else:
             try:
-                await self.db.execute(text("SET session_replication_role = 'replica';"))
                 await self.db.execute(
                     text("UPDATE users SET id = :new_id WHERE id = :old_id"),
                     {"new_id": new_id, "old_id": old_id},
                 )
+                await self.db.flush()
+            except Exception:
+                await self.db.rollback()
+                await self.db.execute(text("""
+                    DO $$
+                    BEGIN
+                        ALTER TABLE daily_activity_reports DROP CONSTRAINT IF EXISTS daily_activity_reports_employee_id_fkey;
+                        ALTER TABLE daily_activity_reports ADD CONSTRAINT daily_activity_reports_employee_id_fkey 
+                            FOREIGN KEY (employee_id) REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE;
+
+                        ALTER TABLE daily_targets DROP CONSTRAINT IF EXISTS daily_targets_employee_id_fkey;
+                        ALTER TABLE daily_targets ADD CONSTRAINT daily_targets_employee_id_fkey 
+                            FOREIGN KEY (employee_id) REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE;
+
+                        ALTER TABLE notices DROP CONSTRAINT IF EXISTS notices_created_by_id_fkey;
+                        ALTER TABLE notices ADD CONSTRAINT notices_created_by_id_fkey 
+                            FOREIGN KEY (created_by_id) REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE;
+
+                        ALTER TABLE notices DROP CONSTRAINT IF EXISTS notices_approved_by_id_fkey;
+                        ALTER TABLE notices ADD CONSTRAINT notices_approved_by_id_fkey 
+                            FOREIGN KEY (approved_by_id) REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE;
+                    EXCEPTION
+                        WHEN OTHERS THEN NULL;
+                    END $$;
+                """))
                 await self.db.execute(
-                    text("UPDATE daily_activity_reports SET employee_id = :new_id WHERE employee_id = :old_id"),
-                    {"new_id": new_id, "old_id": old_id},
-                )
-                await self.db.execute(
-                    text("UPDATE daily_targets SET employee_id = :new_id WHERE employee_id = :old_id"),
-                    {"new_id": new_id, "old_id": old_id},
-                )
-                await self.db.execute(
-                    text("UPDATE notices SET created_by_id = :new_id WHERE created_by_id = :old_id"),
-                    {"new_id": new_id, "old_id": old_id},
-                )
-                await self.db.execute(
-                    text("UPDATE notices SET approved_by_id = :new_id WHERE approved_by_id = :old_id"),
+                    text("UPDATE users SET id = :new_id WHERE id = :old_id"),
                     {"new_id": new_id, "old_id": old_id},
                 )
                 await self.db.flush()
-            finally:
-                await self.db.execute(text("SET session_replication_role = 'origin';"))
 
         self.db.expire_all()
         updated_user = await self.get_by_id(new_id)

@@ -488,12 +488,12 @@ function ReportsContent() {
                 </div>
 
                 {/* Reset & Export Actions */}
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={handleResetFilters}
-                    className="text-xs"
+                    className="text-xs flex-1 sm:flex-initial"
                   >
                     <RotateCcw className="w-3.5 h-3.5 mr-1" />
                     Reset
@@ -502,11 +502,11 @@ function ReportsContent() {
                   <Link
                     href={`/reports/print?start_date=${startDate}&end_date=${endDate}&employee_id=${selectedEmployeeId}&preset=${datePreset}`}
                     target="_blank"
-                    className="inline-flex items-center justify-center px-2.5 py-1.5 rounded-md text-xs font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs"
+                    className="inline-flex items-center justify-center px-2.5 py-1.5 rounded-md text-xs font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs flex-1 sm:flex-initial text-center whitespace-nowrap"
                     title="Print or Save as PDF Multi-Day Executive Summary"
                   >
                     <Printer className="w-3.5 h-3.5 mr-1 text-slate-600" />
-                    Print / PDF Summary
+                    Print / PDF
                   </Link>
 
                   <Button
@@ -514,27 +514,27 @@ function ReportsContent() {
                     size="sm"
                     onClick={handleExportCSV}
                     disabled={filteredReports.length === 0 || loading}
-                    className="text-xs"
+                    className="text-xs flex-1 sm:flex-initial"
                   >
                     <Download className="w-3.5 h-3.5 mr-1" />
-                    Export CSV
+                    CSV
                   </Button>
                 </div>
               </div>
 
               {/* Row 2: Structured Filters (Quick Presets, Dates, Status, Employee) */}
-              <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-slate-100">
-                {/* Quick Date Presets */}
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mr-0.5">
+              <div className="pt-3 border-t border-slate-100 space-y-3">
+                {/* Quick Date Presets: Smooth horizontal swipeable pill bar with zero line wrapping */}
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0 mr-1">
                     Quick:
                   </span>
                   {[
                     { id: "today", label: "Today" },
                     { id: "week", label: "This Week" },
                     { id: "month", label: "This Month" },
-                    { id: "year", label: "This Year" },
                     { id: "30days", label: "30 Days" },
+                    { id: "year", label: "This Year" },
                   ].map((p) => {
                     const active = datePreset === p.id;
                     return (
@@ -544,7 +544,7 @@ function ReportsContent() {
                         onClick={() =>
                           applyDatePreset(p.id as Exclude<DatePreset, "custom">)
                         }
-                        className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer shrink-0 ${
                           active
                             ? "bg-green-700 text-white shadow-xs font-bold"
                             : "bg-slate-100 text-slate-700 hover:bg-slate-200"
@@ -556,79 +556,89 @@ function ReportsContent() {
                   })}
                 </div>
 
-                <div className="h-4 w-px bg-slate-200 mx-0.5 hidden sm:block" />
+                {/* Form Controls Grid: 2 cols on phone, 4 cols on desktop */}
+                <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                  {/* From Date */}
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      From
+                    </label>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => {
+                        setStartDate(e.target.value);
+                        setDatePreset("custom");
+                      }}
+                      className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-green-600/30 focus:border-green-600 focus:outline-none bg-white"
+                    />
+                  </div>
 
-                {/* Date range */}
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="text-xs text-slate-700 font-semibold">From:</span>
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => {
-                      setStartDate(e.target.value);
-                      setDatePreset("custom");
-                    }}
-                    className="border border-slate-300 rounded px-2.5 py-1 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white"
-                  />
-                </div>
+                  {/* To Date */}
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      To
+                    </label>
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => {
+                        setEndDate(e.target.value);
+                        setDatePreset("custom");
+                      }}
+                      className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-green-600/30 focus:border-green-600 focus:outline-none bg-white"
+                    />
+                  </div>
 
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="text-xs text-slate-700 font-semibold">To:</span>
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => {
-                      setEndDate(e.target.value);
-                      setDatePreset("custom");
-                    }}
-                    className="border border-slate-300 rounded px-2.5 py-1 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white"
-                  />
-                </div>
-
-                {/* Status Filter */}
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="text-xs text-slate-700 font-semibold">Status:</span>
-                  <select
-                    value={statusFilter}
-                    onChange={(e) =>
-                      setStatusFilter(e.target.value as "all" | "submitted" | "draft")
-                    }
-                    className="border border-slate-300 rounded px-2.5 py-1 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white"
-                  >
-                    <option value="all">All Statuses</option>
-                    <option value="submitted">Submitted Only</option>
-                    <option value="draft">Drafts Only</option>
-                  </select>
-                </div>
-
-                {/* Employee Filter (Admin only) */}
-                {isAdmin && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="text-xs text-slate-700 font-semibold">Employee:</span>
+                  {/* Status Filter */}
+                  <div className="flex flex-col gap-1 col-span-2 sm:col-span-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      Status
+                    </label>
                     <select
-                      value={selectedEmployeeId}
+                      value={statusFilter}
                       onChange={(e) =>
-                        setSelectedEmployeeId(
-                          e.target.value === "all" ? "all" : Number(e.target.value)
-                        )
+                        setStatusFilter(e.target.value as "all" | "submitted" | "draft")
                       }
-                      className="border border-slate-300 rounded px-2.5 py-1 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white max-w-[260px] truncate"
+                      className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-green-600/30 focus:border-green-600 focus:outline-none bg-white"
                     >
-                      <option value="all">All Employees</option>
-                      {selectedEmployeeId !== "all" &&
-                        !employees.some((e) => e.id === Number(selectedEmployeeId)) && (
-                          <option value={selectedEmployeeId}>
-                            [{formatEmployeeId(selectedEmployeeId)}] (Loading...)
-                          </option>
-                        )}
-                      {employees.map((emp) => (
-                        <option key={emp.id} value={emp.id}>
-                          [{formatEmployeeId(emp.id)}] {emp.full_name} (@{emp.username})
-                        </option>
-                      ))}
+                      <option value="all">All Statuses</option>
+                      <option value="submitted">Submitted Only</option>
+                      <option value="draft">Drafts Only</option>
                     </select>
                   </div>
-                )}
+
+                  {/* Employee Filter (Admin only) */}
+                  {isAdmin && (
+                    <div className="flex flex-col gap-1 col-span-2 sm:col-span-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        Employee
+                      </label>
+                      <select
+                        value={selectedEmployeeId}
+                        onChange={(e) =>
+                          setSelectedEmployeeId(
+                            e.target.value === "all" ? "all" : Number(e.target.value)
+                          )
+                        }
+                        className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-green-600/30 focus:border-green-600 focus:outline-none bg-white truncate"
+                      >
+                        <option value="all">All Employees</option>
+                        {selectedEmployeeId !== "all" &&
+                          !employees.some((e) => e.id === Number(selectedEmployeeId)) && (
+                            <option value={selectedEmployeeId}>
+                              [{formatEmployeeId(selectedEmployeeId)}] (Loading...)
+                            </option>
+                          )}
+                        {employees.map((emp) => (
+                          <option key={emp.id} value={emp.id}>
+                            [{formatEmployeeId(emp.id)}] {emp.full_name} (@{emp.username})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </CardContent>

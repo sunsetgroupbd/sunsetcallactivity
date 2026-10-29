@@ -53,7 +53,7 @@ function DashboardContent() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | "all">("all");
-  const [datePreset, setDatePreset] = useState<"today" | "month" | "30days" | "year" | "custom">("today");
+  const [datePreset, setDatePreset] = useState<"today" | "week" | "month" | "30days" | "year" | "custom">("today");
 
   useEffect(() => {
     const today = getDhakaToday();
@@ -132,11 +132,14 @@ function DashboardContent() {
     setDatePreset("today");
   };
 
-  const handlePresetDate = (preset: "today" | "month" | "30days" | "year") => {
+  const handlePresetDate = (preset: "today" | "week" | "month" | "30days" | "year") => {
     setDatePreset(preset);
     const today = getDhakaToday();
     if (preset === "today") {
       setStartDate(today);
+      setEndDate(today);
+    } else if (preset === "week") {
+      setStartDate(getDhakaDateOffset(-7));
       setEndDate(today);
     } else if (preset === "month") {
       setStartDate(`${today.slice(0, 7)}-01`);
@@ -197,20 +200,90 @@ function DashboardContent() {
         )}
 
         {/* ── Filters Section ─────────────────────────────────────────────── */}
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-center gap-2 text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                <Filter className="w-4 h-4 text-green-700" />
-                <span>Reporting Filter</span>
+        <Card className="border-slate-200 shadow-2xs">
+          <CardContent className="p-3 sm:p-4">
+            <div className="space-y-3">
+              {/* Top Header: Title & Action Buttons */}
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-green-50 border border-green-200 flex items-center justify-center text-green-700">
+                    <Filter className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                      Reporting Filter
+                    </h2>
+                    <p className="text-[11px] text-slate-500 hidden sm:block">
+                      Filter dashboard KPI overview by date range or specific employee
+                    </p>
+                  </div>
+                </div>
+
+                {/* Actions: Reset & Print / PDF */}
+                <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleResetFilters}
+                    className="text-xs flex-1 sm:flex-initial"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 mr-1" />
+                    Reset
+                  </Button>
+
+                  {(isAdmin || isTL) && (
+                    <Link
+                      href={`/reports/print?start_date=${startDate}&end_date=${endDate}&employee_id=${selectedEmployeeId}&preset=${datePreset}`}
+                      target="_blank"
+                      className="inline-flex items-center justify-center px-2.5 py-1.5 rounded-md text-xs font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs flex-1 sm:flex-initial text-center whitespace-nowrap"
+                      title="Print or Save as PDF Executive Performance Report for this period"
+                    >
+                      <Printer className="w-3.5 h-3.5 mr-1 text-slate-600" />
+                      Print / PDF Report
+                    </Link>
+                  )}
+                </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-3">
-                {/* Date range pickers & quick presets */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="flex items-center gap-1.5 text-sm">
-                    <label htmlFor="start_date" className="text-xs text-slate-700 font-semibold">
-                      From:
+              {/* Row 2: Structured Controls */}
+              <div className="pt-2 border-t border-slate-100 space-y-2.5">
+                {/* Quick Date Presets: Smooth horizontal scrollable pill bar */}
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0 mr-1">
+                    Quick:
+                  </span>
+                  {[
+                    { id: "today", label: "Today" },
+                    { id: "week", label: "This Week" },
+                    { id: "month", label: "This Month" },
+                    { id: "30days", label: "30 Days" },
+                    { id: "year", label: "This Year" },
+                  ].map((p) => {
+                    const active = datePreset === p.id;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => handlePresetDate(p.id as "today" | "week" | "month" | "30days" | "year")}
+                        className={cn(
+                          "px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer shrink-0",
+                          active
+                            ? "bg-green-700 text-white shadow-xs font-bold"
+                            : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                        )}
+                      >
+                        {p.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Date range pickers & Employee Selector Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 items-end">
+                  {/* From Date */}
+                  <div className="flex flex-col gap-1">
+                    <label htmlFor="start_date" className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      From
                     </label>
                     <input
                       id="start_date"
@@ -220,13 +293,14 @@ function DashboardContent() {
                         setStartDate(e.target.value);
                         setDatePreset("custom");
                       }}
-                      className="border border-slate-300 rounded px-2.5 py-1 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white"
+                      className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-green-600/30 focus:border-green-600 focus:outline-none bg-white"
                     />
                   </div>
 
-                  <div className="flex items-center gap-1.5 text-sm">
-                    <label htmlFor="end_date" className="text-xs text-slate-700 font-semibold">
-                      To:
+                  {/* To Date */}
+                  <div className="flex flex-col gap-1">
+                    <label htmlFor="end_date" className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      To
                     </label>
                     <input
                       id="end_date"
@@ -236,109 +310,58 @@ function DashboardContent() {
                         setEndDate(e.target.value);
                         setDatePreset("custom");
                       }}
-                      className="border border-slate-300 rounded px-2.5 py-1 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white"
+                      className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-green-600/30 focus:border-green-600 focus:outline-none bg-white"
                     />
                   </div>
 
-                  {/* Preset Pills */}
-                  <div className="flex items-center gap-1 flex-wrap">
-                    {[
-                      { id: "today", label: "Today" },
-                      { id: "month", label: "This Month" },
-                      { id: "30days", label: "30 Days" },
-                      { id: "year", label: "This Year" },
-                    ].map((p) => {
-                      const active = datePreset === p.id;
-                      return (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => handlePresetDate(p.id as "today" | "month" | "30days" | "year")}
-                          className={cn(
-                            "px-2.5 py-1 text-[11px] font-semibold rounded border transition-colors shadow-2xs cursor-pointer",
-                            active
-                              ? "bg-green-700 text-white border-green-700 font-bold"
-                              : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
-                          )}
-                        >
-                          {p.label}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  {/* Employee Selector (Admin only) */}
+                  {isAdmin && (
+                    <div className="flex flex-col gap-1 col-span-2 sm:col-span-2 md:col-span-1 lg:col-span-2">
+                      <label htmlFor="employee_select" className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        Employee
+                      </label>
+                      <select
+                        id="employee_select"
+                        value={selectedEmployeeId}
+                        onChange={(e) =>
+                          setSelectedEmployeeId(
+                            e.target.value === "all" ? "all" : Number(e.target.value)
+                          )
+                        }
+                        className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-green-600/30 focus:border-green-600 focus:outline-none bg-white truncate"
+                      >
+                        <option value="all">All Employees</option>
+                        {employees.map((emp) => {
+                          const roleTag =
+                            emp.role === "tl"
+                              ? "TL"
+                              : emp.role === "co"
+                              ? "CO"
+                              : emp.role === "admin"
+                              ? "Admin"
+                              : emp.role === "sub_admin"
+                              ? "Sub-Admin"
+                              : "Exec";
+                          return (
+                            <option key={emp.id} value={emp.id}>
+                              [{formatEmployeeId(emp.id)}] {emp.full_name} (@{emp.username}) • {roleTag}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* For regular employees: show their employee ID badge */}
+                  {!isAdmin && user && (
+                    <div className="flex items-center gap-1.5 text-xs text-slate-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg col-span-2 sm:col-span-2 md:col-span-1">
+                      <span className="text-emerald-800 font-medium">Employee ID:</span>
+                      <span className="font-mono font-bold text-emerald-950 bg-white border border-emerald-300 px-1.5 py-0.5 rounded shadow-2xs">
+                        {formatEmployeeId(user.id)}
+                      </span>
+                    </div>
+                  )}
                 </div>
-
-                {/* Employee Selector (Admin only) */}
-                {isAdmin && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <label htmlFor="employee_select" className="text-xs text-slate-700 font-semibold">
-                      Employee:
-                    </label>
-                    <select
-                      id="employee_select"
-                      value={selectedEmployeeId}
-                      onChange={(e) =>
-                        setSelectedEmployeeId(
-                          e.target.value === "all" ? "all" : Number(e.target.value)
-                        )
-                      }
-                      className="border border-slate-300 rounded px-2.5 py-1 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white"
-                    >
-                      <option value="all">All Employees</option>
-                      {employees.map((emp) => {
-                        const roleTag =
-                          emp.role === "tl"
-                            ? "TL"
-                            : emp.role === "co"
-                            ? "CO"
-                            : emp.role === "admin"
-                            ? "Admin"
-                            : emp.role === "sub_admin"
-                            ? "Sub-Admin"
-                            : "Exec";
-                        return (
-                          <option key={emp.id} value={emp.id}>
-                            {emp.full_name} ({formatEmployeeId(emp.id)} • {roleTag})
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </div>
-                )}
-
-                {/* For regular employees: show their employee ID badge */}
-                {!isAdmin && user && (
-                  <div className="flex items-center gap-1.5 text-xs text-slate-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md">
-                    <span className="text-emerald-800 font-medium">Your Employee ID:</span>
-                    <span className="font-mono font-bold text-emerald-950 bg-white border border-emerald-300 px-1.5 py-0.2 rounded shadow-2xs">
-                      {formatEmployeeId(user.id)}
-                    </span>
-                  </div>
-                )}
-
-                {/* Clear action */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleResetFilters}
-                  className="text-xs"
-                >
-                  <RotateCcw className="w-3.5 h-3.5 mr-1" />
-                  Reset
-                </Button>
-
-                {/* Print / PDF Executive Report Button (Admin / Supervisor) */}
-                {(isAdmin || isTL) && (
-                  <Link
-                    href={`/reports/print?start_date=${startDate}&end_date=${endDate}&employee_id=${selectedEmployeeId}&preset=${datePreset}`}
-                    target="_blank"
-                    className="inline-flex items-center justify-center px-2.5 py-1.5 rounded-md text-xs font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs"
-                    title="Print or Save as PDF Executive Performance Report for this period"
-                  >
-                    <Printer className="w-3.5 h-3.5 mr-1 text-slate-600" />
-                    Print / PDF Report
-                  </Link>
-                )}
               </div>
             </div>
           </CardContent>

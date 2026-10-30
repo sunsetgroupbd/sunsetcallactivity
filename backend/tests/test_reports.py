@@ -23,19 +23,21 @@ async def test_create_report(client: AsyncClient, employee_user):
 
 
 @pytest.mark.asyncio
-async def test_duplicate_report_rejected(client: AsyncClient, employee_user):
+async def test_duplicate_report_returns_existing(client: AsyncClient, employee_user):
     headers = await emp_headers(client, employee_user)
-    await client.post(
+    resp1 = await client.post(
         "/api/v1/reports",
         json={"report_date": "2026-01-16"},
         headers=headers,
     )
+    assert resp1.status_code == 201
     resp2 = await client.post(
         "/api/v1/reports",
         json={"report_date": "2026-01-16"},
         headers=headers,
     )
-    assert resp2.status_code == 409
+    assert resp2.status_code in (200, 201)
+    assert resp2.json()["id"] == resp1.json()["id"]
 
 
 @pytest.mark.asyncio

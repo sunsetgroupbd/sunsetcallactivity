@@ -92,6 +92,8 @@ class ReportSummary(BaseModel):
     # Meeting
     total_outdoor_visits: int = 0
     total_meeting_duration_minutes: int = 0
+    days_with_outdoor: int = 0
+    days_with_indoor: int = 0
 
     # Financial (BDT) — actual vs commitments are SEPARATE
     total_new_sales: Decimal = Decimal("0")
@@ -165,6 +167,8 @@ class DashboardSummary(BaseModel):
     total_call_duration_minutes: int = 0
     total_outdoor_visits: int = 0
     total_meeting_duration_minutes: int = 0
+    days_with_outdoor: int = 0
+    days_with_indoor: int = 0
 
     total_new_sales: Decimal = Decimal("0")
     total_actual_collection: Decimal = Decimal("0")

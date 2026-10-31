@@ -56,6 +56,11 @@ function SettingsContent() {
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
   const [deletingTarget, setDeletingTarget] = useState(false);
 
+  // KPI Credit Rules State (Once-Per-Day)
+  const [indoorCredit, setIndoorCredit] = useState<string>("35");
+  const [outdoorCredit, setOutdoorCredit] = useState<string>("70");
+  const [savingKpiRules, setSavingKpiRules] = useState(false);
+
   const [statusMessage, setStatusMessage] = useState<{
     type: "success" | "error" | "info";
     text: string;
@@ -65,12 +70,19 @@ function SettingsContent() {
     setLoading(true);
     setStatusMessage(null);
     try {
-      const [targetsData, employeesData] = await Promise.all([
+      const [targetsData, employeesData, kpiRules] = await Promise.all([
         api.settings.getTargets(),
         api.employees.list({ is_active: true }),
+        api.settings.getSystemSettings("kpi_rules").catch(() => []),
       ]);
       setTargets(Array.isArray(targetsData) ? targetsData : []);
       setEmployees(Array.isArray(employeesData) ? employeesData : []);
+      if (Array.isArray(kpiRules)) {
+        const indoor = kpiRules.find((r) => r.key === "indoor_cx_call_credit");
+        const outdoor = kpiRules.find((r) => r.key === "outdoor_visit_call_credit");
+        if (indoor?.value) setIndoorCredit(indoor.value);
+        if (outdoor?.value) setOutdoorCredit(outdoor.value);
+      }
     } catch (err: unknown) {
       if (err instanceof ApiError) {
         setStatusMessage({ type: "error", text: err.message });
@@ -210,6 +222,40 @@ function SettingsContent() {
       }
     } finally {
       setDeletingTarget(false);
+    }
+  };
+
+  const handleSaveKpiRules = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingKpiRules(true);
+    setStatusMessage(null);
+    try {
+      await Promise.all([
+        api.settings.updateSystemSetting({
+          namespace: "kpi_rules",
+          key: "indoor_cx_call_credit",
+          value: indoorCredit || "35",
+          description: "Calls deducted from target per day with indoor CX meeting (Once-Per-Day)",
+        }),
+        api.settings.updateSystemSetting({
+          namespace: "kpi_rules",
+          key: "outdoor_visit_call_credit",
+          value: outdoorCredit || "70",
+          description: "Calls deducted from target per day with outdoor visit (Once-Per-Day)",
+        }),
+      ]);
+      setStatusMessage({
+        type: "success",
+        text: "KPI Call Quota Credit rules updated successfully (Once-Per-Day active).",
+      });
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
+        setStatusMessage({ type: "error", text: err.message });
+      } else {
+        setStatusMessage({ type: "error", text: "Failed to update KPI credit rules." });
+      }
+    } finally {
+      setSavingKpiRules(false);
     }
   };
 
@@ -543,6 +589,84 @@ function SettingsContent() {
           </div>
         </Card>
       </div>
+
+        {/* ── Meeting Call Quota Credit Rules (Once-Per-Day) ─────────────── */}
+        <Card>
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <PhoneCall className="w-4 h-4 text-emerald-700" />
+                  Meeting Call Quota Credit Rules
+                </CardTitle>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Configure call reduction credits granted for customer meetings & outdoor visits
+                </p>
+              </div>
+              <Badge variant="success" className="text-[10px] w-fit">
+                Once-Per-Day Rule Enforced
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSaveKpiRules} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="font-semibold text-slate-900">Indoor CX Meeting Credit</label>
+                    <span className="text-[10px] text-slate-500">calls deducted / day</span>
+                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    max="500"
+                    value={indoorCredit}
+                    onChange={(e) => setIndoorCredit(e.target.value)}
+                    placeholder="35"
+                    className="w-full border border-slate-300 rounded px-3 py-2 text-xs font-semibold font-mono text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none"
+                  />
+                  <p className="text-[11px] text-slate-500">
+                    Granted once per day if the salesperson conducts one or more Indoor CX customer meetings.
+                  </p>
+                </div>
+
+                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="font-semibold text-slate-900">Outdoor Visit Credit</label>
+                    <span className="text-[10px] text-slate-500">calls deducted / day</span>
+                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    max="500"
+                    value={outdoorCredit}
+                    onChange={(e) => setOutdoorCredit(e.target.value)}
+                    placeholder="70"
+                    className="w-full border border-slate-300 rounded px-3 py-2 text-xs font-semibold font-mono text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none"
+                  />
+                  <p className="text-[11px] text-slate-500">
+                    Granted once per day if the salesperson conducts one or more Outdoor site visits.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
+                <p className="text-[11px] text-slate-500">
+                  Rules apply automatically to daily report targets and leaderboard KPI score calculations.
+                </p>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  loading={savingKpiRules}
+                  disabled={savingKpiRules}
+                >
+                  Save Credit Rules
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
 
         {/* ── Business Hours & System Parameters Section ──────────────────── */}
         <Card>

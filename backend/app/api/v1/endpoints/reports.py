@@ -132,4 +132,7 @@ async def get_report_summary(
     svc = ReportService(db)
     await svc.get_report(report_id, current_user)  # raises 404/403 as needed
     dash_svc = DashboardService(db)
-    return await dash_svc.get_report_summary(report_id)
+    summary = await dash_svc.get_report_summary(report_id)
+    if summary is None:
+        raise HTTPException(status_code=404, detail="Report summary not found")
+    return summary

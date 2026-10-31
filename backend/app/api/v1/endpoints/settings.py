@@ -34,6 +34,20 @@ async def get_all_settings(
     return AllSettings(namespaces=namespaces)
 
 
+@router.get("/settings/system", response_model=list[SettingRead])
+async def get_system_settings(
+    namespace: Optional[str] = Query(None),
+    _: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    repo = SettingsRepository(db)
+    if namespace:
+        items = await repo.get_namespace(namespace)
+    else:
+        items = await repo.get_all()
+    return list(items)
+
+
 @router.get("/settings/{namespace}", response_model=NamespaceSettings)
 async def get_namespace_settings(
     namespace: str,
@@ -46,6 +60,7 @@ async def get_namespace_settings(
 
 
 @router.put("/settings", response_model=SettingRead)
+@router.put("/settings/system", response_model=SettingRead)
 async def upsert_setting(
     data: SettingUpsert,
     _: User = Depends(require_admin),

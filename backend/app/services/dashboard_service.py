@@ -28,6 +28,7 @@ from app.repositories.call_repo import CallActivityRepository
 from app.repositories.meeting_repo import MeetingActivityRepository
 from app.repositories.report_repo import ReportRepository
 from app.repositories.sales_repo import SalesCollectionRepository
+from app.repositories.settings_repo import SettingsRepository
 from app.repositories.targets_repo import TargetsRepository
 from app.schemas.dashboard import (
     DashboardSummary,
@@ -52,6 +53,34 @@ class DashboardService:
         self.meeting_repo = MeetingActivityRepository(db)
         self.sales_repo = SalesCollectionRepository(db)
         self.targets_repo = TargetsRepository(db)
+        self.settings_repo = SettingsRepository(db)
+
+    async def get_call_credit_settings(self) -> dict[str, int]:
+        """
+        Fetch configurable call credit settings from AppSettings (namespace="kpi_rules").
+        Defaults:
+            indoor_cx_call_credit: 35 (calls credited once per day)
+            outdoor_visit_call_credit: 70 (calls credited once per day)
+        """
+        indoor_setting = await self.settings_repo.get("kpi_rules", "indoor_cx_call_credit")
+        outdoor_setting = await self.settings_repo.get("kpi_rules", "outdoor_visit_call_credit")
+
+        indoor_credit = 35
+        outdoor_credit = 70
+        if indoor_setting and indoor_setting.value:
+            try:
+                indoor_credit = max(0, int(indoor_setting.value))
+            except ValueError:
+                pass
+        if outdoor_setting and outdoor_setting.value:
+            try:
+                outdoor_credit = max(0, int(outdoor_setting.value))
+            except ValueError:
+                pass
+        return {
+            "indoor_credit": indoor_credit,
+            "outdoor_credit": outdoor_credit,
+        }
 
     async def get_target_with_carry_forward(
         self, report_date: date, employee_id: Optional[int]
@@ -163,7 +192,7 @@ class DashboardService:
 
     async def get_report_summary(
         self, report_id: int
-    ) -> ReportSummary:
+    ) -> Optional[ReportSummary]:
         """Compute full summary for one daily report."""
         from sqlalchemy.orm import selectinload
 
@@ -236,10 +265,19 @@ class DashboardService:
             report.report_date, report.employee_id
         )
 
-        # Call Quota Credit rule:
-        # 35 calls reduced per Indoor CX meeting
-        # 70 calls reduced per Outdoor site visit
-        call_reduction = (total_outdoor_visits * 70) + (total_indoor_cx * 35)
+        # Call Quota Credit rule (Once-Per-Day, configurable by Admin):
+        # Having outdoor visits reduces calls by outdoor_credit ONCE per day.
+        # Having indoor CX meetings reduces calls by indoor_credit ONCE per day.
+        credits = await self.get_call_credit_settings()
+        credit_indoor = credits["indoor_credit"]
+        credit_outdoor = credits["outdoor_credit"]
+
+        call_reduction = 0
+        if total_outdoor_visits > 0:
+            call_reduction += credit_outdoor
+        if total_indoor_cx > 0:
+            call_reduction += credit_indoor
+
         raw_dialed_target = target_info["dialed_target"]
         if raw_dialed_target is not None:
             adjusted_dialed_target = max(0, raw_dialed_target - call_reduction)
@@ -329,6 +367,8 @@ class DashboardService:
             ),
             total_outdoor_visits=total_outdoor_visits,
             total_meeting_duration_minutes=total_meeting_dur,
+            days_with_outdoor=1 if total_outdoor_visits > 0 else 0,
+            days_with_indoor=1 if total_indoor_cx > 0 else 0,
             total_new_sales=fin["total_new_sales"],
             total_actual_collection=fin["total_actual_collection"],
             total_sales_commitments=fin["total_sales_commitments"],
@@ -380,6 +420,8 @@ class DashboardService:
         total_indoor_cx = 0
         total_meeting_dur = 0
         submitted_reports = 0
+        days_with_outdoor: set[date] = set()
+        days_with_indoor: set[date] = set()
 
         slot_breakdown: dict[str, dict[str, int]] = {
             "10_to_1": {"dialed": 0},
@@ -449,8 +491,12 @@ class DashboardService:
                 act_lower = (me.activity_type or "").lower()
                 if "outdoor_visit" in act_lower or "outdoor visit" in act_lower or "visit" in act_lower:
                     total_outdoor_visits += val
+                    if val > 0:
+                        days_with_outdoor.add(report.report_date)
                 elif "indoor_cx" in act_lower or "indoor cx" in act_lower or "cx" in act_lower:
                     total_indoor_cx += val
+                    if val > 0:
+                        days_with_indoor.add(report.report_date)
 
                 dur = me.total_duration_minutes if me.total_duration_minutes is not None else s_sum
                 if "time" in act_lower or "duration" in act_lower or "minute" in act_lower:
@@ -488,6 +534,8 @@ class DashboardService:
             total_call_duration_minutes=total_call_dur,
             total_outdoor_visits=total_outdoor_visits,
             total_indoor_cx=total_indoor_cx,
+            days_with_outdoor=len(days_with_outdoor),
+            days_with_indoor=len(days_with_indoor),
             total_meeting_duration_minutes=total_meeting_dur,
             total_meeting_time_minutes=total_meeting_dur,
             total_new_sales=agg_fin["total_new_sales"],
@@ -526,6 +574,10 @@ class DashboardService:
 
         users_res = await self.db.execute(user_query.order_by(User.id))
         employees = users_res.scalars().all()
+
+        credits = await self.get_call_credit_settings()
+        credit_indoor = credits["indoor_credit"]
+        credit_outdoor = credits["outdoor_credit"]
 
         rankings: list[EmployeeLeaderboardItem] = []
 
@@ -594,10 +646,11 @@ class DashboardService:
             meet_dur = summary.total_meeting_time_minutes
             colls = float(summary.actual_collection_bdt)
 
-            # Meeting Call Quota Credit:
-            # -35 calls reduced per indoor customer meeting
-            # -70 calls reduced per outdoor site visit
-            call_reduction = (visits * 70) + (indoor_cx * 35)
+            # Meeting Call Quota Credit (Once-Per-Day rule, configurable by Admin):
+            # Capped to 1 credit per day that had meetings
+            outdoor_days = summary.days_with_outdoor
+            indoor_days = summary.days_with_indoor
+            call_reduction = (outdoor_days * credit_outdoor) + (indoor_days * credit_indoor)
             base_dialed_target = dialed_tgt
             adjusted_dialed_tgt = max(0, dialed_tgt - call_reduction)
 

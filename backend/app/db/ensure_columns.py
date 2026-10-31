@@ -87,5 +87,23 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
                         WHEN OTHERS THEN NULL;
                     END $$;
                 """))
+
+            # Seed default KPI rules in app_settings if not present
+            try:
+                for key, val, desc in [
+                    ("indoor_cx_call_credit", "35", "Calls deducted from target per day with indoor CX meeting (Once-Per-Day)"),
+                    ("outdoor_visit_call_credit", "70", "Calls deducted from target per day with outdoor visit (Once-Per-Day)"),
+                ]:
+                    check_stmt = text("SELECT id FROM app_settings WHERE namespace = 'kpi_rules' AND key = :key")
+                    res = await conn.execute(check_stmt, {"key": key})
+                    if not res.fetchone():
+                        ins_stmt = text("""
+                            INSERT INTO app_settings (namespace, key, value, description)
+                            VALUES ('kpi_rules', :key, :value, :desc)
+                        """)
+                        await conn.execute(ins_stmt, {"key": key, "value": val, "desc": desc})
+                        logger.info("Initialized default KPI rule: %s = %s", key, val)
+            except Exception as e:
+                logger.warning("Could not seed app_settings kpi_rules: %s", e)
     except Exception as exc:
         logger.warning("ensure_schema_updates warning (non-fatal): %s", exc)

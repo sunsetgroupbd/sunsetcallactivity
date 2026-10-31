@@ -311,6 +311,7 @@ class DashboardService:
             total_tb_collection=fin["total_tb_collection"],
             total_tb_commitments=fin["total_tb_commitments"],
             total_emi_collection=fin["total_emi_collection"],
+            total_emi_commitments=fin.get("total_emi_commitments", Decimal("0")),
             dialed_calls=dialed_ta,
             connected_calls=connected_ta,
             outdoor_visits=visit_ta,
@@ -369,6 +370,7 @@ class DashboardService:
             "total_tb_collection": Decimal("0"),
             "total_tb_commitments": Decimal("0"),
             "total_emi_collection": Decimal("0"),
+            "total_emi_commitments": Decimal("0"),
         }
         category_map: dict[str, LeadCategoryBreakdown] = {}
         by_category_dict: dict[str, dict[str, int]] = {}
@@ -437,8 +439,13 @@ class DashboardService:
             agg_fin["total_tb_collection"] += fin["total_tb_collection"]
             agg_fin["total_tb_commitments"] += fin["total_tb_commitments"]
             agg_fin["total_emi_collection"] += fin["total_emi_collection"]
+            agg_fin["total_emi_commitments"] += fin.get("total_emi_commitments", Decimal("0"))
 
-        tot_commitments = agg_fin["total_sales_commitments"] + agg_fin["total_tb_commitments"]
+        tot_commitments = (
+            agg_fin["total_sales_commitments"]
+            + agg_fin["total_tb_commitments"]
+            + agg_fin["total_emi_commitments"]
+        )
 
         return DashboardSummary(
             date_from=date_from,
@@ -471,6 +478,7 @@ class DashboardService:
             tb_commitments_bdt=agg_fin["total_tb_commitments"],
             total_emi_collection=agg_fin["total_emi_collection"],
             emi_collection_bdt=agg_fin["total_emi_collection"],
+            total_emi_commitments=agg_fin["total_emi_commitments"],
             commitments_bdt=tot_commitments,
             by_slot=slot_breakdown,
             by_category=by_category_dict,
@@ -809,7 +817,9 @@ class DashboardService:
             by_date_map[r_date]["new_sales"] += float(fin["total_new_sales"])
             by_date_map[r_date]["emi"] += float(fin["total_emi_collection"])
             by_date_map[r_date]["commitments"] += float(
-                fin["total_sales_commitments"] + fin["total_tb_commitments"]
+                fin["total_sales_commitments"]
+                + fin["total_tb_commitments"]
+                + fin.get("total_emi_commitments", Decimal("0"))
             )
 
         # Generate sequence of dates from date_from to date_to

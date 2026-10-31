@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, JSON, Numeric, String, Text, func
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base_class import Base
@@ -64,6 +64,7 @@ class SalesCollectionEntry(Base):
 
     # Future commitment date & reschedule audit trail
     expected_payment_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    commitment_percentage: Mapped[int | None] = mapped_column(Integer, nullable=True)
     reschedule_count: Mapped[int] = mapped_column(default=0, nullable=False)
     reschedule_history: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
 

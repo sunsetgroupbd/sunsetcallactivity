@@ -178,6 +178,9 @@ export type SalesCollectionCategory =
   | "tb_commit_payment_2"
   | "tb_commit_payment_3"
   | "emi_collection"
+  | "emi_commit_payment_1"
+  | "emi_commit_payment_2"
+  | "emi_commit_payment_3"
   | "other_collection";
 
 export const SALES_CATEGORIES: {
@@ -195,6 +198,9 @@ export const SALES_CATEGORIES: {
   { key: "tb_commit_payment_2", label: "TB CX Commit Payment 2", isCollection: false, group: "tb" },
   { key: "tb_commit_payment_3", label: "TB CX Commit Payment 3", isCollection: false, group: "tb" },
   { key: "emi_collection", label: "EMI Collection", isCollection: true, group: "emi" },
+  { key: "emi_commit_payment_1", label: "EMI CX Commit Payment 1", isCollection: false, group: "emi" },
+  { key: "emi_commit_payment_2", label: "EMI CX Commit Payment 2", isCollection: false, group: "emi" },
+  { key: "emi_commit_payment_3", label: "EMI CX Commit Payment 3", isCollection: false, group: "emi" },
   { key: "other_collection", label: "Other Collection", isCollection: true, group: "other" },
 ];
 
@@ -233,6 +239,7 @@ export interface SalesCollectionEntry {
   reference?: string | null;
   notes?: string | null;
   expected_payment_date?: string | null;
+  commitment_percentage?: number | null;
   reschedule_count?: number;
   reschedule_history?: RescheduleHistoryItem[] | null;
   created_at?: string;
@@ -249,6 +256,7 @@ export interface CommitmentItem {
   customer_name?: string | null;
   customer_phone?: string | null;
   expected_payment_date?: string | null;
+  commitment_percentage?: number | null;
   reschedule_count: number;
   reschedule_history?: RescheduleHistoryItem[] | null;
   payment_method?: string | null;

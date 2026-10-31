@@ -99,6 +99,7 @@ class ReportSummary(BaseModel):
     total_tb_collection: Decimal = Decimal("0")
     total_tb_commitments: Decimal = Decimal("0")
     total_emi_collection: Decimal = Decimal("0")
+    total_emi_commitments: Decimal = Decimal("0")
 
     # Target achievement
     dialed_calls: TargetAchievement = TargetAchievement()
@@ -125,7 +126,11 @@ class ReportSummary(BaseModel):
         self.total_calls_connected = self.total_connected
         self.total_meeting_time_minutes = self.total_meeting_duration_minutes
         self.actual_collection_bdt = self.total_actual_collection
-        self.commitments_bdt = self.total_sales_commitments + self.total_tb_commitments
+        self.commitments_bdt = (
+            self.total_sales_commitments
+            + self.total_tb_commitments
+            + self.total_emi_commitments
+        )
         return self
 
 
@@ -166,6 +171,7 @@ class DashboardSummary(BaseModel):
     total_tb_collection: Decimal = Decimal("0")
     total_tb_commitments: Decimal = Decimal("0")
     total_emi_collection: Decimal = Decimal("0")
+    total_emi_commitments: Decimal = Decimal("0")
 
     by_slot: dict[str, dict[str, int]] = {}
     by_category: dict[str, dict[str, int]] = {}

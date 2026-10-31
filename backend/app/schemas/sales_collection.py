@@ -19,6 +19,7 @@ class SalesCollectionEntryBase(BaseModel):
     reference: Optional[str] = Field(None, max_length=200)
     notes: Optional[str] = None
     expected_payment_date: Optional[date] = None
+    commitment_percentage: Optional[int] = Field(None, ge=1, le=100)
     reschedule_count: int = 0
     reschedule_history: Optional[List[Dict[str, Any]]] = None
 
@@ -43,6 +44,7 @@ class SalesCollectionEntryUpdate(BaseModel):
     reference: Optional[str] = Field(None, max_length=200)
     notes: Optional[str] = None
     expected_payment_date: Optional[date] = None
+    commitment_percentage: Optional[int] = Field(None, ge=1, le=100)
     reschedule_reason: Optional[str] = None
 
     @field_validator("amount", mode="before")
@@ -77,6 +79,7 @@ class CommitmentItemRead(BaseModel):
     customer_name: Optional[str] = None
     customer_phone: Optional[str] = None
     expected_payment_date: Optional[date] = None
+    commitment_percentage: Optional[int] = None
     reschedule_count: int = 0
     reschedule_history: Optional[List[Dict[str, Any]]] = None
     payment_method: Optional[str] = None

@@ -56,6 +56,10 @@ COMMITMENT_CATEGORIES = {
     "tb_commit_payment_1",
     "tb_commit_payment_2",
     "tb_commit_payment_3",
+    "emi_commit_payment",
+    "emi_commit_payment_1",
+    "emi_commit_payment_2",
+    "emi_commit_payment_3",
 }
 SALES_CATEGORIES = {"total_sales", "new_sales", "new_sales_collection"}
 TB_COLLECTION_CATEGORIES = {"tb_collection"}
@@ -183,6 +187,7 @@ class SalesService:
                     customer_name=entry.customer_name,
                     customer_phone=entry.customer_phone,
                     expected_payment_date=entry.expected_payment_date,
+                    commitment_percentage=entry.commitment_percentage,
                     reschedule_count=entry.reschedule_count or 0,
                     reschedule_history=entry.reschedule_history,
                     payment_method=entry.payment_method,
@@ -220,6 +225,7 @@ class SalesService:
             "total_tb_collection": Decimal("0.00"),
             "total_tb_commitments": Decimal("0.00"),
             "total_emi_collection": Decimal("0.00"),
+            "total_emi_commitments": Decimal("0.00"),
         }
         for entry in entries:
             cat = entry.category
@@ -235,6 +241,8 @@ class SalesService:
             if cat in COMMITMENT_CATEGORIES:
                 if cat.startswith("new_sales"):
                     totals["total_sales_commitments"] += amount
+                elif cat.startswith("emi"):
+                    totals["total_emi_commitments"] += amount
                 else:
                     totals["total_tb_commitments"] += amount
         return totals

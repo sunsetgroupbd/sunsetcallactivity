@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.models.report import DailyActivityReport
 
 from sqlalchemy import Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -73,7 +77,7 @@ class SalesCollectionEntry(Base):
     )
 
     # ── Relationship ──────────────────────────────────────────────────────────
-    report: Mapped["DailyActivityReport"] = relationship(  # noqa: F821
+    report: Mapped[DailyActivityReport] = relationship(
         "DailyActivityReport", back_populates="sales_collection_entries"
     )
 

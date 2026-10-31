@@ -30,7 +30,13 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
 
     # ── CORS ──────────────────────────────────────────────────────────────────
-    ALLOWED_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
+    ALLOWED_ORIGINS: str = (
+        "https://call.sunsetgroupbd.com,"
+        "http://call.sunsetgroupbd.com,"
+        "https://callapi.sunsetgroupbd.com,"
+        "http://localhost:3000,"
+        "http://127.0.0.1:3000"
+    )
 
     # ── Cookies ───────────────────────────────────────────────────────────────
     COOKIE_SECURE: bool = False
@@ -41,7 +47,15 @@ class Settings(BaseSettings):
 
     @property
     def allowed_origins_list(self) -> List[str]:
-        return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
+        origins = [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
+        for default_domain in (
+            "https://call.sunsetgroupbd.com",
+            "http://call.sunsetgroupbd.com",
+            "https://callapi.sunsetgroupbd.com",
+        ):
+            if default_domain not in origins:
+                origins.append(default_domain)
+        return origins
 
     @property
     def is_sqlite(self) -> bool:

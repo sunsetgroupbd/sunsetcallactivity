@@ -3,16 +3,22 @@ Sunset Group Daily Call Activity Dashboard — FastAPI Backend
 """
 from __future__ import annotations
 
+import logging
+import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.api.v1.router import api_router
 from app.db.session import engine
 from app.db.base import Base  # noqa: F401 — imports all models so metadata is populated
 from app.db.ensure_columns import ensure_schema_updates
+
+logger = logging.getLogger("uvicorn.error")
 
 
 @asynccontextmanager
@@ -42,6 +48,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins_list,
+    allow_origin_regex=r"^https?://([a-zA-Z0-9-]+\.)*sunsetgroupbd\.com(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -51,9 +58,6 @@ app.add_middleware(
 app.include_router(api_router, prefix="/api/v1")
 
 # ─── Static Uploads ───────────────────────────────────────────────────────────
-import os
-from fastapi.staticfiles import StaticFiles
-
 # Keep uploads inside backend/uploads even if process starts from root workspace
 backend_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 uploads_dir = os.path.join(backend_root, "uploads")
@@ -62,13 +66,17 @@ app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 
 
 @app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
-    import logging
-    logging.getLogger("uvicorn.error").error(f"Unhandled server error: {exc}", exc_info=True)
-    from fastapi.responses import JSONResponse
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled server error: {exc}", exc_info=True)
+    origin = request.headers.get("origin")
+    headers: dict[str, str] = {}
+    if origin and ("sunsetgroupbd.com" in origin or origin in settings.allowed_origins_list):
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
     return JSONResponse(
         status_code=500,
-        content={"detail": f"Internal server error: {str(exc)}"}
+        content={"detail": f"Internal server error: {str(exc)}"},
+        headers=headers,
     )
 
 

@@ -213,12 +213,20 @@ class DashboardService:
         # ── Meeting totals ────────────────────────────────────────────────────
         # Visit count activities (non-time): activity_type contains "visit" or "CX"
         total_outdoor_visits = 0
+        total_indoor_cx = 0
         total_meeting_dur = 0
         for me in meeting_entries:
-            if me.total_count is not None:
-                total_outdoor_visits += me.total_count
-            if me.total_duration_minutes is not None:
-                total_meeting_dur += me.total_duration_minutes
+            s_sum = (me.slot_10am_1pm or 0) + (me.slot_2pm_5pm or 0) + (me.slot_5pm_6pm or 0)
+            val = me.total_count if me.total_count is not None else s_sum
+            act_lower = (me.activity_type or "").lower()
+            if "outdoor_visit" in act_lower or "outdoor visit" in act_lower or ("outdoor" in act_lower and "time" not in act_lower and "minute" not in act_lower):
+                total_outdoor_visits += val
+            elif "indoor_cx" in act_lower or "indoor cx" in act_lower or "cx" in act_lower or ("indoor" in act_lower and "time" not in act_lower and "minute" not in act_lower):
+                total_indoor_cx += val
+
+            dur = me.total_duration_minutes if me.total_duration_minutes is not None else s_sum
+            if "time" in act_lower or "duration" in act_lower or "minute" in act_lower:
+                total_meeting_dur += dur
 
         # ── Financial totals ─────────────────────────────────────────────────
         fin = SalesService.calc_totals(sales_entries)
@@ -228,7 +236,17 @@ class DashboardService:
             report.report_date, report.employee_id
         )
 
-        def ta(actual_int, target_val, base_val=None, cf_val=None, monthly_val=None) -> TargetAchievement:
+        # Call Quota Credit rule:
+        # 35 calls reduced per Indoor CX meeting
+        # 70 calls reduced per Outdoor site visit
+        call_reduction = (total_outdoor_visits * 70) + (total_indoor_cx * 35)
+        raw_dialed_target = target_info["dialed_target"]
+        if raw_dialed_target is not None:
+            adjusted_dialed_target = max(0, raw_dialed_target - call_reduction)
+        else:
+            adjusted_dialed_target = None
+
+        def ta(actual_int, target_val, base_val=None, cf_val=None, monthly_val=None, reduction_val=None) -> TargetAchievement:
             actual = Decimal(str(actual_int))
             t = Decimal(str(target_val)) if target_val is not None else None
             return TargetAchievement(
@@ -238,9 +256,15 @@ class DashboardService:
                 base_target=Decimal(str(base_val)) if base_val is not None else None,
                 carry_forward=Decimal(str(cf_val)) if cf_val is not None else None,
                 monthly_target=Decimal(str(monthly_val)) if monthly_val is not None else None,
+                call_reduction=reduction_val,
             )
 
-        dialed_ta = ta(total_dialed, target_info["dialed_target"])
+        dialed_ta = ta(
+            total_dialed,
+            adjusted_dialed_target,
+            base_val=raw_dialed_target,
+            reduction_val=call_reduction,
+        )
         connected_ta = ta(total_connected, target_info["connected_target"])
         visit_ta = ta(total_outdoor_visits, target_info["outdoor_target"])
         sales_actual = fin["total_new_sales"]
@@ -566,10 +590,18 @@ class DashboardService:
             dialed = summary.total_calls_dialed
             connected = summary.total_calls_connected
             visits = summary.total_outdoor_visits
+            indoor_cx = summary.total_indoor_cx
             meet_dur = summary.total_meeting_time_minutes
             colls = float(summary.actual_collection_bdt)
 
-            dialed_pct = min(200.0, round((dialed / dialed_tgt * 100), 1)) if dialed_tgt > 0 else 100.0
+            # Meeting Call Quota Credit:
+            # -35 calls reduced per indoor customer meeting
+            # -70 calls reduced per outdoor site visit
+            call_reduction = (visits * 70) + (indoor_cx * 35)
+            base_dialed_target = dialed_tgt
+            adjusted_dialed_tgt = max(0, dialed_tgt - call_reduction)
+
+            dialed_pct = min(200.0, round((dialed / adjusted_dialed_tgt * 100), 1)) if adjusted_dialed_tgt > 0 else 100.0
             connected_pct = min(200.0, round((connected / connected_tgt * 100), 1)) if connected_tgt > 0 else 100.0
             outdoor_pct = min(200.0, round((visits / outdoor_tgt * 100), 1)) if outdoor_tgt > 0 else 100.0
             colls_pct = min(200.0, round((colls / collection_tgt * 100), 1)) if collection_tgt > 0 else 100.0
@@ -593,8 +625,11 @@ class DashboardService:
                     username=emp.username,
                     reports_count=summary.total_reports,
                     dialed_calls=dialed,
-                    dialed_target=dialed_tgt,
+                    dialed_target=adjusted_dialed_tgt,
                     dialed_pct=dialed_pct,
+                    base_dialed_target=base_dialed_target,
+                    call_reduction=call_reduction,
+                    indoor_cx_count=indoor_cx,
                     connected_calls=connected,
                     connected_target=connected_tgt,
                     connected_pct=connected_pct,

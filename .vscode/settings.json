@@ -1,0 +1,13 @@
+{
+  "python.defaultInterpreterPath": "C:\\Users\\user\\AppData\\Local\\Python\\pythoncore-3.15-64\\python.exe",
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/backend"
+  ],
+  "python.autoComplete.extraPaths": [
+    "${workspaceFolder}/backend"
+  ],
+  "pyright.analysis.extraPaths": [
+    "${workspaceFolder}/backend"
+  ]
+}
+

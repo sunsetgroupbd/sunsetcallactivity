@@ -70,6 +70,7 @@ class TargetAchievement(BaseModel):
     base_target: Optional[Decimal] = None
     carry_forward: Optional[Decimal] = None
     monthly_target: Optional[Decimal] = None
+    call_reduction: Optional[int] = None
 
 
 class ReportSummary(BaseModel):
@@ -187,6 +188,9 @@ class EmployeeLeaderboardItem(BaseModel):
     dialed_calls: int
     dialed_target: int
     dialed_pct: float
+    base_dialed_target: Optional[int] = None
+    call_reduction: Optional[int] = None
+    indoor_cx_count: Optional[int] = None
     connected_calls: int
     connected_target: int
     connected_pct: float

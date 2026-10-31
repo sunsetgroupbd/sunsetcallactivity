@@ -4,3 +4,16 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+
+[tool.pyright]
+include = ["app", "tests"]
+extraPaths = [
+    ".",
+    "C:/Users/user/AppData/Local/Python/pythoncore-3.15-64/Lib/site-packages"
+]
+
+[tool.pyrefly]
+search-path = [
+    ".",
+    "C:/Users/user/AppData/Local/Python/pythoncore-3.15-64/Lib/site-packages"
+]

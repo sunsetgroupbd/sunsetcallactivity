@@ -3,7 +3,11 @@ from __future__ import annotations
 
 import enum
 from datetime import datetime, timezone
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from app.models.report import DailyActivityReport
+    from app.models.targets import DailyTargets
 
 from sqlalchemy import Boolean, DateTime, Enum, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -43,14 +47,14 @@ class User(Base):
     )
 
     # ── Relationships ─────────────────────────────────────────────────────────
-    reports: Mapped[list["DailyActivityReport"]] = relationship(  # noqa: F821
+    reports: Mapped[list[DailyActivityReport]] = relationship(
         "DailyActivityReport",
         back_populates="employee",
         cascade="all, delete-orphan",
         passive_deletes=True,
         lazy="select",
     )
-    targets: Mapped[list["DailyTargets"]] = relationship(  # noqa: F821
+    targets: Mapped[list[DailyTargets]] = relationship(
         "DailyTargets",
         back_populates="employee",
         cascade="all, delete-orphan",

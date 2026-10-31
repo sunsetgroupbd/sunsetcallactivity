@@ -1,6 +1,11 @@
 """MeetingActivityEntry model — daily meeting/visit time by activity type."""
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.models.report import DailyActivityReport
+
 from sqlalchemy import ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -59,7 +64,7 @@ class MeetingActivityEntry(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # ── Relationship ──────────────────────────────────────────────────────────
-    report: Mapped["DailyActivityReport"] = relationship(  # noqa: F821
+    report: Mapped[DailyActivityReport] = relationship(
         "DailyActivityReport", back_populates="meeting_entries"
     )
 

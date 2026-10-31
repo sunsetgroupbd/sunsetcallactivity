@@ -386,6 +386,9 @@ export interface EmployeeLeaderboardItem {
   dialed_calls: number;
   dialed_target: number;
   dialed_pct: number;
+  base_dialed_target?: number;
+  call_reduction?: number;
+  indoor_cx_count?: number;
   connected_calls: number;
   connected_target: number;
   connected_pct: number;

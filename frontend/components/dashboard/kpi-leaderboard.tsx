@@ -274,11 +274,27 @@ export function KPILeaderboard({
                 </span>
               </div>
               {renderProgressBar(personal.dialed_pct)}
-              <p className="text-[11px] text-slate-500 pt-1 font-medium">
-                {personal.dialed_calls >= personal.dialed_target
-                  ? "Target reached! 🎉"
-                  : `${personal.dialed_target - personal.dialed_calls} calls remaining`}
-              </p>
+              {personal.call_reduction && personal.call_reduction > 0 ? (
+                <div className="pt-1 flex items-center justify-between text-[10px]">
+                  <span className="text-slate-500 font-medium">
+                    {personal.dialed_calls >= personal.dialed_target
+                      ? "Target reached! 🎉"
+                      : `${personal.dialed_target - personal.dialed_calls} calls remaining`}
+                  </span>
+                  <span
+                    className="font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 cursor-help"
+                    title={`Dialed target adjusted from ${personal.base_dialed_target || personal.dialed_target + personal.call_reduction} to ${personal.dialed_target} (-${personal.call_reduction} calls credited for outdoor/indoor meetings)`}
+                  >
+                    -{personal.call_reduction} mtg credit
+                  </span>
+                </div>
+              ) : (
+                <p className="text-[11px] text-slate-500 pt-1 font-medium">
+                  {personal.dialed_calls >= personal.dialed_target
+                    ? "Target reached! 🎉"
+                    : `${personal.dialed_target - personal.dialed_calls} calls remaining`}
+                </p>
+              )}
             </div>
 
             {/* Connected */}
@@ -660,6 +676,16 @@ export function KPILeaderboard({
                         </span>
                       </div>
                       {renderProgressBar(emp.dialed_pct)}
+                      {emp.call_reduction && emp.call_reduction > 0 ? (
+                        <div className="mt-1 flex items-center justify-end">
+                          <span
+                            className="text-[9px] font-bold text-amber-700 bg-amber-50 px-1 py-0.2 rounded border border-amber-200 cursor-help"
+                            title={`Base target: ${emp.base_dialed_target ?? (emp.dialed_target + emp.call_reduction)} calls. Credited -${emp.call_reduction} calls (-70 per outdoor, -35 per indoor CX).`}
+                          >
+                            -{emp.call_reduction} credit
+                          </span>
+                        </div>
+                      ) : null}
                     </td>
 
                     {/* Connected Target vs Actual */}
@@ -818,6 +844,17 @@ export function KPILeaderboard({
                         <span className="text-[10px] text-slate-400 font-normal">/ {emp.dialed_target}</span>
                       </div>
                       {renderProgressBar(emp.dialed_pct)}
+                      {emp.call_reduction && emp.call_reduction > 0 ? (
+                        <div className="mt-1 flex items-center justify-between text-[9px]">
+                          <span className="text-slate-500">Mtg credit:</span>
+                          <span
+                            className="font-bold text-amber-700 bg-amber-100/70 px-1 py-0.2 rounded cursor-help"
+                            title={`Base: ${emp.base_dialed_target ?? (emp.dialed_target + emp.call_reduction)} calls (-${emp.call_reduction} calls credited)`}
+                          >
+                            -{emp.call_reduction} calls
+                          </span>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
 

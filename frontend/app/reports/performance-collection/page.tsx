@@ -157,6 +157,7 @@ function PerformanceCollectionContent() {
     <DashboardLayout
       title="Employee Performance & Collection Report"
       subtitle="Monthly performance benchmarks, milestone intervals, and customer-wise collection ledger"
+      adminOnly
     >
       <div className="space-y-6">
         {/* ── Top Header Actions & Breadcrumb ────────────────────────────── */}

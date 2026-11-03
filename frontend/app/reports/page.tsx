@@ -459,30 +459,32 @@ function ReportsContent() {
       subtitle="Historical daily call activity reports, financial metrics, and export"
     >
       <div className="space-y-6">
-        {/* ── Featured Quick Link: Employee Performance & Collection Report ──── */}
-        <div className="bg-gradient-to-r from-emerald-900 to-teal-900 text-white rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-md">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-700/60 text-emerald-100 px-2 py-0.5 rounded-full border border-emerald-500/30">
-                Performance & Ledger
-              </span>
-              <span className="text-xs text-emerald-200">Executive & Customer Report</span>
+        {/* ── Featured Quick Link: Employee Performance & Collection Report (Admin Only) ──── */}
+        {isAdmin && (
+          <div className="bg-gradient-to-r from-emerald-900 to-teal-900 text-white rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-md">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-700/60 text-emerald-100 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                  Admin Only • Performance & Ledger
+                </span>
+                <span className="text-xs text-emerald-200">Executive & Customer Report</span>
+              </div>
+              <h3 className="text-base sm:text-lg font-bold text-white">
+                Employee Performance & Collection Report
+              </h3>
+              <p className="text-xs text-emerald-100/80 max-w-2xl">
+                Section 1 (Monthly Progress & Till-Date Checkpoints: 5th, 10th, 15th, 20th, 25th, 30th) + Section 2 (Customer-wise Collection Ledger with IN/OUT plans and Next Collection Dates).
+              </p>
             </div>
-            <h3 className="text-base sm:text-lg font-bold text-white">
-              Employee Performance & Collection Report
-            </h3>
-            <p className="text-xs text-emerald-100/80 max-w-2xl">
-              Section 1 (Monthly Progress & Till-Date Checkpoints: 5th, 10th, 15th, 20th, 25th, 30th) + Section 2 (Customer-wise Collection Ledger with IN/OUT plans and Next Collection Dates).
-            </p>
+            <Link
+              href="/reports/performance-collection"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-bold rounded-lg text-xs transition-colors shrink-0 shadow-xs"
+            >
+              <span>Open Performance Report</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
           </div>
-          <Link
-            href="/reports/performance-collection"
-            className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-bold rounded-lg text-xs transition-colors shrink-0 shadow-xs"
-          >
-            <span>Open Performance Report</span>
-            <ArrowRight className="w-4 h-4" />
-          </Link>
-        </div>
+        )}
 
         {/* ── Filters Card ─────────────────────────────────────────────────── */}
         <Card>

@@ -19,8 +19,10 @@ from app.schemas.report import (
     ReportUpdate,
 )
 from app.schemas.dashboard import ReportSummary
+from app.schemas.performance_collection_report import PerformanceCollectionReportResponse
 from app.services.report_service import ReportService
 from app.services.dashboard_service import DashboardService
+from app.services.performance_collection_service import PerformanceCollectionService
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 
@@ -69,6 +71,28 @@ async def get_report_by_date(
 ):
     svc = ReportService(db)
     return await svc.get_report_by_date(report_date, current_user, employee_id)
+
+
+@router.get("/employee-performance-collection", response_model=PerformanceCollectionReportResponse)
+async def get_employee_performance_collection_report(
+    month: Optional[str] = Query(None, description="Month format YYYY-MM (e.g. 2026-11)"),
+    employee_id: Optional[int] = Query(None, description="Filter by employee"),
+    date_from: Optional[date] = Query(None, description="Start date filter"),
+    date_to: Optional[date] = Query(None, description="End date filter"),
+    lead_status: Optional[str] = Query(None, description="Filter by customer lead status (HP, P, FUB, NI)"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate Section 1 (Employee Monthly Performance) & Section 2 (Customer Collection Ledger) report."""
+    svc = PerformanceCollectionService(db)
+    return await svc.get_report_data(
+        current_user=current_user,
+        month_str=month,
+        employee_id=employee_id,
+        date_from=date_from,
+        date_to=date_to,
+        lead_status_filter=lead_status,
+    )
 
 
 @router.get("/{report_id}", response_model=ReportRead)

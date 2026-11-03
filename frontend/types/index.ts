@@ -478,5 +478,92 @@ export interface FinancialTrendResponse {
   trend: DailyTrendPoint[];
 }
 
+export interface PerformanceIntervalSummary {
+  label: string;
+  end_day: number;
+  new_sales: number;
+  emi: number;
+  total_collection: number;
+  total_lead: number;
+  fair_lead: number;
+  fb_lead: number;
+  hp: number;
+  p: number;
+  fup: number;
+  outdoor_visits: number;
+  indoor_cx: number;
+}
+
+export interface EmployeeMonthlyPerformance {
+  employee_id: number;
+  employee_name: string;
+  position: string;
+  month: string;
+  target_sales: number;
+  target_collection: number;
+  actual_new_sales: number;
+  actual_emi: number;
+  actual_tb: number;
+  total_collection: number;
+  total_lead: number;
+  fair_lead: number;
+  fb_lead: number;
+  hp: number;
+  p: number;
+  fup: number;
+  prediction_sold_fair: number;
+  prediction_sold_fb: number;
+  prediction_sold_other: number;
+  prediction_hold: number;
+  prediction_cancel: number;
+  intervals: PerformanceIntervalSummary[];
+}
+
+export interface CustomerCollectionItem {
+  id: number;
+  customer_name: string;
+  customer_phone?: string | null;
+  paid_amount: number;
+  unpaid_amount: number;
+  collection_date?: string | null;
+  in_out_plan: string;
+  date_1?: string | null;
+  date_2?: string | null;
+  new_sales_amount: number;
+  tb_amount: number;
+  emi_amount: number;
+  next_collection_date?: string | null;
+  lead_status: string;
+  total_collection: number;
+  remarks?: string | null;
+  employee_id: number;
+  employee_name: string;
+}
+
+export interface PerformanceCollectionSummaryTotals {
+  total_target: number;
+  total_new_sales: number;
+  total_emi: number;
+  total_tb: number;
+  total_collection: number;
+  total_paid: number;
+  total_unpaid: number;
+  total_leads: number;
+  total_fair_leads: number;
+  total_fb_leads: number;
+  total_hp: number;
+  total_p: number;
+  total_fup: number;
+}
+
+export interface PerformanceCollectionReportResponse {
+  month: string;
+  date_from: string;
+  date_to: string;
+  monthly_performances: EmployeeMonthlyPerformance[];
+  customer_collections: CustomerCollectionItem[];
+  summary: PerformanceCollectionSummaryTotals;
+}
+
 
 

@@ -22,6 +22,7 @@ import {
   PerformanceLeaderboardResponse,
   FinancialTrendResponse,
   Notice,
+  PerformanceCollectionReportResponse,
 } from "@/types";
 
 const API_BASE =
@@ -306,7 +307,24 @@ export const api = {
         method: "DELETE",
       });
     },
-
+    getPerformanceCollectionReport: async (params?: {
+      month?: string;
+      employee_id?: number;
+      date_from?: string;
+      date_to?: string;
+      lead_status?: string;
+    }): Promise<PerformanceCollectionReportResponse> => {
+      const search = new URLSearchParams();
+      if (params?.month) search.set("month", params.month);
+      if (params?.employee_id) search.set("employee_id", String(params.employee_id));
+      if (params?.date_from) search.set("date_from", params.date_from);
+      if (params?.date_to) search.set("date_to", params.date_to);
+      if (params?.lead_status) search.set("lead_status", params.lead_status);
+      const q = search.toString();
+      return request<PerformanceCollectionReportResponse>(
+        `/reports/employee-performance-collection${q ? `?${q}` : ""}`
+      );
+    },
   },
 
   calls: {

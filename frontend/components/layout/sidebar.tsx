@@ -10,6 +10,7 @@ import {
   Users,
   Banknote,
   FileSpreadsheet,
+  Target,
   UserCheck,
   Settings,
   X,
@@ -36,6 +37,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
     { name: "Meeting Activity", href: "/meetings", icon: Users },
     { name: "Sales & Collection", href: "/sales", icon: Banknote },
     { name: "Reports", href: "/reports", icon: FileSpreadsheet },
+    { name: "Performance & Collection", href: "/reports/performance-collection", icon: Target },
     { name: "Notice Board", href: "/notices", icon: BellRing },
     ...(isAdmin
       ? [

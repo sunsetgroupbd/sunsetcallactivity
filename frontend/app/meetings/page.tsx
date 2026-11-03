@@ -17,7 +17,6 @@ import {
   Table2,
   Briefcase,
   Layers,
-  Sparkles,
   CheckCircle2,
   Cloud,
   RefreshCw,
@@ -1103,8 +1102,8 @@ function MeetingTimeDailyContent() {
 
               {loggedActivities.length === 0 ? (
                 <div className="bg-white border-2 border-dashed border-slate-200 rounded-2xl p-4 sm:p-5 text-center">
-                  <div className="w-10 h-10 bg-emerald-50 text-emerald-700 rounded-xl flex items-center justify-center mx-auto mb-2">
-                    <Sparkles className="w-5 h-5" />
+                  <div className="w-10 h-10 bg-slate-100 text-slate-500 rounded-xl flex items-center justify-center mx-auto mb-2">
+                    <Users className="w-5 h-5 text-slate-500" />
                   </div>
                   <h4 className="font-bold text-slate-800 text-xs sm:text-sm mb-1">No activities logged today</h4>
                   <p className="text-[11px] sm:text-xs text-slate-400 mb-3">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
@@ -33,19 +33,24 @@ import {
   Search,
 } from "lucide-react";
 
-export default function PerformanceCollectionReportPage() {
+export const dynamic = "force-dynamic";
+
+function PerformanceCollectionReportContent() {
   const { user, loading: authLoading, isAdmin, isSubAdmin } = useAuth();
   const router = useRouter();
 
   // Permitted only for Admin and Sub-Admin
   const canAccess = Boolean(isAdmin || isSubAdmin);
 
-  // Filter States
-  const currentYearMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
-  const [selectedMonth, setSelectedMonth] = useState<string>(currentYearMonth);
+  // Filter States - deferred to avoid SSR prerender time instability
+  const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("");
   const [selectedLeadStatus, setSelectedLeadStatus] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
+
+  useEffect(() => {
+    setSelectedMonth(new Date().toISOString().slice(0, 7));
+  }, []);
 
   // Data & Loading States
   const [report, setReport] = useState<PerformanceCollectionReportResponse | null>(null);
@@ -64,7 +69,7 @@ export default function PerformanceCollectionReportPage() {
     setError(null);
     try {
       const data = await api.reports.getPerformanceCollectionReport({
-        month: selectedMonth,
+        month: selectedMonth || undefined,
         employee_id: selectedEmployeeId ? parseInt(selectedEmployeeId, 10) : undefined,
         lead_status: selectedLeadStatus || undefined,
       });
@@ -940,5 +945,19 @@ export default function PerformanceCollectionReportPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function PerformanceCollectionReportPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-96 items-center justify-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        </div>
+      }
+    >
+      <PerformanceCollectionReportContent />
+    </Suspense>
   );
 }

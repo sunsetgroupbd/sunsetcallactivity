@@ -76,6 +76,41 @@ export const getAccessToken = (): string | null => {
   return null;
 };
 
+let refreshPromise: Promise<string | null> | null = null;
+
+export async function performTokenRefresh(): Promise<string | null> {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = (async () => {
+    try {
+      const url = `${API_BASE}/auth/refresh`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { Accept: "application/json" },
+        credentials: "include",
+      });
+      if (!res.ok) {
+        setAccessToken(null);
+        return null;
+      }
+      const data = (await res.json()) as AuthTokenResponse;
+      if (data?.access_token) {
+        setAccessToken(data.access_token);
+        return data.access_token;
+      }
+      setAccessToken(null);
+      return null;
+    } catch {
+      setAccessToken(null);
+      return null;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
+}
+
 async function request<T>(
   endpoint: string,
   options: RequestInit = {}
@@ -103,6 +138,59 @@ async function request<T>(
     });
   } catch (err: unknown) {
     throw new ApiError(0, "Unable to reach the server. Please check your network connection.", err);
+  }
+
+  // Automatic 401 Token Refresh Interceptor:
+  // If request failed with 401 and is not already a login or refresh request,
+  // attempt to refresh the token using HttpOnly cookie and replay the request.
+  if (
+    response.status === 401 &&
+    !endpoint.startsWith("/auth/login") &&
+    !endpoint.startsWith("/auth/refresh")
+  ) {
+    const newToken = await performTokenRefresh();
+    if (newToken) {
+      const retryHeaders: Record<string, string> = {
+        ...headers,
+        Authorization: `Bearer ${newToken}`,
+      };
+      let retryResponse: Response;
+      try {
+        retryResponse = await fetch(url, {
+          ...options,
+          headers: retryHeaders,
+          credentials: "include",
+        });
+      } catch (err: unknown) {
+        throw new ApiError(0, "Unable to reach the server. Please check your network connection.", err);
+      }
+
+      if (retryResponse.status === 204) {
+        return {} as T;
+      }
+
+      let retryData: unknown;
+      try {
+        retryData = await retryResponse.json();
+      } catch {
+        retryData = null;
+      }
+
+      if (retryResponse.ok) {
+        return retryData as T;
+      }
+
+      let retryErrorMessage = `Request failed with status ${retryResponse.status}`;
+      if (retryData && typeof retryData === "object") {
+        const errObj = retryData as { detail?: unknown; message?: string };
+        if (typeof errObj.detail === "string") {
+          retryErrorMessage = errObj.detail;
+        } else if (errObj.message) {
+          retryErrorMessage = errObj.message;
+        }
+      }
+      throw new ApiError(retryResponse.status, retryErrorMessage, retryData);
+    }
   }
 
   if (response.status === 204) {
@@ -190,11 +278,11 @@ export const api = {
       return request<User>("/auth/me");
     },
     refresh: async (): Promise<AuthTokenResponse> => {
-      const res = await request<AuthTokenResponse>("/auth/refresh", {
-        method: "POST",
-      });
-      setAccessToken(res.access_token);
-      return res;
+      const token = await performTokenRefresh();
+      if (!token) {
+        throw new ApiError(401, "Invalid or expired refresh token");
+      }
+      return { access_token: token, token_type: "bearer" };
     },
   },
 

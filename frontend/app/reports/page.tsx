@@ -459,29 +459,28 @@ function ReportsContent() {
       subtitle="Historical daily call activity reports, financial metrics, and export"
     >
       <div className="space-y-6">
-        {/* ── Featured Quick Link: Employee Performance & Collection Report (Admin Only) ──── */}
+        {/* ── Quick Link: Performance & Collection Report (Admin Only) ──── */}
         {isAdmin && (
-          <div className="bg-gradient-to-r from-emerald-900 to-teal-900 text-white rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-md">
-            <div className="space-y-1">
+          <div className="bg-gradient-to-r from-emerald-900 to-teal-900 text-white rounded-xl p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm border border-emerald-800">
+            <div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-700/60 text-emerald-100 px-2 py-0.5 rounded-full border border-emerald-500/30">
-                  Admin Only • Performance & Ledger
+                <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-800/80 text-emerald-200 px-2 py-0.5 rounded-md border border-emerald-700/50">
+                  Admin
                 </span>
-                <span className="text-xs text-emerald-200">Executive & Customer Report</span>
+                <h3 className="text-sm sm:text-base font-bold text-white">
+                  Performance & Collection Ledger
+                </h3>
               </div>
-              <h3 className="text-base sm:text-lg font-bold text-white">
-                Employee Performance & Collection Report
-              </h3>
-              <p className="text-xs text-emerald-100/80 max-w-2xl">
-                Section 1 (Monthly Progress & Till-Date Checkpoints: 5th, 10th, 15th, 20th, 25th, 30th) + Section 2 (Customer-wise Collection Ledger with IN/OUT plans and Next Collection Dates).
+              <p className="text-xs text-emerald-200/90 mt-0.5">
+                Monthly employee benchmarks & customer collection ledger
               </p>
             </div>
             <Link
               href="/reports/performance-collection"
-              className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-bold rounded-lg text-xs transition-colors shrink-0 shadow-xs"
+              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-bold rounded-lg text-xs transition-colors shrink-0 shadow-xs"
             >
-              <span>Open Performance Report</span>
-              <ArrowRight className="w-4 h-4" />
+              <span>Open Report</span>
+              <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           </div>
         )}

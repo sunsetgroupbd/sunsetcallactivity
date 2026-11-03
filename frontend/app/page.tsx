@@ -47,7 +47,7 @@ import {
 } from "@/lib/utils";
 
 function DashboardContent() {
-  const { user, isAdmin, isTL } = useAuth();
+  const { user, loading: authLoading, isAdmin, isTL } = useAuth();
 
   // Filters
   const [startDate, setStartDate] = useState("");
@@ -72,15 +72,16 @@ function DashboardContent() {
 
   // Fetch admin employee list
   useEffect(() => {
-    if (isAdmin) {
+    if (!authLoading && user && isAdmin) {
       api.employees
         .list({ is_active: true })
         .then((data) => setEmployees(data))
         .catch(() => {});
     }
-  }, [isAdmin]);
+  }, [authLoading, user, isAdmin]);
 
   const loadDashboardData = useCallback(async () => {
+    if (authLoading || !user) return;
     if (!startDate || !endDate) return;
     setLoading(true);
     setError(null);
@@ -118,11 +119,13 @@ function DashboardContent() {
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate, selectedEmployeeId]);
+  }, [authLoading, user, startDate, endDate, selectedEmployeeId]);
 
   useEffect(() => {
-    loadDashboardData();
-  }, [loadDashboardData]);
+    if (!authLoading && user) {
+      loadDashboardData();
+    }
+  }, [authLoading, user, loadDashboardData]);
 
   const handleResetFilters = () => {
     const today = getDhakaToday();

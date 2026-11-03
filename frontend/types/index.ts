@@ -502,6 +502,8 @@ export interface PerformanceIntervalSummary {
   fup: number;
   outdoor_visits: number;
   indoor_cx: number;
+  is_manual?: boolean;
+  admin_notes?: string | null;
 }
 
 export interface EmployeeMonthlyPerformance {
@@ -572,7 +574,53 @@ export interface PerformanceCollectionReportResponse {
   date_to: string;
   monthly_performances: EmployeeMonthlyPerformance[];
   customer_collections: CustomerCollectionItem[];
+  company_intervals?: PerformanceIntervalSummary[];
   summary: PerformanceCollectionSummaryTotals;
+}
+
+export interface MilestoneCheckpointItem {
+  checkpoint_day: number;
+  label?: string;
+  new_sales: number;
+  emi: number;
+  total_collection?: number;
+  total_lead?: number;
+  fair_lead?: number;
+  fb_lead?: number;
+  hp?: number;
+  p?: number;
+  fup?: number;
+  outdoor_visits?: number;
+  indoor_cx?: number;
+  admin_notes?: string | null;
+}
+
+export interface MilestoneCheckpointsBulkSaveRequest {
+  month: string;
+  employee_id?: number | null;
+  checkpoints: MilestoneCheckpointItem[];
+}
+
+export interface MilestoneCheckpointRead {
+  id: number;
+  month: string;
+  employee_id?: number | null;
+  checkpoint_day: number;
+  label: string;
+  new_sales: number;
+  emi: number;
+  total_collection: number;
+  total_lead: number;
+  fair_lead: number;
+  fb_lead: number;
+  hp: number;
+  p: number;
+  fup: number;
+  outdoor_visits: number;
+  indoor_cx: number;
+  admin_notes?: string | null;
+  is_manual: boolean;
+  updated_by_id?: number | null;
 }
 
 

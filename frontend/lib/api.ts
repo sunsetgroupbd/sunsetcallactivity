@@ -24,6 +24,8 @@ import {
   Notice,
   PerformanceCollectionReportResponse,
   BulkUploadEmployeesResponse,
+  MilestoneCheckpointsBulkSaveRequest,
+  MilestoneCheckpointRead,
 } from "@/types";
 
 const API_BASE =
@@ -412,6 +414,47 @@ export const api = {
       const q = search.toString();
       return request<PerformanceCollectionReportResponse>(
         `/reports/employee-performance-collection${q ? `?${q}` : ""}`
+      );
+    },
+    saveMilestoneCheckpoints: async (
+      data: MilestoneCheckpointsBulkSaveRequest
+    ): Promise<MilestoneCheckpointRead[]> => {
+      return request<MilestoneCheckpointRead[]>("/reports/milestone-checkpoints", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+    getMilestoneCheckpoints: async (params: {
+      month: string;
+      employee_id?: number | null;
+    }): Promise<MilestoneCheckpointRead[]> => {
+      const search = new URLSearchParams();
+      search.set("month", params.month);
+      if (params.employee_id !== undefined && params.employee_id !== null) {
+        search.set("employee_id", String(params.employee_id));
+      }
+      return request<MilestoneCheckpointRead[]>(
+        `/reports/milestone-checkpoints?${search.toString()}`
+      );
+    },
+    resetMilestoneCheckpoints: async (params: {
+      month: string;
+      employee_id?: number | null;
+      checkpoint_day?: number;
+    }): Promise<{ message: string; count: number }> => {
+      const search = new URLSearchParams();
+      search.set("month", params.month);
+      if (params.employee_id !== undefined && params.employee_id !== null) {
+        search.set("employee_id", String(params.employee_id));
+      }
+      if (params.checkpoint_day !== undefined && params.checkpoint_day !== null) {
+        search.set("checkpoint_day", String(params.checkpoint_day));
+      }
+      return request<{ message: string; count: number }>(
+        `/reports/milestone-checkpoints?${search.toString()}`,
+        {
+          method: "DELETE",
+        }
       );
     },
   },

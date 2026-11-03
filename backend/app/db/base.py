@@ -13,3 +13,4 @@ from app.models.sales_collection import SalesCollectionEntry  # noqa: F401
 from app.models.targets import DailyTargets  # noqa: F401
 from app.models.settings import AppSettings  # noqa: F401
 from app.models.notice import Notice  # noqa: F401
+from app.models.milestone_checkpoint import MilestoneCheckpoint  # noqa: F401

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Optional
+from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,7 +19,11 @@ from app.schemas.report import (
     ReportUpdate,
 )
 from app.schemas.dashboard import ReportSummary
-from app.schemas.performance_collection_report import PerformanceCollectionReportResponse
+from app.schemas.performance_collection_report import (
+    PerformanceCollectionReportResponse,
+    MilestoneCheckpointsBulkSaveRequest,
+    MilestoneCheckpointRead,
+)
 from app.services.report_service import ReportService
 from app.services.dashboard_service import DashboardService
 from app.services.performance_collection_service import PerformanceCollectionService
@@ -93,6 +97,45 @@ async def get_employee_performance_collection_report(
         date_to=date_to,
         lead_status_filter=lead_status,
     )
+
+
+@router.post("/milestone-checkpoints", response_model=List[MilestoneCheckpointRead])
+async def save_milestone_checkpoints(
+    data: MilestoneCheckpointsBulkSaveRequest,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Save manual milestone checkpoints review session data (Admin Only).
+    Supports both company-wide (employee_id is null) and per-employee entry.
+    """
+    svc = PerformanceCollectionService(db)
+    return await svc.save_milestone_checkpoints(data, current_user)
+
+
+@router.get("/milestone-checkpoints", response_model=List[MilestoneCheckpointRead])
+async def get_milestone_checkpoints(
+    month: str = Query(..., description="Month in YYYY-MM format"),
+    employee_id: Optional[int] = Query(None, description="Employee ID or None for company-wide"),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get manual milestone checkpoints for the specified month and scope."""
+    svc = PerformanceCollectionService(db)
+    return await svc.get_milestone_checkpoints(month, employee_id)
+
+
+@router.delete("/milestone-checkpoints", status_code=200)
+async def reset_milestone_checkpoints(
+    month: str = Query(..., description="Month in YYYY-MM format"),
+    employee_id: Optional[int] = Query(None, description="Employee ID or None for company-wide"),
+    checkpoint_day: Optional[int] = Query(None, description="Optional specific checkpoint day (5, 10, etc.)"),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Reset manual checkpoints to revert back to auto-calculated report figures."""
+    svc = PerformanceCollectionService(db)
+    count = await svc.reset_milestone_checkpoints(month, employee_id, checkpoint_day)
+    return {"message": f"Successfully reset {count} manual checkpoint(s).", "count": count}
 
 
 @router.get("/{report_id}", response_model=ReportRead)

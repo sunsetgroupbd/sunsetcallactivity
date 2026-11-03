@@ -55,6 +55,34 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
                         logger.info("Added emi_target to daily_targets table")
                     except Exception as e:
                         logger.warning("Error adding emi_target to daily_targets: %s", e)
+
+                # Ensure milestone_checkpoints table exists for admin review sessions
+                await conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS milestone_checkpoints (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        month VARCHAR(7) NOT NULL,
+                        employee_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                        checkpoint_day INTEGER NOT NULL,
+                        label VARCHAR(50) NOT NULL,
+                        new_sales NUMERIC(15, 2) NOT NULL DEFAULT 0.0,
+                        emi NUMERIC(15, 2) NOT NULL DEFAULT 0.0,
+                        total_collection NUMERIC(15, 2) NOT NULL DEFAULT 0.0,
+                        total_lead INTEGER NOT NULL DEFAULT 0,
+                        fair_lead INTEGER NOT NULL DEFAULT 0,
+                        fb_lead INTEGER NOT NULL DEFAULT 0,
+                        hp INTEGER NOT NULL DEFAULT 0,
+                        p INTEGER NOT NULL DEFAULT 0,
+                        fup INTEGER NOT NULL DEFAULT 0,
+                        outdoor_visits INTEGER NOT NULL DEFAULT 0,
+                        indoor_cx INTEGER NOT NULL DEFAULT 0,
+                        admin_notes TEXT,
+                        updated_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_mc_month ON milestone_checkpoints(month)"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_mc_emp ON milestone_checkpoints(employee_id)"))
         except Exception as exc:
             logger.warning("ensure_schema_updates sqlite warning: %s", exc)
     else:
@@ -68,6 +96,32 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS designation VARCHAR(150)",
             "ALTER TABLE daily_targets ADD COLUMN IF NOT EXISTS emi_target NUMERIC(15, 2)",
+            """
+            CREATE TABLE IF NOT EXISTS milestone_checkpoints (
+                id SERIAL PRIMARY KEY,
+                month VARCHAR(7) NOT NULL,
+                employee_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                checkpoint_day INTEGER NOT NULL,
+                label VARCHAR(50) NOT NULL,
+                new_sales NUMERIC(15, 2) NOT NULL DEFAULT 0.0,
+                emi NUMERIC(15, 2) NOT NULL DEFAULT 0.0,
+                total_collection NUMERIC(15, 2) NOT NULL DEFAULT 0.0,
+                total_lead INTEGER NOT NULL DEFAULT 0,
+                fair_lead INTEGER NOT NULL DEFAULT 0,
+                fb_lead INTEGER NOT NULL DEFAULT 0,
+                hp INTEGER NOT NULL DEFAULT 0,
+                p INTEGER NOT NULL DEFAULT 0,
+                fup INTEGER NOT NULL DEFAULT 0,
+                outdoor_visits INTEGER NOT NULL DEFAULT 0,
+                indoor_cx INTEGER NOT NULL DEFAULT 0,
+                admin_notes TEXT,
+                updated_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS ix_mc_month ON milestone_checkpoints(month)",
+            "CREATE INDEX IF NOT EXISTS ix_mc_emp ON milestone_checkpoints(employee_id)",
             """
             DO $$
             BEGIN

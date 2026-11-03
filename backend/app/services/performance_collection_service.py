@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.models.milestone_checkpoint import MilestoneCheckpoint
 from app.models.report import DailyActivityReport
 from app.models.user import User, UserRole
 from app.repositories.targets_repo import TargetsRepository
@@ -24,6 +25,9 @@ from app.schemas.performance_collection_report import (
     PerformanceCollectionReportResponse,
     PerformanceCollectionSummaryTotals,
     PerformanceIntervalSummary,
+    MilestoneCheckpointItem,
+    MilestoneCheckpointsBulkSaveRequest,
+    MilestoneCheckpointRead,
 )
 
 
@@ -119,6 +123,20 @@ class PerformanceCollectionService:
 
         # 4. Checkpoint day boundaries for Section 1 milestones
         milestone_days = [5, 10, 15, 20, 25, num_days]
+
+        # Fetch manual milestone review session entries for this active month
+        active_month_str = f"{year:04d}-{month:02d}"
+        mc_query = select(MilestoneCheckpoint).where(MilestoneCheckpoint.month == active_month_str)
+        mc_res = await self.db.execute(mc_query)
+        all_mc_records = mc_res.scalars().all()
+
+        employee_manual_map: Dict[tuple[int, int], MilestoneCheckpoint] = {}
+        company_manual_map: Dict[int, MilestoneCheckpoint] = {}
+        for rec in all_mc_records:
+            if rec.employee_id is not None:
+                employee_manual_map[(rec.employee_id, rec.checkpoint_day)] = rec
+            else:
+                company_manual_map[rec.checkpoint_day] = rec
 
         monthly_performances: List[EmployeeMonthlyPerformance] = []
         customer_collection_items: List[CustomerCollectionItem] = []
@@ -285,24 +303,47 @@ class PerformanceCollectionService:
                         elif "indoor" in act:
                             sub_indoor += val
 
-                label = f"Till {m_day}th" if m_day != num_days else f"Till {num_days}th (Full Month)"
-                intervals.append(
-                    PerformanceIntervalSummary(
-                        label=label,
-                        end_day=m_day,
-                        new_sales=sub_new_sales,
-                        emi=sub_emi,
-                        total_collection=sub_new_sales + sub_emi + sub_tb,
-                        total_lead=sub_leads,
-                        fair_lead=sub_fair,
-                        fb_lead=sub_fb,
-                        hp=sub_hp,
-                        p=sub_p,
-                        fup=sub_fup,
-                        outdoor_visits=sub_outdoor,
-                        indoor_cx=sub_indoor,
+                if (emp.id, m_day) in employee_manual_map:
+                    rec = employee_manual_map[(emp.id, m_day)]
+                    intervals.append(
+                        PerformanceIntervalSummary(
+                            label=rec.label or f"Till {m_day}th",
+                            end_day=m_day,
+                            new_sales=rec.new_sales,
+                            emi=rec.emi,
+                            total_collection=rec.total_collection,
+                            total_lead=rec.total_lead,
+                            fair_lead=rec.fair_lead,
+                            fb_lead=rec.fb_lead,
+                            hp=rec.hp,
+                            p=rec.p,
+                            fup=rec.fup,
+                            outdoor_visits=rec.outdoor_visits,
+                            indoor_cx=rec.indoor_cx,
+                            is_manual=True,
+                            admin_notes=rec.admin_notes,
+                        )
                     )
-                )
+                else:
+                    label = f"Till {m_day}th" if m_day != num_days else f"Till {num_days}th (Full Month)"
+                    intervals.append(
+                        PerformanceIntervalSummary(
+                            label=label,
+                            end_day=m_day,
+                            new_sales=sub_new_sales,
+                            emi=sub_emi,
+                            total_collection=sub_new_sales + sub_emi + sub_tb,
+                            total_lead=sub_leads,
+                            fair_lead=sub_fair,
+                            fb_lead=sub_fb,
+                            hp=sub_hp,
+                            p=sub_p,
+                            fup=sub_fup,
+                            outdoor_visits=sub_outdoor,
+                            indoor_cx=sub_indoor,
+                            is_manual=False,
+                        )
+                    )
 
             # Role formatted display
             pos_title: str = (
@@ -356,6 +397,95 @@ class PerformanceCollectionService:
             summary_totals["total_hp"] += hp_total
             summary_totals["total_p"] += p_total
             summary_totals["total_fup"] += fup_total
+
+        # 5. Compute Company-Wide Intervals (either manual session or aggregate across staff)
+        company_intervals: List[PerformanceIntervalSummary] = []
+        for idx, m_day in enumerate(milestone_days):
+            if m_day in company_manual_map:
+                rec = company_manual_map[m_day]
+                company_intervals.append(
+                    PerformanceIntervalSummary(
+                        label=rec.label or f"Till {m_day}th",
+                        end_day=m_day,
+                        new_sales=rec.new_sales,
+                        emi=rec.emi,
+                        total_collection=rec.total_collection,
+                        total_lead=rec.total_lead,
+                        fair_lead=rec.fair_lead,
+                        fb_lead=rec.fb_lead,
+                        hp=rec.hp,
+                        p=rec.p,
+                        fup=rec.fup,
+                        outdoor_visits=rec.outdoor_visits,
+                        indoor_cx=rec.indoor_cx,
+                        is_manual=True,
+                        admin_notes=rec.admin_notes,
+                    )
+                )
+            else:
+                c_new_sales = sum(
+                    (p.intervals[idx].new_sales for p in monthly_performances if len(p.intervals) > idx),
+                    Decimal("0"),
+                )
+                c_emi = sum(
+                    (p.intervals[idx].emi for p in monthly_performances if len(p.intervals) > idx),
+                    Decimal("0"),
+                )
+                c_tot_coll = sum(
+                    (p.intervals[idx].total_collection for p in monthly_performances if len(p.intervals) > idx),
+                    Decimal("0"),
+                )
+                c_leads = sum(
+                    (p.intervals[idx].total_lead for p in monthly_performances if len(p.intervals) > idx),
+                    0,
+                )
+                c_fair = sum(
+                    (p.intervals[idx].fair_lead for p in monthly_performances if len(p.intervals) > idx),
+                    0,
+                )
+                c_fb = sum(
+                    (p.intervals[idx].fb_lead for p in monthly_performances if len(p.intervals) > idx),
+                    0,
+                )
+                c_hp = sum(
+                    (p.intervals[idx].hp for p in monthly_performances if len(p.intervals) > idx),
+                    0,
+                )
+                c_p = sum(
+                    (p.intervals[idx].p for p in monthly_performances if len(p.intervals) > idx),
+                    0,
+                )
+                c_fup = sum(
+                    (p.intervals[idx].fup for p in monthly_performances if len(p.intervals) > idx),
+                    0,
+                )
+                c_outdoor = sum(
+                    (p.intervals[idx].outdoor_visits for p in monthly_performances if len(p.intervals) > idx),
+                    0,
+                )
+                c_indoor = sum(
+                    (p.intervals[idx].indoor_cx for p in monthly_performances if len(p.intervals) > idx),
+                    0,
+                )
+                label = f"Till {m_day}th" if m_day != num_days else f"Till {num_days}th (Full Month)"
+                company_intervals.append(
+                    PerformanceIntervalSummary(
+                        label=label,
+                        end_day=m_day,
+                        new_sales=c_new_sales,
+                        emi=c_emi,
+                        total_collection=c_tot_coll,
+                        total_lead=c_leads,
+                        fair_lead=c_fair,
+                        fb_lead=c_fb,
+                        hp=c_hp,
+                        p=c_p,
+                        fup=c_fup,
+                        outdoor_visits=c_outdoor,
+                        indoor_cx=c_indoor,
+                        is_manual=False,
+                    )
+                )
 
         # 6. Process Section 2: Customer-wise Collection Report rows
         customer_item_id = 1
@@ -496,5 +626,156 @@ class PerformanceCollectionService:
             monthly_performances=monthly_performances,
             customer_collections=customer_collection_items,
             summary=summary_response,
+            company_intervals=company_intervals,
         )
+
+    async def save_milestone_checkpoints(
+        self,
+        data: MilestoneCheckpointsBulkSaveRequest,
+        admin_user: User,
+    ) -> List[MilestoneCheckpointRead]:
+        """Save/upsert manual review session checkpoints for Company-Wide or specific Employee."""
+        results: List[MilestoneCheckpointRead] = []
+        for cp in data.checkpoints:
+            stmt = select(MilestoneCheckpoint).where(
+                MilestoneCheckpoint.month == data.month,
+                MilestoneCheckpoint.checkpoint_day == cp.checkpoint_day,
+            )
+            if data.employee_id is not None:
+                stmt = stmt.where(MilestoneCheckpoint.employee_id == data.employee_id)
+            else:
+                stmt = stmt.where(MilestoneCheckpoint.employee_id.is_(None))
+
+            res = await self.db.execute(stmt)
+            existing = res.scalar_one_or_none()
+
+            tot_coll = cp.total_collection
+            if tot_coll == Decimal("0") and (cp.new_sales > 0 or cp.emi > 0):
+                tot_coll = cp.new_sales + cp.emi
+
+            if existing:
+                existing.label = cp.label
+                existing.new_sales = cp.new_sales
+                existing.emi = cp.emi
+                existing.total_collection = tot_coll
+                existing.total_lead = cp.total_lead
+                existing.fair_lead = cp.fair_lead
+                existing.fb_lead = cp.fb_lead
+                existing.hp = cp.hp
+                existing.p = cp.p
+                existing.fup = cp.fup
+                existing.outdoor_visits = cp.outdoor_visits
+                existing.indoor_cx = cp.indoor_cx
+                existing.admin_notes = cp.admin_notes
+                existing.updated_by_id = admin_user.id
+                target_rec = existing
+            else:
+                target_rec = MilestoneCheckpoint(
+                    month=data.month,
+                    employee_id=data.employee_id,
+                    checkpoint_day=cp.checkpoint_day,
+                    label=cp.label,
+                    new_sales=cp.new_sales,
+                    emi=cp.emi,
+                    total_collection=tot_coll,
+                    total_lead=cp.total_lead,
+                    fair_lead=cp.fair_lead,
+                    fb_lead=cp.fb_lead,
+                    hp=cp.hp,
+                    p=cp.p,
+                    fup=cp.fup,
+                    outdoor_visits=cp.outdoor_visits,
+                    indoor_cx=cp.indoor_cx,
+                    admin_notes=cp.admin_notes,
+                    updated_by_id=admin_user.id,
+                )
+                self.db.add(target_rec)
+
+            await self.db.flush()
+            results.append(
+                MilestoneCheckpointRead(
+                    id=target_rec.id,
+                    month=target_rec.month,
+                    employee_id=target_rec.employee_id,
+                    checkpoint_day=target_rec.checkpoint_day,
+                    label=target_rec.label,
+                    new_sales=target_rec.new_sales,
+                    emi=target_rec.emi,
+                    total_collection=target_rec.total_collection,
+                    total_lead=target_rec.total_lead,
+                    fair_lead=target_rec.fair_lead,
+                    fb_lead=target_rec.fb_lead,
+                    hp=target_rec.hp,
+                    p=target_rec.p,
+                    fup=target_rec.fup,
+                    outdoor_visits=target_rec.outdoor_visits,
+                    indoor_cx=target_rec.indoor_cx,
+                    admin_notes=target_rec.admin_notes,
+                    is_manual=True,
+                    updated_by_id=target_rec.updated_by_id,
+                )
+            )
+
+        await self.db.commit()
+        return results
+
+    async def get_milestone_checkpoints(
+        self,
+        month: str,
+        employee_id: Optional[int] = None,
+    ) -> List[MilestoneCheckpointRead]:
+        """Retrieve saved manual session checkpoints."""
+        stmt = select(MilestoneCheckpoint).where(MilestoneCheckpoint.month == month)
+        if employee_id is not None:
+            stmt = stmt.where(MilestoneCheckpoint.employee_id == employee_id)
+        else:
+            stmt = stmt.where(MilestoneCheckpoint.employee_id.is_(None))
+        stmt = stmt.order_by(MilestoneCheckpoint.checkpoint_day.asc())
+
+        res = await self.db.execute(stmt)
+        records = res.scalars().all()
+        return [
+            MilestoneCheckpointRead(
+                id=r.id,
+                month=r.month,
+                employee_id=r.employee_id,
+                checkpoint_day=r.checkpoint_day,
+                label=r.label,
+                new_sales=r.new_sales,
+                emi=r.emi,
+                total_collection=r.total_collection,
+                total_lead=r.total_lead,
+                fair_lead=r.fair_lead,
+                fb_lead=r.fb_lead,
+                hp=r.hp,
+                p=r.p,
+                fup=r.fup,
+                outdoor_visits=r.outdoor_visits,
+                indoor_cx=r.indoor_cx,
+                admin_notes=r.admin_notes,
+                is_manual=True,
+                updated_by_id=r.updated_by_id,
+            )
+            for r in records
+        ]
+
+    async def reset_milestone_checkpoints(
+        self,
+        month: str,
+        employee_id: Optional[int] = None,
+        checkpoint_day: Optional[int] = None,
+    ) -> int:
+        """Reset manual checkpoints back to auto-calculated report data."""
+        from sqlalchemy import delete
+        stmt = delete(MilestoneCheckpoint).where(MilestoneCheckpoint.month == month)
+        if employee_id is not None:
+            stmt = stmt.where(MilestoneCheckpoint.employee_id == employee_id)
+        else:
+            stmt = stmt.where(MilestoneCheckpoint.employee_id.is_(None))
+        if checkpoint_day is not None:
+            stmt = stmt.where(MilestoneCheckpoint.checkpoint_day == checkpoint_day)
+
+        res = await self.db.execute(stmt)
+        await self.db.commit()
+        return res.rowcount
 

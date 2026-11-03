@@ -416,43 +416,64 @@ function PrintablePerformanceCollectionContent() {
         </div>
 
         {/* ── 3. CUMULATIVE MILESTONES PROGRESS ───────────────────────────────── */}
-        {report.monthly_performances.length > 0 &&
-          report.monthly_performances[0].intervals &&
-          report.monthly_performances[0].intervals.length > 0 && (
-            <div className="mb-6 break-inside-avoid">
-              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2 flex items-center gap-1.5 border-b border-slate-200 pb-1">
+        {((report.company_intervals && report.company_intervals.length > 0) ||
+          (report.monthly_performances.length > 0 &&
+            report.monthly_performances[0].intervals &&
+            report.monthly_performances[0].intervals.length > 0)) && (
+          <div className="mb-6 break-inside-avoid">
+            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2 flex items-center justify-between border-b border-slate-200 pb-1">
+              <span className="flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5 text-emerald-700" />
-                Cumulative Performance Milestones (Till 5th, 10th, 15th, 20th...)
-              </h3>
+                Cumulative Performance Milestones (Till 5th, 10th, 15th, 20th, 25th, 30th)
+              </span>
+              <span className="text-[10px] text-slate-500 font-normal">
+                {report.company_intervals?.some((i) => i.is_manual)
+                  ? "Approved Management Session Data"
+                  : "Daily Activity Cumulative Totals"}
+              </span>
+            </h3>
 
-              <div className="grid grid-cols-6 gap-2 text-xs print:grid-cols-6">
-                {report.monthly_performances[0].intervals.map(
-                  (inv: PerformanceIntervalSummary, idx: number) => (
-                    <div key={idx} className="p-2 border border-slate-300 rounded bg-slate-50">
-                      <div className="flex justify-between font-bold text-slate-900 border-b border-slate-200 pb-1 text-[10px]">
-                        <span>{inv.label}</span>
-                        <span className="text-slate-500">{inv.total_lead} Leads</span>
-                      </div>
-                      <div className="mt-1 space-y-0.5 text-[10px]">
-                        <div className="flex justify-between">
-                          <span className="text-slate-500">Sales:</span>
-                          <span className="font-bold text-emerald-800">৳{formatMoney(inv.new_sales)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-slate-500">Coll:</span>
-                          <span className="font-bold text-sky-800">৳{formatMoney(inv.total_collection)}</span>
-                        </div>
-                        <div className="flex justify-between text-slate-600">
-                          <span>Visits:</span>
-                          <span className="font-semibold">{inv.outdoor_visits + inv.indoor_cx}</span>
-                        </div>
-                      </div>
+            <div className="grid grid-cols-6 gap-2 text-xs print:grid-cols-6">
+              {(report.company_intervals && report.company_intervals.length > 0
+                ? report.company_intervals
+                : report.monthly_performances[0].intervals
+              ).map((inv: PerformanceIntervalSummary, idx: number) => (
+                <div key={idx} className="p-2 border border-slate-300 rounded bg-slate-50">
+                  <div className="flex justify-between items-center font-bold text-slate-900 border-b border-slate-200 pb-1 text-[10px]">
+                    <div className="flex items-center gap-1">
+                      <span>{inv.label}</span>
+                      {inv.is_manual && (
+                        <span className="text-[8px] bg-amber-100 text-amber-900 px-1 py-0.2 rounded font-bold border border-amber-300">
+                          Verified
+                        </span>
+                      )}
                     </div>
-                  )
-                )}
-              </div>
+                    <span className="text-slate-500">{inv.total_lead} Leads</span>
+                  </div>
+                  <div className="mt-1 space-y-0.5 text-[10px]">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Sales:</span>
+                      <span className="font-bold text-emerald-800">৳{formatMoney(inv.new_sales)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Coll:</span>
+                      <span className="font-bold text-sky-800">৳{formatMoney(inv.total_collection)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-600">
+                      <span>Visits:</span>
+                      <span className="font-semibold">{inv.outdoor_visits + inv.indoor_cx}</span>
+                    </div>
+                    {inv.admin_notes && (
+                      <div className="text-[9px] text-slate-500 italic truncate pt-0.5" title={inv.admin_notes}>
+                        &ldquo;{inv.admin_notes}&rdquo;
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
-          )}
+          </div>
+        )}
 
         {/* ── 4. SECTION 2: CUSTOMER COLLECTION LEDGER ──────────────────────── */}
         <div className="mb-8">

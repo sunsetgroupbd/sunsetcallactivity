@@ -13,6 +13,7 @@ import type {
   EmployeeMonthlyPerformance,
   CustomerCollectionItem,
   PerformanceIntervalSummary,
+  MilestoneCheckpointItem,
 } from "@/types";
 import {
   FileSpreadsheet,
@@ -36,6 +37,11 @@ import {
   Search,
   AlertTriangle,
   Printer,
+  Edit3,
+  CheckCircle2,
+  RotateCcw,
+  X,
+  Check,
 } from "lucide-react";
 
 function PerformanceCollectionReportContent() {
@@ -64,6 +70,233 @@ function PerformanceCollectionReportContent() {
   const [mobileViewMode, setMobileViewMode] = useState<"cards" | "table">("cards");
   const [activeTab, setActiveTab] = useState<"both" | "employees" | "customers">("both");
   const [expandedEmployeeId, setExpandedEmployeeId] = useState<number | null>(null);
+
+  // Milestone Review Session Modal States
+  const [isMilestoneModalOpen, setIsMilestoneModalOpen] = useState<boolean>(false);
+  const [modalScope, setModalScope] = useState<"company" | "employee">("company");
+  const [modalEmployeeId, setModalEmployeeId] = useState<string>("");
+  const [modalLoading, setModalLoading] = useState<boolean>(false);
+  const [modalSaving, setModalSaving] = useState<boolean>(false);
+  const [modalMessage, setModalMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const initialCheckpoints: MilestoneCheckpointItem[] = useMemo(
+    () => [
+      { checkpoint_day: 5, label: "Till 5th", new_sales: 0, emi: 0, total_collection: 0, total_lead: 0, fair_lead: 0, fb_lead: 0, hp: 0, p: 0, fup: 0, outdoor_visits: 0, indoor_cx: 0, admin_notes: "" },
+      { checkpoint_day: 10, label: "Till 10th", new_sales: 0, emi: 0, total_collection: 0, total_lead: 0, fair_lead: 0, fb_lead: 0, hp: 0, p: 0, fup: 0, outdoor_visits: 0, indoor_cx: 0, admin_notes: "" },
+      { checkpoint_day: 15, label: "Till 15th", new_sales: 0, emi: 0, total_collection: 0, total_lead: 0, fair_lead: 0, fb_lead: 0, hp: 0, p: 0, fup: 0, outdoor_visits: 0, indoor_cx: 0, admin_notes: "" },
+      { checkpoint_day: 20, label: "Till 20th", new_sales: 0, emi: 0, total_collection: 0, total_lead: 0, fair_lead: 0, fb_lead: 0, hp: 0, p: 0, fup: 0, outdoor_visits: 0, indoor_cx: 0, admin_notes: "" },
+      { checkpoint_day: 25, label: "Till 25th", new_sales: 0, emi: 0, total_collection: 0, total_lead: 0, fair_lead: 0, fb_lead: 0, hp: 0, p: 0, fup: 0, outdoor_visits: 0, indoor_cx: 0, admin_notes: "" },
+      { checkpoint_day: 30, label: "Till 30th", new_sales: 0, emi: 0, total_collection: 0, total_lead: 0, fair_lead: 0, fb_lead: 0, hp: 0, p: 0, fup: 0, outdoor_visits: 0, indoor_cx: 0, admin_notes: "" },
+    ],
+    []
+  );
+
+  const [checkpointRows, setCheckpointRows] = useState<MilestoneCheckpointItem[]>(initialCheckpoints);
+
+  // Auto-fill form inputs from current system report calculations
+  const autoFillFromSystem = (scope: "company" | "employee", empIdStr: string) => {
+    let sourceIntervals: PerformanceIntervalSummary[] = [];
+    if (scope === "company") {
+      sourceIntervals = report?.company_intervals || report?.monthly_performances?.[0]?.intervals || [];
+    } else {
+      const emp = report?.monthly_performances?.find((e) => String(e.employee_id) === empIdStr);
+      sourceIntervals = emp?.intervals || [];
+    }
+
+    if (!sourceIntervals || sourceIntervals.length === 0) return;
+
+    setCheckpointRows((prev) =>
+      prev.map((row) => {
+        const match = sourceIntervals.find((inv) => inv.end_day === row.checkpoint_day);
+        if (!match) return row;
+        return {
+          ...row,
+          new_sales: match.new_sales || 0,
+          emi: match.emi || 0,
+          total_collection: match.total_collection || ((match.new_sales || 0) + (match.emi || 0)),
+          total_lead: match.total_lead || 0,
+          fair_lead: match.fair_lead || 0,
+          fb_lead: match.fb_lead || 0,
+          hp: match.hp || 0,
+          p: match.p || 0,
+          fup: match.fup || 0,
+          outdoor_visits: match.outdoor_visits || 0,
+          indoor_cx: match.indoor_cx || 0,
+          admin_notes: match.admin_notes || row.admin_notes || "",
+        };
+      })
+    );
+  };
+
+  // Load existing saved checkpoints from database for modal
+  const loadMilestoneCheckpointsForModal = async (scope: "company" | "employee", empIdStr: string) => {
+    if (!selectedMonth) return;
+    try {
+      setModalLoading(true);
+      setModalMessage(null);
+      const empId = scope === "employee" && empIdStr ? Number(empIdStr) : null;
+      const saved = await api.reports.getMilestoneCheckpoints({
+        month: selectedMonth,
+        employee_id: empId,
+      });
+
+      if (saved && saved.length > 0) {
+        setCheckpointRows((prev) =>
+          prev.map((row) => {
+            const match = saved.find((s) => s.checkpoint_day === row.checkpoint_day);
+            if (!match) return row;
+            return {
+              checkpoint_day: match.checkpoint_day,
+              label: match.label,
+              new_sales: match.new_sales,
+              emi: match.emi,
+              total_collection: match.total_collection,
+              total_lead: match.total_lead,
+              fair_lead: match.fair_lead,
+              fb_lead: match.fb_lead,
+              hp: match.hp,
+              p: match.p,
+              fup: match.fup,
+              outdoor_visits: match.outdoor_visits,
+              indoor_cx: match.indoor_cx,
+              admin_notes: match.admin_notes || "",
+            };
+          })
+        );
+      } else {
+        autoFillFromSystem(scope, empIdStr);
+      }
+    } catch (err: unknown) {
+      console.error("Failed to load checkpoints", err);
+      autoFillFromSystem(scope, empIdStr);
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  const handleOpenMilestoneModal = (employeeId?: number) => {
+    setModalMessage(null);
+    if (employeeId) {
+      setModalScope("employee");
+      setModalEmployeeId(String(employeeId));
+      setIsMilestoneModalOpen(true);
+      loadMilestoneCheckpointsForModal("employee", String(employeeId));
+    } else {
+      setModalScope("company");
+      const defaultEmp = report?.monthly_performances?.[0]?.employee_id
+        ? String(report.monthly_performances[0].employee_id)
+        : "";
+      setModalEmployeeId(defaultEmp);
+      setIsMilestoneModalOpen(true);
+      loadMilestoneCheckpointsForModal("company", defaultEmp);
+    }
+  };
+
+  const handleSaveMilestones = async () => {
+    if (!selectedMonth) return;
+    try {
+      setModalSaving(true);
+      setModalMessage(null);
+      const empId = modalScope === "employee" && modalEmployeeId ? Number(modalEmployeeId) : null;
+      await api.reports.saveMilestoneCheckpoints({
+        month: selectedMonth,
+        employee_id: empId,
+        checkpoints: checkpointRows,
+      });
+
+      setModalMessage({
+        type: "success",
+        text: `Milestone checkpoints saved successfully for ${
+          modalScope === "company" ? "Company-Wide Total" : "Selected Employee"
+        }!`,
+      });
+
+      await loadData();
+
+      setTimeout(() => {
+        setIsMilestoneModalOpen(false);
+        setModalMessage(null);
+      }, 800);
+    } catch (err: unknown) {
+      console.error("Failed to save checkpoints", err);
+      setModalMessage({
+        type: "error",
+        text: err instanceof Error ? err.message : "Failed to save milestone checkpoints.",
+      });
+    } finally {
+      setModalSaving(false);
+    }
+  };
+
+  const handleResetMilestones = async () => {
+    if (!selectedMonth) return;
+    const confirmReset = window.confirm(
+      `Revert ${
+        modalScope === "company" ? "Company-Wide" : "this Employee's"
+      } milestone checkpoints back to auto-calculated daily report figures?`
+    );
+    if (!confirmReset) return;
+
+    try {
+      setModalSaving(true);
+      setModalMessage(null);
+      const empId = modalScope === "employee" && modalEmployeeId ? Number(modalEmployeeId) : null;
+      await api.reports.resetMilestoneCheckpoints({
+        month: selectedMonth,
+        employee_id: empId,
+      });
+
+      autoFillFromSystem(modalScope, modalEmployeeId);
+
+      setModalMessage({
+        type: "success",
+        text: "Reset back to auto-calculated report figures.",
+      });
+
+      await loadData();
+    } catch (err: unknown) {
+      console.error("Failed to reset checkpoints", err);
+      setModalMessage({
+        type: "error",
+        text: err instanceof Error ? err.message : "Failed to reset milestone checkpoints.",
+      });
+    } finally {
+      setModalSaving(false);
+    }
+  };
+
+  const updateCheckpointField = (
+    index: number,
+    field: keyof MilestoneCheckpointItem,
+    value: string | number
+  ) => {
+    setCheckpointRows((prev) => {
+      const copy = [...prev];
+      const row = { ...copy[index], [field]: value };
+
+      if (field === "new_sales" || field === "emi") {
+        const prevSales = Number(copy[index].new_sales) || 0;
+        const prevEmi = Number(copy[index].emi) || 0;
+        const currentTotal = Number(copy[index].total_collection) || 0;
+        const newSales = field === "new_sales" ? Number(value) || 0 : prevSales;
+        const newEmi = field === "emi" ? Number(value) || 0 : prevEmi;
+
+        if (currentTotal === 0 || currentTotal === prevSales + prevEmi) {
+          row.total_collection = newSales + newEmi;
+        }
+      }
+
+      copy[index] = row;
+      return copy;
+    });
+  };
+
+  const displayMilestones: PerformanceIntervalSummary[] = useMemo(() => {
+    if (report?.company_intervals && report.company_intervals.length > 0) {
+      return report.company_intervals;
+    }
+    return report?.monthly_performances?.[0]?.intervals || [];
+  }, [report]);
 
   // Fetch report data
   const loadData = async () => {
@@ -553,8 +786,21 @@ function PerformanceCollectionReportContent() {
                     report.monthly_performances.map((emp: EmployeeMonthlyPerformance) => (
                       <tr key={emp.employee_id} className="hover:bg-slate-50/80 transition-colors">
                         <td className="py-3 px-3 sticky left-0 bg-white hover:bg-slate-50/80 z-10 border-r border-slate-100">
-                          <div className="font-bold text-slate-900">{emp.employee_name}</div>
-                          <div className="text-[11px] text-slate-500 font-medium">{emp.position || "Staff"}</div>
+                          <div className="flex items-center justify-between gap-1.5">
+                            <div>
+                              <div className="font-bold text-slate-900">{emp.employee_name}</div>
+                              <div className="text-[11px] text-slate-500 font-medium">{emp.position || "Staff"}</div>
+                            </div>
+                            {canAccess && (
+                              <button
+                                onClick={() => handleOpenMilestoneModal(emp.employee_id)}
+                                className="p-1 rounded text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 transition"
+                                title={`Review milestone checkpoints for ${emp.employee_name}`}
+                              >
+                                <Edit3 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </td>
                         <td className="py-3 px-2.5 whitespace-nowrap text-slate-600 font-medium">{emp.month}</td>
                         <td className="py-3 px-2.5 text-right font-semibold text-slate-900">
@@ -613,6 +859,15 @@ function PerformanceCollectionReportContent() {
                         <div>
                           <div className="font-bold text-slate-900 text-sm">{emp.employee_name}</div>
                           <div className="text-xs text-slate-500 font-medium mt-0.5">{emp.position || "Staff"} • {emp.month}</div>
+                          {canAccess && (
+                            <button
+                              onClick={() => handleOpenMilestoneModal(emp.employee_id)}
+                              className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200 transition"
+                            >
+                              <Edit3 className="h-3 w-3" />
+                              <span>Review Session</span>
+                            </button>
+                          )}
                         </div>
                         <div className="text-right">
                           <div className="text-[10px] text-slate-400 font-semibold uppercase">Target (TG)</div>
@@ -694,7 +949,14 @@ function PerformanceCollectionReportContent() {
                                   key={idx}
                                   className="flex items-center justify-between py-1.5 border-b border-slate-200/60 last:border-0"
                                 >
-                                  <span className="font-semibold text-slate-800">{inv.label}</span>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-semibold text-slate-800">{inv.label}</span>
+                                    {inv.is_manual && (
+                                      <span className="px-1 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                        Session Data
+                                      </span>
+                                    )}
+                                  </div>
                                   <div className="flex items-center gap-2.5">
                                     <span className="text-emerald-700 font-bold">
                                       ৳{formatMoney(inv.new_sales)}
@@ -714,48 +976,85 @@ function PerformanceCollectionReportContent() {
             </div>
 
             {/* PROGRESS SUMMARIES / MILESTONES (Global Grid) */}
-            {report.monthly_performances.length > 0 &&
-              report.monthly_performances[0].intervals &&
-              report.monthly_performances[0].intervals.length > 0 && (
-                <div className="p-4 sm:p-5 border-t border-slate-100 bg-slate-50/30">
-                  <div className="flex items-center gap-2 mb-3">
+            {displayMilestones.length > 0 && (
+              <div className="p-4 sm:p-5 border-t border-slate-100 bg-slate-50/30">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 mb-3">
+                  <div className="flex items-center gap-2">
                     <Clock className="h-4 w-4 text-emerald-700" />
-                    <h4 className="text-xs sm:text-sm font-bold text-slate-900">
-                      Progress Summaries & Cumulative Milestones (Till 5th, 10th, 15th, 20th...)
-                    </h4>
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-bold text-slate-900">
+                        Progress Summaries & Cumulative Milestones (Till 5th, 10th, 15th, 20th, 25th, 30th)
+                      </h4>
+                      <p className="text-[11px] text-slate-500">
+                        {report.company_intervals?.some((i) => i.is_manual)
+                          ? "Company milestone review session data approved by management"
+                          : "Calculated from daily activity reports (Admin can conduct review sessions & enter checkpoints)"}
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-                    {report.monthly_performances[0].intervals.map((inv: PerformanceIntervalSummary, idx: number) => (
-                      <div
-                        key={idx}
-                        className="rounded-xl border border-slate-200 bg-white p-3 hover:border-slate-300 shadow-2xs transition"
-                      >
-                        <div className="flex items-center justify-between text-xs font-bold text-slate-800 pb-1.5 border-b border-slate-100">
-                          <span>{inv.label}</span>
-                          <span className="text-[10px] text-slate-500 font-medium">{inv.total_lead} Leads</span>
-                        </div>
-                        <div className="mt-2 space-y-1 text-xs">
-                          <div className="flex justify-between">
-                            <span className="text-slate-500">Sales:</span>
-                            <span className="font-bold text-emerald-700">৳{formatMoney(inv.new_sales)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-slate-500">Coll:</span>
-                            <span className="font-bold text-sky-700">৳{formatMoney(inv.total_collection)}</span>
-                          </div>
-                          <div className="flex justify-between border-t border-slate-100 pt-1 text-[11px]">
-                            <span className="text-slate-500">Visits:</span>
-                            <span className="font-semibold text-slate-800">
-                              {inv.outdoor_visits + inv.indoor_cx}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  {canAccess && (
+                    <button
+                      onClick={() => handleOpenMilestoneModal()}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-xs font-bold text-emerald-800 shadow-2xs transition self-start sm:self-auto"
+                      title="Conduct admin review session and enter/adjust milestone checkpoints"
+                    >
+                      <Edit3 className="h-3.5 w-3.5 text-emerald-700" />
+                      <span>Milestone Review Session</span>
+                    </button>
+                  )}
                 </div>
-              )}
+
+                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
+                  {displayMilestones.map((inv: PerformanceIntervalSummary, idx: number) => (
+                    <div
+                      key={idx}
+                      className={`rounded-xl border p-3 shadow-2xs transition ${
+                        inv.is_manual
+                          ? "border-amber-200 bg-amber-50/30 hover:border-amber-300"
+                          : "border-slate-200 bg-white hover:border-slate-300"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-xs font-bold text-slate-800 pb-1.5 border-b border-slate-100">
+                        <div className="flex items-center gap-1">
+                          <span>{inv.label}</span>
+                          {inv.is_manual && (
+                            <span
+                              title={inv.admin_notes || "Verified during admin review session"}
+                              className="px-1 py-0.5 rounded text-[9px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300 uppercase tracking-tight"
+                            >
+                              Session
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-slate-500 font-medium">{inv.total_lead} Leads</span>
+                      </div>
+                      <div className="mt-2 space-y-1 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Sales:</span>
+                          <span className="font-bold text-emerald-700">৳{formatMoney(inv.new_sales)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Coll:</span>
+                          <span className="font-bold text-sky-700">৳{formatMoney(inv.total_collection)}</span>
+                        </div>
+                        <div className="flex justify-between border-t border-slate-100 pt-1 text-[11px]">
+                          <span className="text-slate-500">Visits:</span>
+                          <span className="font-semibold text-slate-800">
+                            {inv.outdoor_visits + inv.indoor_cx}
+                          </span>
+                        </div>
+                        {inv.admin_notes && (
+                          <div className="text-[10px] text-slate-500 italic truncate pt-0.5" title={inv.admin_notes}>
+                            &ldquo;{inv.admin_notes}&rdquo;
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -999,6 +1298,357 @@ function PerformanceCollectionReportContent() {
                   </div>
                 ))
               )}
+            </div>
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* MILESTONE REVIEW SESSION MODAL (Company-Wide & Per-Employee) */}
+        {/* ============================================================ */}
+        {isMilestoneModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
+            <div className="relative w-full max-w-5xl rounded-2xl bg-white shadow-2xl border border-slate-200 my-8 overflow-hidden flex flex-col max-h-[90vh]">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-100 bg-slate-50/70 shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-800 shrink-0">
+                    <Clock className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">
+                      Milestone Review Session ({selectedMonth})
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Manual review data entry for checkpoints: Till 5th, 10th, 15th, 20th, 25th, 30th
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setIsMilestoneModalOpen(false)}
+                  className="rounded-lg p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                  title="Close"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Scope & Fast Actions Toolbar */}
+              <div className="p-4 border-b border-slate-100 bg-white shrink-0 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  {/* Scope Selector */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-bold text-slate-700 mr-1">Session Scope:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModalScope("company");
+                        loadMilestoneCheckpointsForModal("company", modalEmployeeId);
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition border ${
+                        modalScope === "company"
+                          ? "bg-emerald-600 text-white border-emerald-600 shadow-2xs"
+                          : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
+                      }`}
+                    >
+                      Company-Wide Total
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModalScope("employee");
+                        const defaultEmp =
+                          modalEmployeeId ||
+                          (report?.monthly_performances?.[0]?.employee_id
+                            ? String(report.monthly_performances[0].employee_id)
+                            : "");
+                        setModalEmployeeId(defaultEmp);
+                        loadMilestoneCheckpointsForModal("employee", defaultEmp);
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition border ${
+                        modalScope === "employee"
+                          ? "bg-emerald-600 text-white border-emerald-600 shadow-2xs"
+                          : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
+                      }`}
+                    >
+                      Per-Employee Entry
+                    </button>
+
+                    {modalScope === "employee" && (
+                      <select
+                        value={modalEmployeeId}
+                        onChange={(e) => {
+                          const newEmpId = e.target.value;
+                          setModalEmployeeId(newEmpId);
+                          loadMilestoneCheckpointsForModal("employee", newEmpId);
+                        }}
+                        className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600"
+                      >
+                        {report?.monthly_performances?.map((emp) => (
+                          <option key={emp.employee_id} value={emp.employee_id}>
+                            {emp.employee_name} ({emp.position || "Staff"})
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+
+                  {/* Quick Auto-fill & Reset Buttons */}
+                  <div className="flex items-center gap-2 self-start sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={() => autoFillFromSystem(modalScope, modalEmployeeId)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-sky-200 bg-sky-50 hover:bg-sky-100 text-xs font-bold text-sky-800 transition"
+                      title="Prefill inputs from current system report calculations"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      <span>Auto-fill from System</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleResetMilestones}
+                      disabled={modalSaving}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-rose-50 hover:text-rose-700 text-xs font-semibold text-slate-600 transition"
+                      title="Delete manual session records to revert to automated calculations"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      <span>Revert to Auto</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Feedback message banner */}
+                {modalMessage && (
+                  <div
+                    className={`rounded-lg p-2.5 text-xs font-semibold flex items-center gap-2 ${
+                      modalMessage.type === "success"
+                        ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                        : "bg-rose-50 text-rose-800 border border-rose-200"
+                    }`}
+                  >
+                    {modalMessage.type === "success" ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                    ) : (
+                      <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0" />
+                    )}
+                    <span>{modalMessage.text}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Body: 6 Checkpoint Cards */}
+              <div className="p-4 sm:p-5 overflow-y-auto space-y-4">
+                {modalLoading ? (
+                  <div className="flex h-64 items-center justify-center">
+                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {checkpointRows.map((cp, idx) => (
+                      <div
+                        key={cp.checkpoint_day}
+                        className="rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 shadow-2xs space-y-3"
+                      >
+                        <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                          <span className="font-extrabold text-sm text-slate-900">
+                            {cp.label || `Till ${cp.checkpoint_day}th`}
+                          </span>
+                          <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
+                            Days 1 - {cp.checkpoint_day}
+                          </span>
+                        </div>
+
+                        {/* Financials: Sales, EMI, Total */}
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                              Sales (৳)
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={cp.new_sales}
+                              onChange={(e) => updateCheckpointField(idx, "new_sales", Number(e.target.value) || 0)}
+                              className="w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-bold text-emerald-700 focus:border-emerald-600 focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                              EMI (৳)
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={cp.emi}
+                              onChange={(e) => updateCheckpointField(idx, "emi", Number(e.target.value) || 0)}
+                              className="w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-bold text-sky-700 focus:border-emerald-600 focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                              Total (৳)
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={cp.total_collection || 0}
+                              onChange={(e) => updateCheckpointField(idx, "total_collection", Number(e.target.value) || 0)}
+                              className="w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-extrabold text-slate-900 focus:border-emerald-600 focus:outline-none"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Leads: Total, Fair, FB */}
+                        <div className="grid grid-cols-3 gap-2 pt-1 border-t border-slate-200">
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-600 mb-1">
+                              Total Leads
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={cp.total_lead || 0}
+                              onChange={(e) => updateCheckpointField(idx, "total_lead", Number(e.target.value) || 0)}
+                              className="w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-800 focus:border-emerald-600 focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-600 mb-1">
+                              Fair Lead
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={cp.fair_lead || 0}
+                              onChange={(e) => updateCheckpointField(idx, "fair_lead", Number(e.target.value) || 0)}
+                              className="w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-800 focus:border-emerald-600 focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-600 mb-1">
+                              FB Lead
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={cp.fb_lead || 0}
+                              onChange={(e) => updateCheckpointField(idx, "fb_lead", Number(e.target.value) || 0)}
+                              className="w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-800 focus:border-emerald-600 focus:outline-none"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Status Leads: HP, P, FUP, Visits */}
+                        <div className="grid grid-cols-4 gap-1.5 pt-1 border-t border-slate-200">
+                          <div>
+                            <label className="block text-[9px] font-bold text-rose-700 mb-1">
+                              HP
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={cp.hp || 0}
+                              onChange={(e) => updateCheckpointField(idx, "hp", Number(e.target.value) || 0)}
+                              className="w-full rounded-md border border-slate-300 bg-white px-1.5 py-1 text-xs font-bold text-rose-700 focus:border-emerald-600 focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[9px] font-bold text-amber-700 mb-1">
+                              P
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={cp.p || 0}
+                              onChange={(e) => updateCheckpointField(idx, "p", Number(e.target.value) || 0)}
+                              className="w-full rounded-md border border-slate-300 bg-white px-1.5 py-1 text-xs font-bold text-amber-700 focus:border-emerald-600 focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[9px] font-bold text-sky-700 mb-1">
+                              FUP
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={cp.fup || 0}
+                              onChange={(e) => updateCheckpointField(idx, "fup", Number(e.target.value) || 0)}
+                              className="w-full rounded-md border border-slate-300 bg-white px-1.5 py-1 text-xs font-bold text-sky-700 focus:border-emerald-600 focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[9px] font-bold text-slate-700 mb-1">
+                              Visits
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={(cp.outdoor_visits || 0) + (cp.indoor_cx || 0)}
+                              onChange={(e) => {
+                                const val = Number(e.target.value) || 0;
+                                updateCheckpointField(idx, "outdoor_visits", val);
+                                updateCheckpointField(idx, "indoor_cx", 0);
+                              }}
+                              className="w-full rounded-md border border-slate-300 bg-white px-1.5 py-1 text-xs font-bold text-slate-800 focus:border-emerald-600 focus:outline-none"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Admin Session Remarks */}
+                        <div className="pt-1 border-t border-slate-200">
+                          <label className="block text-[10px] font-semibold text-slate-500 mb-1">
+                            Session Remarks / Notes
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Reviewed in meeting; fair lead on target"
+                            value={cp.admin_notes || ""}
+                            onChange={(e) => updateCheckpointField(idx, "admin_notes", e.target.value)}
+                            className="w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 placeholder:text-slate-400 focus:border-emerald-600 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="flex items-center justify-between p-4 border-t border-slate-100 bg-slate-50/70 shrink-0">
+                <div className="text-xs text-slate-500">
+                  Target Scope:{" "}
+                  <span className="font-bold text-slate-800">
+                    {modalScope === "company"
+                      ? "All Executives (Company-Wide Total)"
+                      : `Employee ID #${modalEmployeeId}`}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsMilestoneModalOpen(false)}
+                    className="px-4 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 shadow-2xs transition"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveMilestones}
+                    disabled={modalSaving || modalLoading}
+                    className="inline-flex items-center gap-1.5 px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-xs font-bold text-white shadow-2xs transition disabled:opacity-50"
+                  >
+                    {modalSaving ? (
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Check className="h-3.5 w-3.5" />
+                    )}
+                    <span>Save Session Checkpoints</span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}

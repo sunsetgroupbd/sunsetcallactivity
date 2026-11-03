@@ -22,6 +22,8 @@ class PerformanceIntervalSummary(BaseModel):
     fup: int = 0
     outdoor_visits: int = 0
     indoor_cx: int = 0
+    is_manual: bool = False
+    admin_notes: Optional[str] = None
 
 
 class EmployeeMonthlyPerformance(BaseModel):
@@ -109,4 +111,36 @@ class PerformanceCollectionReportResponse(BaseModel):
     monthly_performances: List[EmployeeMonthlyPerformance] = Field(default_factory=list)
     customer_collections: List[CustomerCollectionItem] = Field(default_factory=list)
     summary: PerformanceCollectionSummaryTotals
+    company_intervals: List[PerformanceIntervalSummary] = Field(default_factory=list)
+
+
+class MilestoneCheckpointItem(BaseModel):
+    checkpoint_day: int
+    label: str
+    new_sales: Decimal = Decimal("0")
+    emi: Decimal = Decimal("0")
+    total_collection: Decimal = Decimal("0")
+    total_lead: int = 0
+    fair_lead: int = 0
+    fb_lead: int = 0
+    hp: int = 0
+    p: int = 0
+    fup: int = 0
+    outdoor_visits: int = 0
+    indoor_cx: int = 0
+    admin_notes: Optional[str] = None
+
+
+class MilestoneCheckpointsBulkSaveRequest(BaseModel):
+    month: str  # "YYYY-MM"
+    employee_id: Optional[int] = None  # None for Company-Wide, integer for Employee
+    checkpoints: List[MilestoneCheckpointItem]
+
+
+class MilestoneCheckpointRead(MilestoneCheckpointItem):
+    id: int
+    month: str
+    employee_id: Optional[int] = None
+    is_manual: bool = True
+    updated_by_id: Optional[int] = None
 

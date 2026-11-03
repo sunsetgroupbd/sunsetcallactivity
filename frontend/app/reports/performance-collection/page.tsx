@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo, Suspense } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
 import { exportPerformanceCollectionToCSV } from "@/lib/export-performance-collection";
@@ -33,6 +34,7 @@ import {
   Table as TableIcon,
   Search,
   AlertTriangle,
+  Printer,
 } from "lucide-react";
 
 function PerformanceCollectionReportContent() {
@@ -207,6 +209,17 @@ function PerformanceCollectionReportContent() {
               <RefreshCw className={`h-3.5 w-3.5 text-slate-500 ${loading ? "animate-spin" : ""}`} />
               <span>Refresh</span>
             </button>
+
+            <Link
+              href={`/reports/performance-collection/print?month=${selectedMonth}&employee_id=${selectedEmployeeId}&lead_status=${selectedLeadStatus}`}
+              target="_blank"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-2xs transition"
+              title="Print or Save as Official PDF Report"
+            >
+              <Printer className="h-3.5 w-3.5 text-slate-600" />
+              <span>Print / PDF</span>
+            </Link>
+
             <button
               onClick={handleExport}
               disabled={loading || !report}

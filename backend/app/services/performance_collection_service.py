@@ -9,16 +9,13 @@ import calendar
 import json
 from datetime import date
 from decimal import Decimal
-from typing import List, Optional, Tuple, Dict, Any
+from typing import List, Optional, Dict, Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.report import DailyActivityReport, ReportStatus
-from app.models.sales_collection import SalesCollectionEntry
-from app.models.call_activity import CallActivityEntry
-from app.models.meeting_activity import MeetingActivityEntry
+from app.models.report import DailyActivityReport
 from app.models.user import User, UserRole
 from app.repositories.targets_repo import TargetsRepository
 from app.schemas.performance_collection_report import (
@@ -149,18 +146,19 @@ class PerformanceCollectionService:
             # Target lookup
             target_obj = await self.targets_repo.get_effective_target(active_end, emp.id)
             target_sales = (
-                (target_obj.sales_target * Decimal("30"))
-                if target_obj and target_obj.sales_target
+                (Decimal(str(target_obj.sales_target)) * Decimal("30"))
+                if target_obj and target_obj.sales_target is not None
                 else Decimal("500000.00")
             )
             target_tb = (
-                (target_obj.tb_target * Decimal("30"))
-                if target_obj and target_obj.tb_target
+                (Decimal(str(target_obj.tb_target)) * Decimal("30"))
+                if target_obj and target_obj.tb_target is not None
                 else Decimal("200000.00")
             )
+            target_emi_val = getattr(target_obj, "emi_target", None) if target_obj else None
             target_emi = (
-                (getattr(target_obj, "emi_target", None) * Decimal("30"))
-                if target_obj and getattr(target_obj, "emi_target", None)
+                (Decimal(str(target_emi_val)) * Decimal("30"))
+                if target_emi_val is not None
                 else Decimal("300000.00")
             )
             target_coll = target_sales + target_tb + target_emi
@@ -307,9 +305,9 @@ class PerformanceCollectionService:
                 )
 
             # Role formatted display
-            pos_title = (
-                emp.designation
-                if getattr(emp, "designation", None)
+            pos_title: str = (
+                str(emp.designation)
+                if emp.designation
                 else "Sales Executive"
                 if emp.role == UserRole.EMPLOYEE
                 else "Team Lead"

@@ -59,18 +59,26 @@ async def create_employee(
         raise HTTPException(status_code=409, detail="Email already registered")
     if await repo.get_by_username(data.username):
         raise HTTPException(status_code=409, detail="Username already taken")
-    user = User(
-        id=data.id,
-        full_name=data.full_name,
-        email=data.email,
-        phone=data.phone,
-        username=data.username,
-        designation=data.designation,
-        password_hash=hash_password(data.password),
-        role=data.role,
-        is_active=data.is_active,
-    )
+    user_kwargs: dict[str, Any] = {
+        "full_name": data.full_name,
+        "email": data.email,
+        "phone": data.phone,
+        "username": data.username,
+        "designation": data.designation,
+        "password_hash": hash_password(data.password),
+        "role": data.role,
+        "is_active": data.is_active,
+    }
+    if data.id is not None:
+        user_kwargs["id"] = data.id
+    user = User(**user_kwargs)
     return await repo.create(user)
+
+
+def _get_val(row: list[str], idx: Optional[int]) -> str:
+    if idx is not None and idx < len(row):
+        return str(row[idx]).strip()
+    return ""
 
 
 @router.post("/bulk-upload")
@@ -80,7 +88,7 @@ async def bulk_upload_employees(
     reset_existing_passwords: bool = Form(False),
     _: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Bulk register or update employees from a CSV file.
 
     Existing employees retain their existing passwords unless
@@ -111,7 +119,7 @@ async def bulk_upload_employees(
         for p in patterns:
             cleaned_p = re.sub(r"[^a-z0-9]", "", p.lower())
             for idx, h in enumerate(norm_headers):
-                if cleaned_p in h or h in cleaned_p:
+                if cleaned_p == h or cleaned_p in h:
                     return idx
         return None
 
@@ -143,17 +151,12 @@ async def bulk_upload_employees(
         if not row or all(not str(cell).strip() for cell in row):
             continue
 
-        def get_val(idx: Optional[int]) -> str:
-            if idx is not None and idx < len(row):
-                return str(row[idx]).strip()
-            return ""
-
-        raw_id = get_val(id_idx)
-        name = get_val(name_idx)
-        username = get_val(username_idx)
-        email = get_val(email_idx).lower()
-        phone = get_val(phone_idx)
-        designation = get_val(desig_idx)
+        raw_id = _get_val(row, id_idx)
+        name = _get_val(row, name_idx)
+        username = _get_val(row, username_idx)
+        email = _get_val(row, email_idx).lower()
+        phone = _get_val(row, phone_idx)
+        designation = _get_val(row, desig_idx)
 
         if not name:
             errors.append(f"Row {row_num}: Missing employee name, skipped.")
@@ -215,17 +218,19 @@ async def bulk_upload_employees(
             if await repo.get_by_username(username):
                 username = f"{username}{emp_id}" if emp_id else f"{username}_{row_num}"
 
-            new_user = User(
-                id=emp_id,
-                full_name=name,
-                email=email,
-                phone=phone or None,
-                username=username,
-                designation=designation or None,
-                password_hash=hashed_default,
-                role=UserRole.EMPLOYEE,
-                is_active=True,
-            )
+            new_user_kwargs: dict[str, Any] = {
+                "full_name": name,
+                "email": email,
+                "phone": phone or None,
+                "username": username,
+                "designation": designation or None,
+                "password_hash": hashed_default,
+                "role": UserRole.EMPLOYEE,
+                "is_active": True,
+            }
+            if emp_id is not None:
+                new_user_kwargs["id"] = emp_id
+            new_user = User(**new_user_kwargs)
             try:
                 await repo.create(new_user)
                 created_count += 1

@@ -306,7 +306,7 @@ class PerformanceCollectionService:
 
             # Role formatted display
             pos_title: str = (
-                str(emp.designation)
+                emp.designation
                 if emp.designation
                 else "Sales Executive"
                 if emp.role == UserRole.EMPLOYEE

@@ -77,7 +77,7 @@ async def create_employee(
 
 def _get_val(row: list[str], idx: Optional[int]) -> str:
     if idx is not None and idx < len(row):
-        return str(row[idx]).strip()
+        return row[idx].strip()
     return ""
 
 
@@ -85,6 +85,7 @@ def _get_val(row: list[str], idx: Optional[int]) -> str:
 async def bulk_upload_employees(
     file: UploadFile = File(...),
     default_password: str = Form("Sunset@1234"),
+    role: str = Form("employee"),
     reset_existing_passwords: bool = Form(False),
     _: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -148,7 +149,7 @@ async def bulk_upload_employees(
     errors: list[str] = []
 
     for row_num, row in enumerate(rows[1:], start=2):
-        if not row or all(not str(cell).strip() for cell in row):
+        if not row or all(not cell.strip() for cell in row):
             continue
 
         raw_id = _get_val(row, id_idx)
@@ -177,6 +178,23 @@ async def bulk_upload_employees(
 
         if not username:
             username = email.split("@")[0].strip()
+
+        # Resolve role to assign
+        assigned_role = UserRole.EMPLOYEE
+        desig_lower = designation.lower()
+        if role == "auto":
+            if "team leader" in desig_lower or "team lead" in desig_lower:
+                assigned_role = UserRole.TL
+            elif "coordinator" in desig_lower or "co-ordinator" in desig_lower:
+                assigned_role = UserRole.CO
+            elif "sub admin" in desig_lower:
+                assigned_role = UserRole.SUB_ADMIN
+            elif "admin" in desig_lower or "director" in desig_lower:
+                assigned_role = UserRole.ADMIN
+            else:
+                assigned_role = UserRole.EMPLOYEE
+        elif role in ("tl", "co", "sub_admin", "admin", "employee"):
+            assigned_role = UserRole(role)
 
         # Check existing user
         existing_user: Optional[User] = None
@@ -225,7 +243,7 @@ async def bulk_upload_employees(
                 "username": username,
                 "designation": designation or None,
                 "password_hash": hashed_default,
-                "role": UserRole.EMPLOYEE,
+                "role": assigned_role,
                 "is_active": True,
             }
             if emp_id is not None:

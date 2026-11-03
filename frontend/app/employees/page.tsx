@@ -125,6 +125,7 @@ export default function EmployeesPage() {
   const [bulkFile, setBulkFile] = useState<File | null>(null);
   const [bulkDefaultPassword, setBulkDefaultPassword] = useState("Sunset@1234");
   const [bulkShowPassword, setBulkShowPassword] = useState(false);
+  const [bulkRole, setBulkRole] = useState<string>("auto");
   const [bulkResetExisting, setBulkResetExisting] = useState(false);
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
   const [bulkError, setBulkError] = useState<string | null>(null);
@@ -313,6 +314,7 @@ export default function EmployeesPage() {
       const formData = new FormData();
       formData.append("file", bulkFile);
       formData.append("default_password", bulkDefaultPassword.trim() || "Sunset@1234");
+      formData.append("role", bulkRole);
       formData.append("reset_existing_passwords", String(bulkResetExisting));
 
       const res = await api.employees.bulkUpload(formData);
@@ -1184,6 +1186,28 @@ export default function EmployeesPage() {
                   )}
                 </button>
               </div>
+            </div>
+
+            {/* Role Selection */}
+            <div className="space-y-1.5 pt-1 border-t border-slate-100">
+              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                Assign Role to Uploaded Employees
+              </label>
+              <select
+                value={bulkRole}
+                onChange={(e) => setBulkRole(e.target.value)}
+                className="w-full border border-slate-300 rounded px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white"
+              >
+                <option value="auto">Auto-detect from Designation (Recommended)</option>
+                <option value="employee">Sales Executive (Employee)</option>
+                <option value="tl">Team Leader (TL)</option>
+                <option value="co">Coordinator (CO)</option>
+                <option value="sub_admin">Sub Admin</option>
+                <option value="admin">Administrator</option>
+              </select>
+              <span className="text-[10px] text-slate-500">
+                Auto-detect assigns Team Leader if designation has &quot;Team Leader&quot;, Coordinator if &quot;Coordinator&quot;, etc.
+              </span>
             </div>
 
             {/* Smart Update & Password Option */}

@@ -33,8 +33,6 @@ import {
   Search,
 } from "lucide-react";
 
-export const dynamic = "force-dynamic";
-
 function PerformanceCollectionReportContent() {
   const { user, loading: authLoading, isAdmin, isSubAdmin } = useAuth();
   const router = useRouter();

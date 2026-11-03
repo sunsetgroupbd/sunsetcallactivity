@@ -10,7 +10,7 @@ import {
   Phone,
   Calendar,
   FileText,
-  DollarSign,
+  Banknote,
   X,
   ExternalLink,
   ChevronRight,
@@ -323,7 +323,7 @@ export function NotificationBell() {
                         ) : r.type === "report_submission" ? (
                           <FileText className="w-3.5 h-3.5" />
                         ) : (
-                          <DollarSign className="w-3.5 h-3.5" />
+                          <Banknote className="w-3.5 h-3.5" />
                         )}
                       </div>
 

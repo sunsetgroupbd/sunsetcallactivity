@@ -1227,7 +1227,7 @@ export default function EmployeesPage() {
                   className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                 />
                 <span className="text-[11px] text-slate-700 font-medium">
-                  Also reset existing employees' passwords to this default password
+                  Also reset existing employees&apos; passwords to this default password
                 </span>
               </label>
 

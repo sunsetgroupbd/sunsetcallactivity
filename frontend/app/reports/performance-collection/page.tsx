@@ -96,11 +96,12 @@ export default function PerformanceCollectionReportPage() {
   }, [authLoading, user, canAccess, selectedMonth, selectedEmployeeId, selectedLeadStatus]);
 
   // Client-side search filtering on customer records
+  const customerCollections = report?.customer_collections;
   const filteredCustomers = useMemo(() => {
-    if (!report?.customer_collections) return [];
-    if (!searchQuery.trim()) return report.customer_collections;
+    if (!customerCollections) return [];
+    if (!searchQuery.trim()) return customerCollections;
     const q = searchQuery.toLowerCase();
-    return report.customer_collections.filter(
+    return customerCollections.filter(
       (c: CustomerCollectionItem) =>
         c.customer_name.toLowerCase().includes(q) ||
         (c.customer_phone && c.customer_phone.toLowerCase().includes(q)) ||
@@ -108,7 +109,7 @@ export default function PerformanceCollectionReportPage() {
         (c.remarks && c.remarks.toLowerCase().includes(q)) ||
         (c.lead_status && c.lead_status.toLowerCase().includes(q))
     );
-  }, [report?.customer_collections, searchQuery]);
+  }, [customerCollections, searchQuery]);
 
   // Excel Export Handler
   const handleExport = () => {

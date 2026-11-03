@@ -1,8 +1,4 @@
-import {
-  PerformanceCollectionReportResponse,
-  EmployeeMonthlyPerformance,
-  CustomerCollectionItem,
-} from "@/types";
+import { PerformanceCollectionReportResponse } from "@/types";
 
 function escapeCsv(str: unknown): string {
   if (str === null || str === undefined) return '""';

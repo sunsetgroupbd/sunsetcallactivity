@@ -1,821 +1,943 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/auth-context";
+import { api } from "@/lib/api";
+import { exportPerformanceCollectionToCSV } from "@/lib/export-performance-collection";
+import type {
+  PerformanceCollectionReportResponse,
+  EmployeeMonthlyPerformance,
+  CustomerCollectionItem,
+  PerformanceIntervalSummary,
+} from "@/types";
 import {
   FileSpreadsheet,
   Download,
   Filter,
-  RotateCcw,
+  RefreshCw,
+  TrendingUp,
+  DollarSign,
   Users,
-  Banknote,
-  PhoneCall,
   Calendar,
+  AlertCircle,
+  Clock,
   Layers,
   ChevronDown,
   ChevronRight,
+  Phone,
+  ShieldAlert,
+  ArrowRight,
+  LayoutGrid,
+  Table as TableIcon,
   Search,
-  CheckCircle2,
-  Clock,
-  ArrowLeft,
-  Building,
-  Target,
 } from "lucide-react";
-import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-  Badge,
-  Button,
-  Alert,
-} from "@/components/ui";
-import { useAuth } from "@/lib/auth-context";
-import { api, ApiError } from "@/lib/api";
-import {
-  PerformanceCollectionReportResponse,
-  User,
-} from "@/types";
-import { exportPerformanceCollectionToCSV } from "@/lib/export-performance-collection";
-import {
-  formatBDT,
-  formatReadableDate,
-  formatEmployeeId,
-} from "@/lib/utils";
 
-function getCurrentYearMonth() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  return `${y}-${m}`;
-}
+export default function PerformanceCollectionReportPage() {
+  const { user, loading: authLoading, isAdmin, isSubAdmin } = useAuth();
+  const router = useRouter();
 
-function PerformanceCollectionContent() {
-  const { user, isAdmin } = useAuth();
-  const searchParams = useSearchParams();
+  // Permitted only for Admin and Sub-Admin
+  const canAccess = Boolean(isAdmin || isSubAdmin);
 
-  // Filters
-  const paramMonth = searchParams.get("month") || getCurrentYearMonth();
-  const paramEmpId = searchParams.get("employee_id");
-
-  const [selectedMonth, setSelectedMonth] = useState<string>(paramMonth);
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | "all">(() => {
-    if (paramEmpId && !isNaN(Number(paramEmpId))) {
-      return Number(paramEmpId);
-    }
-    return "all";
-  });
-  const [leadStatusFilter, setLeadStatusFilter] = useState<string>("ALL");
-  const [activeTab, setActiveTab] = useState<"combined" | "section1" | "section2">("combined");
-  const [showCheckpoints, setShowCheckpoints] = useState<boolean>(true);
+  // Filter States
+  const currentYearMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+  const [selectedMonth, setSelectedMonth] = useState<string>(currentYearMonth);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("");
+  const [selectedLeadStatus, setSelectedLeadStatus] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
-  // Data & State
-  const [reportData, setReportData] = useState<PerformanceCollectionReportResponse | null>(null);
-  const [employees, setEmployees] = useState<User[]>([]);
+  // Data & Loading States
+  const [report, setReport] = useState<PerformanceCollectionReportResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [exporting, setExporting] = useState<boolean>(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // Load employee list for filter
-  useEffect(() => {
-    async function loadEmployees() {
-      try {
-        const emps = await api.employees.list({ is_active: true });
-        setEmployees(Array.isArray(emps) ? emps : []);
-      } catch (e) {
-        console.error("Failed to load employee filter options:", e);
-      }
-    }
-    loadEmployees();
-  }, []);
+  // Mobile View Toggles
+  const [mobileViewMode, setMobileViewMode] = useState<"cards" | "table">("cards");
+  const [expandedEmployeeId, setExpandedEmployeeId] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState<"both" | "employees" | "customers">("both");
 
-  // Fetch report data
-  const loadReport = useCallback(async () => {
+  // Load report data
+  const loadData = async () => {
+    if (!canAccess) return;
     setLoading(true);
-    setErrorMessage(null);
+    setError(null);
     try {
       const data = await api.reports.getPerformanceCollectionReport({
         month: selectedMonth,
-        employee_id: selectedEmployeeId !== "all" ? selectedEmployeeId : undefined,
-        lead_status: leadStatusFilter !== "ALL" ? leadStatusFilter : undefined,
+        employee_id: selectedEmployeeId ? parseInt(selectedEmployeeId, 10) : undefined,
+        lead_status: selectedLeadStatus || undefined,
       });
-      setReportData(data);
-    } catch (err: unknown) {
-      if (err instanceof ApiError) {
-        setErrorMessage(err.message);
-      } else {
-        setErrorMessage("Failed to load Employee Performance & Collection Report.");
+      setReport(data);
+      // Auto-expand first employee on mobile if available
+      if (data?.monthly_performances?.length && expandedEmployeeId === null) {
+        setExpandedEmployeeId(data.monthly_performances[0].employee_id);
       }
+    } catch (err: any) {
+      console.error("Failed to load Performance & Collection Report:", err);
+      setError(
+        err?.response?.data?.detail ||
+          err?.message ||
+          "Failed to load report. Please ensure your backend is up to date."
+      );
     } finally {
       setLoading(false);
     }
-  }, [selectedMonth, selectedEmployeeId, leadStatusFilter]);
+  };
 
   useEffect(() => {
-    loadReport();
-  }, [loadReport]);
+    if (!authLoading) {
+      if (!user) {
+        router.push("/login");
+      } else if (canAccess) {
+        loadData();
+      }
+    }
+  }, [authLoading, user, canAccess, selectedMonth, selectedEmployeeId, selectedLeadStatus]);
 
-  // Filtered customer collection records based on search query
-  const filteredCustomerCollections = useMemo(() => {
-    if (!reportData?.customer_collections) return [];
-    if (!searchQuery.trim()) return reportData.customer_collections;
+  // Client-side search filtering on customer records
+  const filteredCustomers = useMemo(() => {
+    if (!report?.customer_collections) return [];
+    if (!searchQuery.trim()) return report.customer_collections;
     const q = searchQuery.toLowerCase();
-    return reportData.customer_collections.filter(
-      (c) =>
+    return report.customer_collections.filter(
+      (c: CustomerCollectionItem) =>
         c.customer_name.toLowerCase().includes(q) ||
         (c.customer_phone && c.customer_phone.toLowerCase().includes(q)) ||
-        c.employee_name.toLowerCase().includes(q) ||
+        (c.employee_name && c.employee_name.toLowerCase().includes(q)) ||
         (c.remarks && c.remarks.toLowerCase().includes(q)) ||
-        c.lead_status.toLowerCase().includes(q)
+        (c.lead_status && c.lead_status.toLowerCase().includes(q))
     );
-  }, [reportData, searchQuery]);
+  }, [report?.customer_collections, searchQuery]);
 
-  // Handle Export
+  // Excel Export Handler
   const handleExport = () => {
-    if (!reportData) return;
-    setExporting(true);
-    try {
-      exportPerformanceCollectionToCSV(reportData);
-    } catch (err) {
-      console.error("Export error:", err);
-    } finally {
-      setExporting(false);
-    }
+    if (!report) return;
+    exportPerformanceCollectionToCSV(report, `Employee_Performance_Collection_${selectedMonth}.csv`);
   };
 
-  const handleResetFilters = () => {
-    setSelectedMonth(getCurrentYearMonth());
-    setSelectedEmployeeId("all");
-    setLeadStatusFilter("ALL");
-    setSearchQuery("");
+  // Format currency
+  const formatMoney = (val?: number | null) => {
+    if (val === undefined || val === null) return "0";
+    return Number(val).toLocaleString("en-BD");
   };
+
+  // Helper for lead status badge styles
+  const getStatusBadge = (status?: string | null) => {
+    const s = (status || "").toUpperCase();
+    if (s.includes("WON") || s.includes("COLLECTED") || s.includes("HOT")) {
+      return "bg-emerald-500/10 text-emerald-400 border-emerald-500/30";
+    }
+    if (s.includes("WARM") || s.includes("RESCHEDULED") || s.includes("PENDING")) {
+      return "bg-amber-500/10 text-amber-400 border-amber-500/30";
+    }
+    if (s.includes("LOST") || s.includes("CANCEL") || s.includes("COLD")) {
+      return "bg-rose-500/10 text-rose-400 border-rose-500/30";
+    }
+    return "bg-slate-800 text-slate-300 border-slate-700";
+  };
+
+  if (authLoading) {
+    return (
+      <div className="flex h-96 items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  // Admin access guard
+  if (!canAccess) {
+    return (
+      <div className="mx-auto max-w-2xl py-12 px-4 text-center">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-400 border border-rose-500/20 mb-4">
+          <ShieldAlert className="h-8 w-8" />
+        </div>
+        <h1 className="text-xl sm:text-2xl font-bold text-white mb-2">Access Restricted</h1>
+        <p className="text-sm text-slate-400 mb-6">
+          This <strong>Employee Performance & Collection Report</strong> is restricted to Administrators and Sub-Administrators only.
+        </p>
+        <button
+          onClick={() => router.push("/")}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium border border-slate-700 transition"
+        >
+          <ArrowRight className="h-4 w-4 rotate-180" /> Back to Dashboard
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <DashboardLayout
-      title="Employee Performance & Collection Report"
-      subtitle="Monthly performance benchmarks, milestone intervals, and customer-wise collection ledger"
-      adminOnly
-    >
-      <div className="space-y-6">
-        {/* ── Top Header Actions & Breadcrumb ────────────────────────────── */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+    <div className="space-y-6 pb-16 px-1 sm:px-0">
+      {/* Page Header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
           <div className="flex items-center gap-2">
-            <Link
-              href="/reports"
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-emerald-700 transition-colors p-1.5 rounded-lg hover:bg-slate-100"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Standard Reports</span>
-            </Link>
-            <span className="text-slate-300">|</span>
-            <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
-              <Calendar className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Report Month: <strong className="text-slate-900">{reportData?.month || selectedMonth}</strong></span>
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/20">
+              <FileSpreadsheet className="h-5 w-5" />
             </div>
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* View Mode Toggle */}
-            <div className="inline-flex items-center p-0.5 bg-slate-100 rounded-lg text-xs font-medium border border-slate-200">
-              <button
-                type="button"
-                onClick={() => setActiveTab("combined")}
-                className={`px-3 py-1 rounded-md transition-all ${
-                  activeTab === "combined"
-                    ? "bg-white text-emerald-800 font-bold shadow-2xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                Combined View
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("section1")}
-                className={`px-3 py-1 rounded-md transition-all ${
-                  activeTab === "section1"
-                    ? "bg-white text-emerald-800 font-bold shadow-2xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                Sec 1: Monthly Performance
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("section2")}
-                className={`px-3 py-1 rounded-md transition-all ${
-                  activeTab === "section2"
-                    ? "bg-white text-emerald-800 font-bold shadow-2xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                Sec 2: Customer Collections
-              </button>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
+                Employee Performance & Collection Report
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-400">
+                Monthly performance milestones & customer collection ledger (Excel Format)
+              </p>
             </div>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExport}
-              disabled={loading || !reportData || exporting}
-              className="border-emerald-600 text-emerald-800 hover:bg-emerald-50 shrink-0 font-bold"
-            >
-              <Download className="w-3.5 h-3.5 mr-1.5 text-emerald-700" />
-              {exporting ? "Exporting..." : "Export to Excel"}
-            </Button>
           </div>
         </div>
 
-        {/* ── Status Error Alert ─────────────────────────────────────────── */}
-        {errorMessage && (
-          <Alert type="error" onDismiss={() => setErrorMessage(null)}>
-            {errorMessage}
-          </Alert>
-        )}
-
-        {/* ── Filter Bar ─────────────────────────────────────────────────── */}
-        <Card className="p-4 bg-slate-50/60">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
-            {/* 1. Month Picker */}
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                Select Month
-              </label>
-              <input
-                type="month"
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-emerald-600 focus:outline-none"
-              />
-            </div>
-
-            {/* 2. Employee Selector */}
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                Employee
-              </label>
-              <select
-                value={selectedEmployeeId}
-                onChange={(e) =>
-                  setSelectedEmployeeId(
-                    e.target.value === "all" ? "all" : Number(e.target.value)
-                  )
-                }
-                className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-emerald-600 focus:outline-none"
-              >
-                <option value="all">All Employees</option>
-                {employees.map((emp) => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.full_name} ({formatEmployeeId(emp.id)})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* 3. Lead Status Filter */}
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                Lead Status
-              </label>
-              <select
-                value={leadStatusFilter}
-                onChange={(e) => setLeadStatusFilter(e.target.value)}
-                className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-emerald-600 focus:outline-none"
-              >
-                <option value="ALL">All Statuses</option>
-                <option value="HP">HP (High Potential)</option>
-                <option value="P">P (Potential)</option>
-                <option value="FUB">FUB (Follow-Up Booked)</option>
-                <option value="NI">NI (Not Interested)</option>
-                <option value="CX">CX (Customer Meeting)</option>
-                <option value="Paid">Paid / Collected</option>
-              </select>
-            </div>
-
-            {/* 4. Customer / Remarks Search */}
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                Search Customer
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Name, phone, or remarks..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded-lg pl-7 pr-2.5 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 focus:ring-1 focus:ring-emerald-600 focus:outline-none font-medium"
-                />
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2 top-2.5" />
-              </div>
-            </div>
-
-            {/* 5. Filter Actions */}
-            <div className="flex items-end gap-2">
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={loadReport}
-                loading={loading}
-                className="flex-1 font-bold"
-              >
-                <Filter className="w-3.5 h-3.5 mr-1" />
-                Apply
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleResetFilters}
-                className="px-2.5 text-slate-600"
-                title="Reset Filters"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-              </Button>
-            </div>
-          </div>
-        </Card>
-
-        {/* ── Summary Financial & Lead Metrics Cards ──────────────────────── */}
-        {reportData && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-2xs">
-              <span className="text-[10px] uppercase font-bold text-slate-500 block">Total Target (TG)</span>
-              <span className="text-sm font-extrabold text-slate-900 mt-1 block">
-                {formatBDT(reportData.summary.total_target)}
-              </span>
-              <span className="text-[10px] text-slate-400">Monthly Quota</span>
-            </div>
-
-            <div className="p-3 bg-emerald-50/50 border border-emerald-200 rounded-xl shadow-2xs">
-              <span className="text-[10px] uppercase font-bold text-emerald-800 block">New Sales</span>
-              <span className="text-sm font-extrabold text-emerald-700 mt-1 block">
-                {formatBDT(reportData.summary.total_new_sales)}
-              </span>
-              <span className="text-[10px] text-emerald-600 font-medium">Actual Collections</span>
-            </div>
-
-            <div className="p-3 bg-sky-50/50 border border-sky-200 rounded-xl shadow-2xs">
-              <span className="text-[10px] uppercase font-bold text-sky-800 block">EMI Collected</span>
-              <span className="text-sm font-extrabold text-sky-700 mt-1 block">
-                {formatBDT(reportData.summary.total_emi)}
-              </span>
-              <span className="text-[10px] text-sky-600 font-medium">Installment Dues</span>
-            </div>
-
-            <div className="p-3 bg-indigo-50/50 border border-indigo-200 rounded-xl shadow-2xs">
-              <span className="text-[10px] uppercase font-bold text-indigo-800 block">Total Collection</span>
-              <span className="text-sm font-extrabold text-indigo-700 mt-1 block">
-                {formatBDT(reportData.summary.total_collection)}
-              </span>
-              <span className="text-[10px] text-indigo-600 font-medium">Sales + TB + EMI</span>
-            </div>
-
-            <div className="p-3 bg-amber-50/50 border border-amber-200 rounded-xl shadow-2xs">
-              <span className="text-[10px] uppercase font-bold text-amber-800 block">Unpaid / Promised</span>
-              <span className="text-sm font-extrabold text-amber-700 mt-1 block">
-                {formatBDT(reportData.summary.total_unpaid)}
-              </span>
-              <span className="text-[10px] text-amber-600 font-medium">Committed Pipeline</span>
-            </div>
-
-            <div className="p-3 bg-purple-50/50 border border-purple-200 rounded-xl shadow-2xs">
-              <span className="text-[10px] uppercase font-bold text-purple-800 block">Total Leads Dialed</span>
-              <span className="text-sm font-extrabold text-purple-700 mt-1 block">
-                {reportData.summary.total_leads.toLocaleString()}
-              </span>
-              <span className="text-[10px] text-purple-600 font-medium">
-                Fair: {reportData.summary.total_fair_leads} • FB: {reportData.summary.total_fb_leads}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        {/* SECTION 1: EMPLOYEE MONTHLY PERFORMANCE REPORT                     */}
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        {(activeTab === "combined" || activeTab === "section1") && (
-          <Card>
-            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/80 bg-slate-50/50 px-4 py-3">
-              <div>
-                <CardTitle className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                  <Target className="w-4 h-4 text-emerald-700" />
-                  Section 1: Employee Monthly Performance Report
-                </CardTitle>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  Monthly benchmarks, lead generation breakdown, and Till-Date cumulative milestones
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCheckpoints(!showCheckpoints)}
-                  className={`text-xs px-2.5 py-1 rounded-md border font-semibold transition-colors flex items-center gap-1 ${
-                    showCheckpoints
-                      ? "bg-emerald-50 text-emerald-800 border-emerald-300"
-                      : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50"
-                  }`}
-                >
-                  {showCheckpoints ? (
-                    <>
-                      <ChevronDown className="w-3.5 h-3.5 text-emerald-700" />
-                      <span>Hide Milestones</span>
-                    </>
-                  ) : (
-                    <>
-                      <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
-                      <span>Show Milestones (5th, 10th...)</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </CardHeader>
-
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-slate-100 border-b border-slate-200 text-slate-700 text-[11px] font-bold select-none whitespace-nowrap">
-                      <th className="py-2.5 px-3">Employee Name</th>
-                      <th className="py-2.5 px-2.5">Position</th>
-                      <th className="py-2.5 px-2.5">Month</th>
-                      <th className="py-2.5 px-3 text-right">TG (Target)</th>
-                      <th className="py-2.5 px-3 text-right text-emerald-800 bg-emerald-50/50">New Sales</th>
-                      <th className="py-2.5 px-3 text-right text-sky-800 bg-sky-50/50">EMI</th>
-                      <th className="py-2.5 px-3 text-right font-extrabold text-slate-900">Total Coll.</th>
-                      <th className="py-2.5 px-2.5 text-center">Total Lead</th>
-                      <th className="py-2.5 px-2 text-center text-indigo-700">Fair Lead</th>
-                      <th className="py-2.5 px-2 text-center text-blue-700">FB Leads</th>
-                      <th className="py-2.5 px-2 text-center text-purple-700">HP</th>
-                      <th className="py-2.5 px-2 text-center text-emerald-700">P</th>
-                      <th className="py-2.5 px-2 text-center text-amber-700">FUP</th>
-                      <th className="py-2.5 px-3 text-right text-slate-600">Pred. Fair</th>
-                      <th className="py-2.5 px-3 text-right text-slate-600">Pred. FB</th>
-                      <th className="py-2.5 px-3 text-right text-slate-600">Pred. Other</th>
-                      <th className="py-2.5 px-2.5 text-right text-amber-700">Hold</th>
-                      <th className="py-2.5 px-2.5 text-right text-rose-700">Cancel</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
-                    {loading ? (
-                      <tr>
-                        <td colSpan={18} className="py-8 text-center text-slate-400">
-                          Loading monthly performance report data...
-                        </td>
-                      </tr>
-                    ) : !reportData || reportData.monthly_performances.length === 0 ? (
-                      <tr>
-                        <td colSpan={18} className="py-8 text-center text-slate-400">
-                          No performance data found for {selectedMonth}.
-                        </td>
-                      </tr>
-                    ) : (
-                      reportData.monthly_performances.map((emp) => (
-                        <React.Fragment key={emp.employee_id}>
-                          {/* Main Employee Row */}
-                          <tr className="hover:bg-slate-50/80 transition-colors bg-white">
-                            <td className="py-2.5 px-3 font-bold text-slate-900">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span>{emp.employee_name}</span>
-                                <span className="font-mono text-[9px] font-bold bg-slate-100 text-slate-700 px-1 py-0.2 rounded">
-                                  {formatEmployeeId(emp.employee_id)}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="py-2.5 px-2.5 text-slate-600 text-[11px] whitespace-nowrap">
-                              {emp.position}
-                            </td>
-                            <td className="py-2.5 px-2.5 font-mono text-[11px] text-slate-600 whitespace-nowrap">
-                              {emp.month}
-                            </td>
-                            <td className="py-2.5 px-3 text-right font-mono font-semibold text-slate-700">
-                              {formatBDT(emp.target_sales)}
-                            </td>
-                            <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-700 bg-emerald-50/30">
-                              {formatBDT(emp.actual_new_sales)}
-                            </td>
-                            <td className="py-2.5 px-3 text-right font-mono font-bold text-sky-700 bg-sky-50/30">
-                              {formatBDT(emp.actual_emi)}
-                            </td>
-                            <td className="py-2.5 px-3 text-right font-mono font-extrabold text-slate-900">
-                              {formatBDT(emp.total_collection)}
-                            </td>
-                            <td className="py-2.5 px-2.5 text-center font-bold text-slate-800">
-                              {emp.total_lead}
-                            </td>
-                            <td className="py-2.5 px-2 text-center font-bold text-indigo-700">
-                              {emp.fair_lead}
-                            </td>
-                            <td className="py-2.5 px-2 text-center font-bold text-blue-700">
-                              {emp.fb_lead}
-                            </td>
-                            <td className="py-2.5 px-2 text-center font-bold text-purple-700">
-                              {emp.hp}
-                            </td>
-                            <td className="py-2.5 px-2 text-center font-bold text-emerald-700">
-                              {emp.p}
-                            </td>
-                            <td className="py-2.5 px-2 text-center font-bold text-amber-700">
-                              {emp.fup}
-                            </td>
-                            <td className="py-2.5 px-3 text-right font-mono text-slate-600">
-                              {emp.prediction_sold_fair > 0 ? formatBDT(emp.prediction_sold_fair) : "-"}
-                            </td>
-                            <td className="py-2.5 px-3 text-right font-mono text-slate-600">
-                              {emp.prediction_sold_fb > 0 ? formatBDT(emp.prediction_sold_fb) : "-"}
-                            </td>
-                            <td className="py-2.5 px-3 text-right font-mono text-slate-600">
-                              {emp.prediction_sold_other > 0 ? formatBDT(emp.prediction_sold_other) : "-"}
-                            </td>
-                            <td className="py-2.5 px-2.5 text-right font-mono text-amber-700">
-                              {emp.prediction_hold > 0 ? formatBDT(emp.prediction_hold) : "-"}
-                            </td>
-                            <td className="py-2.5 px-2.5 text-right font-mono text-rose-700">
-                              {emp.prediction_cancel > 0 ? formatBDT(emp.prediction_cancel) : "-"}
-                            </td>
-                          </tr>
-
-                          {/* Checkpoint Milestone Rows (Till 5th, Till 10th, etc.) */}
-                          {showCheckpoints &&
-                            emp.intervals.map((inv) => (
-                              <tr
-                                key={`${emp.employee_id}-${inv.label}`}
-                                className="bg-slate-50/50 hover:bg-slate-100/50 text-[11px] text-slate-600 transition-colors"
-                              >
-                                <td className="py-1.5 px-3 pl-8 font-semibold text-slate-600 flex items-center gap-1.5 whitespace-nowrap">
-                                  <span className="text-slate-400">↳</span>
-                                  <span className="bg-slate-200/70 text-slate-700 px-1.5 py-0.2 rounded text-[10px] font-bold">
-                                    {inv.label}
-                                  </span>
-                                </td>
-                                <td className="py-1.5 px-2.5 text-slate-400">-</td>
-                                <td className="py-1.5 px-2.5 text-slate-400">-</td>
-                                <td className="py-1.5 px-3 text-right text-slate-400">-</td>
-                                <td className="py-1.5 px-3 text-right font-mono text-emerald-800 bg-emerald-50/20">
-                                  {formatBDT(inv.new_sales)}
-                                </td>
-                                <td className="py-1.5 px-3 text-right font-mono text-sky-800 bg-sky-50/20">
-                                  {formatBDT(inv.emi)}
-                                </td>
-                                <td className="py-1.5 px-3 text-right font-mono font-bold text-slate-800">
-                                  {formatBDT(inv.total_collection)}
-                                </td>
-                                <td className="py-1.5 px-2.5 text-center">{inv.total_lead}</td>
-                                <td className="py-1.5 px-2 text-center text-indigo-700">{inv.fair_lead}</td>
-                                <td className="py-1.5 px-2 text-center text-blue-700">{inv.fb_lead}</td>
-                                <td className="py-1.5 px-2 text-center text-purple-700">{inv.hp}</td>
-                                <td className="py-1.5 px-2 text-center text-emerald-700">{inv.p}</td>
-                                <td className="py-1.5 px-2 text-center text-amber-700">{inv.fup}</td>
-                                <td className="py-1.5 px-3 text-right text-slate-400">-</td>
-                                <td className="py-1.5 px-3 text-right text-slate-400">-</td>
-                                <td className="py-1.5 px-3 text-right text-slate-400">-</td>
-                                <td className="py-1.5 px-2.5 text-right text-slate-400">-</td>
-                                <td className="py-1.5 px-2.5 text-right text-slate-400">-</td>
-                              </tr>
-                            ))}
-                        </React.Fragment>
-                      ))
-                    )}
-                  </tbody>
-
-                  {/* Section 1 Totals Footer */}
-                  {reportData && reportData.monthly_performances.length > 0 && (
-                    <tfoot>
-                      <tr className="bg-slate-100 border-t-2 border-slate-300 font-extrabold text-slate-900 select-none whitespace-nowrap">
-                        <td className="py-3 px-3 uppercase text-xs">Section 1 Totals</td>
-                        <td className="py-3 px-2.5 text-slate-400">-</td>
-                        <td className="py-3 px-2.5 text-slate-400">-</td>
-                        <td className="py-3 px-3 text-right font-mono">
-                          {formatBDT(reportData.summary.total_target)}
-                        </td>
-                        <td className="py-3 px-3 text-right font-mono text-emerald-800 bg-emerald-100/50">
-                          {formatBDT(reportData.summary.total_new_sales)}
-                        </td>
-                        <td className="py-3 px-3 text-right font-mono text-sky-800 bg-sky-100/50">
-                          {formatBDT(reportData.summary.total_emi)}
-                        </td>
-                        <td className="py-3 px-3 text-right font-mono text-slate-900 bg-slate-200/50">
-                          {formatBDT(reportData.summary.total_collection)}
-                        </td>
-                        <td className="py-3 px-2.5 text-center">{reportData.summary.total_leads}</td>
-                        <td className="py-3 px-2 text-center text-indigo-800">{reportData.summary.total_fair_leads}</td>
-                        <td className="py-3 px-2 text-center text-blue-800">{reportData.summary.total_fb_leads}</td>
-                        <td className="py-3 px-2 text-center text-purple-800">{reportData.summary.total_hp}</td>
-                        <td className="py-3 px-2 text-center text-emerald-800">{reportData.summary.total_p}</td>
-                        <td className="py-3 px-2 text-center text-amber-800">{reportData.summary.total_fup}</td>
-                        <td colSpan={5} className="py-3 px-3 text-right text-slate-400 font-normal">
-                          Cumulative Monthly Benchmarks
-                        </td>
-                      </tr>
-                    </tfoot>
-                  )}
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        {/* SECTION 2: CUSTOMER-WISE COLLECTION REPORT                         */}
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        {(activeTab === "combined" || activeTab === "section2") && (
-          <Card>
-            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/80 bg-slate-50/50 px-4 py-3">
-              <div>
-                <CardTitle className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                  <Banknote className="w-4 h-4 text-emerald-700" />
-                  Section 2: Customer-wise Collection Report
-                </CardTitle>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  Customer ledger with paid/unpaid status, IN/OUT visit plans, category amounts, and next collection dates
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2 text-xs">
-                <span className="font-semibold text-slate-600">
-                  Showing: <strong className="text-slate-900">{filteredCustomerCollections.length}</strong> records
-                </span>
-              </div>
-            </CardHeader>
-
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-slate-100 border-b border-slate-200 text-slate-700 text-[11px] font-bold select-none whitespace-nowrap">
-                      <th className="py-2.5 px-3">Customer Name</th>
-                      <th className="py-2.5 px-2.5">Phone</th>
-                      <th className="py-2.5 px-3 text-right text-emerald-800 bg-emerald-50/50">Paid</th>
-                      <th className="py-2.5 px-3 text-right text-amber-800 bg-amber-50/50">Unpaid</th>
-                      <th className="py-2.5 px-2.5">Collection Date</th>
-                      <th className="py-2.5 px-2.5 text-center">IN/OUT Plan</th>
-                      <th className="py-2.5 px-2.5">Date-1</th>
-                      <th className="py-2.5 px-2.5">Date-2</th>
-                      <th className="py-2.5 px-3 text-right">New Sales</th>
-                      <th className="py-2.5 px-3 text-right">TB</th>
-                      <th className="py-2.5 px-3 text-right">EMI</th>
-                      <th className="py-2.5 px-2.5">Next Coll. Date</th>
-                      <th className="py-2.5 px-2 text-center">Status</th>
-                      <th className="py-2.5 px-3 text-right font-extrabold text-slate-900">Total Coll.</th>
-                      <th className="py-2.5 px-3">Executive</th>
-                      <th className="py-2.5 px-3 min-w-[150px]">Remarks</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
-                    {loading ? (
-                      <tr>
-                        <td colSpan={16} className="py-8 text-center text-slate-400">
-                          Loading customer collection ledger...
-                        </td>
-                      </tr>
-                    ) : filteredCustomerCollections.length === 0 ? (
-                      <tr>
-                        <td colSpan={16} className="py-8 text-center text-slate-400">
-                          No customer collection entries found for this criteria.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredCustomerCollections.map((c) => (
-                        <tr key={c.id} className="hover:bg-slate-50/80 transition-colors bg-white">
-                          <td className="py-2.5 px-3 font-bold text-slate-900">
-                            {c.customer_name}
-                          </td>
-                          <td className="py-2.5 px-2.5 font-mono text-[11px] text-slate-500 whitespace-nowrap">
-                            {c.customer_phone || "-"}
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-700 bg-emerald-50/30">
-                            {c.paid_amount > 0 ? formatBDT(c.paid_amount) : "-"}
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-mono font-bold text-amber-700 bg-amber-50/30">
-                            {c.unpaid_amount > 0 ? formatBDT(c.unpaid_amount) : "-"}
-                          </td>
-                          <td className="py-2.5 px-2.5 font-mono text-[11px] text-slate-600 whitespace-nowrap">
-                            {c.collection_date ? formatReadableDate(c.collection_date) : "-"}
-                          </td>
-                          <td className="py-2.5 px-2.5 text-center whitespace-nowrap">
-                            <span
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                                c.in_out_plan.includes("Outdoor")
-                                  ? "bg-purple-100 text-purple-900 border-purple-200"
-                                  : c.in_out_plan.includes("Indoor")
-                                  ? "bg-blue-100 text-blue-900 border-blue-200"
-                                  : "bg-slate-100 text-slate-700 border-slate-200"
-                              }`}
-                            >
-                              {c.in_out_plan}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-2.5 font-mono text-[11px] text-slate-600 whitespace-nowrap">
-                            {c.date_1 ? formatReadableDate(c.date_1) : "-"}
-                          </td>
-                          <td className="py-2.5 px-2.5 font-mono text-[11px] text-slate-600 whitespace-nowrap">
-                            {c.date_2 ? formatReadableDate(c.date_2) : "-"}
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-mono text-emerald-800">
-                            {c.new_sales_amount > 0 ? formatBDT(c.new_sales_amount) : "-"}
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-mono text-amber-800">
-                            {c.tb_amount > 0 ? formatBDT(c.tb_amount) : "-"}
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-mono text-sky-800">
-                            {c.emi_amount > 0 ? formatBDT(c.emi_amount) : "-"}
-                          </td>
-                          <td className="py-2.5 px-2.5 font-mono text-[11px] text-amber-900 whitespace-nowrap">
-                            {c.next_collection_date ? (
-                              <span className="bg-amber-100 text-amber-900 font-bold px-1.5 py-0.5 rounded border border-amber-200">
-                                {formatReadableDate(c.next_collection_date)}
-                              </span>
-                            ) : (
-                              "-"
-                            )}
-                          </td>
-                          <td className="py-2.5 px-2 text-center whitespace-nowrap">
-                            <span
-                              className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold ${
-                                c.lead_status === "HP"
-                                  ? "bg-purple-100 text-purple-800 border border-purple-200"
-                                  : c.lead_status === "P"
-                                  ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
-                                  : c.lead_status === "FUB"
-                                  ? "bg-amber-100 text-amber-800 border border-amber-200"
-                                  : c.lead_status === "Paid"
-                                  ? "bg-teal-100 text-teal-800 border border-teal-200"
-                                  : "bg-slate-100 text-slate-700 border border-slate-200"
-                              }`}
-                            >
-                              {c.lead_status}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-mono font-extrabold text-slate-900">
-                            {formatBDT(c.total_collection)}
-                          </td>
-                          <td className="py-2.5 px-3 text-slate-700 whitespace-nowrap">
-                            {c.employee_name}
-                          </td>
-                          <td className="py-2.5 px-3 text-slate-500 text-[11px] italic max-w-xs truncate" title={c.remarks || ""}>
-                            {c.remarks || "-"}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-
-                  {/* Section 2 Totals Footer */}
-                  {reportData && filteredCustomerCollections.length > 0 && (
-                    <tfoot>
-                      <tr className="bg-slate-100 border-t-2 border-slate-300 font-extrabold text-slate-900 select-none whitespace-nowrap">
-                        <td className="py-3 px-3 uppercase text-xs" colSpan={2}>
-                          Section 2 Totals
-                        </td>
-                        <td className="py-3 px-3 text-right font-mono text-emerald-800 bg-emerald-100/50">
-                          {formatBDT(reportData.summary.total_paid)}
-                        </td>
-                        <td className="py-3 px-3 text-right font-mono text-amber-800 bg-amber-100/50">
-                          {formatBDT(reportData.summary.total_unpaid)}
-                        </td>
-                        <td className="py-3 px-2.5 text-slate-400" colSpan={4}>-</td>
-                        <td className="py-3 px-3 text-right font-mono text-emerald-800">
-                          {formatBDT(reportData.summary.total_new_sales)}
-                        </td>
-                        <td className="py-3 px-3 text-right font-mono text-amber-800">
-                          {formatBDT(reportData.summary.total_tb)}
-                        </td>
-                        <td className="py-3 px-3 text-right font-mono text-sky-800">
-                          {formatBDT(reportData.summary.total_emi)}
-                        </td>
-                        <td className="py-3 px-2.5 text-slate-400" colSpan={2}>-</td>
-                        <td className="py-3 px-3 text-right font-mono text-slate-900 bg-slate-200/50">
-                          {formatBDT(reportData.summary.total_collection)}
-                        </td>
-                        <td className="py-3 px-3 text-slate-400" colSpan={2}>-</td>
-                      </tr>
-                    </tfoot>
-                  )}
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        {/* Action Buttons */}
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={loadData}
+            disabled={loading}
+            className="flex items-center gap-1.5 rounded-xl border border-slate-700/80 bg-slate-800/80 px-3.5 py-2 text-xs sm:text-sm font-medium text-slate-200 hover:bg-slate-700 transition disabled:opacity-50"
+            title="Refresh Data"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
+          <button
+            onClick={handleExport}
+            disabled={loading || !report}
+            className="flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-3.5 py-2 text-xs sm:text-sm font-medium text-white shadow-lg shadow-emerald-600/20 transition disabled:opacity-50"
+          >
+            <Download className="h-4 w-4" />
+            <span>Export to Excel</span>
+          </button>
+        </div>
       </div>
-    </DashboardLayout>
+
+      {/* Filter Bar */}
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 backdrop-blur">
+        <div className="flex items-center gap-2 pb-3 mb-3 border-b border-slate-800/80 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+          <Filter className="h-3.5 w-3.5 text-primary" />
+          <span>Filters & Search</span>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {/* Month Selector */}
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1">
+              Select Month
+            </label>
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="w-full rounded-xl border border-slate-700/80 bg-slate-800/90 px-3 py-2 text-sm text-slate-100 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </div>
+
+          {/* Employee Filter */}
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1">
+              Filter by Employee
+            </label>
+            <select
+              value={selectedEmployeeId}
+              onChange={(e) => setSelectedEmployeeId(e.target.value)}
+              className="w-full rounded-xl border border-slate-700/80 bg-slate-800/90 px-3 py-2 text-sm text-slate-100 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="">All Employees ({report?.monthly_performances?.length || 0})</option>
+              {report?.monthly_performances?.map((emp: EmployeeMonthlyPerformance) => (
+                <option key={emp.employee_id} value={emp.employee_id}>
+                  {emp.employee_name} ({emp.position || "Staff"})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Lead Status Filter */}
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1">
+              Lead Status
+            </label>
+            <select
+              value={selectedLeadStatus}
+              onChange={(e) => setSelectedLeadStatus(e.target.value)}
+              className="w-full rounded-xl border border-slate-700/80 bg-slate-800/90 px-3 py-2 text-sm text-slate-100 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="">All Statuses</option>
+              <option value="HOT">Hot Lead</option>
+              <option value="WARM">Warm Lead</option>
+              <option value="COLD">Cold Lead</option>
+              <option value="WON">Sold / Won</option>
+              <option value="RESCHEDULED">Rescheduled</option>
+              <option value="PENDING">Pending Collection</option>
+            </select>
+          </div>
+
+          {/* Customer / Phone Search */}
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1">
+              Search Customer / Remarks
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Customer, phone, remarks..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full rounded-xl border border-slate-700/80 bg-slate-800/90 pl-8 pr-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+              <Search className="h-4 w-4 text-slate-400 absolute left-2.5 top-2.5" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* KPI Summary Cards */}
+      {report && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-3 sm:p-4">
+            <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-1">
+              <TrendingUp className="h-3.5 w-3.5 text-primary" />
+              <span>Target (TG)</span>
+            </div>
+            <div className="text-base sm:text-xl font-bold text-white">
+              ৳{formatMoney(report.summary.total_target)}
+            </div>
+            <div className="text-[10px] text-slate-500 mt-0.5">Monthly Goal</div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-3 sm:p-4">
+            <div className="flex items-center gap-1.5 text-xs text-emerald-400 mb-1">
+              <DollarSign className="h-3.5 w-3.5 text-emerald-400" />
+              <span>New Sales</span>
+            </div>
+            <div className="text-base sm:text-xl font-bold text-emerald-400">
+              ৳{formatMoney(report.summary.total_new_sales)}
+            </div>
+            <div className="text-[10px] text-slate-500 mt-0.5">Booking / Down Payment</div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-3 sm:p-4">
+            <div className="flex items-center gap-1.5 text-xs text-blue-400 mb-1">
+              <Layers className="h-3.5 w-3.5 text-blue-400" />
+              <span>EMI Collected</span>
+            </div>
+            <div className="text-base sm:text-xl font-bold text-blue-400">
+              ৳{formatMoney(report.summary.total_emi)}
+            </div>
+            <div className="text-[10px] text-slate-500 mt-0.5">Installment Collection</div>
+          </div>
+
+          <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-3 sm:p-4">
+            <div className="flex items-center gap-1.5 text-xs text-emerald-300 mb-1">
+              <DollarSign className="h-3.5 w-3.5 text-emerald-400" />
+              <span>Total Collection</span>
+            </div>
+            <div className="text-base sm:text-xl font-bold text-emerald-300">
+              ৳{formatMoney(report.summary.total_collection)}
+            </div>
+            <div className="text-[10px] text-emerald-500/70 mt-0.5">New Sales + EMI + TB</div>
+          </div>
+
+          <div className="rounded-2xl border border-rose-500/30 bg-rose-500/5 p-3 sm:p-4">
+            <div className="flex items-center gap-1.5 text-xs text-rose-300 mb-1">
+              <AlertCircle className="h-3.5 w-3.5 text-rose-400" />
+              <span>Unpaid Amount</span>
+            </div>
+            <div className="text-base sm:text-xl font-bold text-rose-300">
+              ৳{formatMoney(report.summary.total_unpaid)}
+            </div>
+            <div className="text-[10px] text-rose-500/70 mt-0.5">Pending Recovery</div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-3 sm:p-4">
+            <div className="flex items-center gap-1.5 text-xs text-indigo-400 mb-1">
+              <Users className="h-3.5 w-3.5 text-indigo-400" />
+              <span>Total Leads</span>
+            </div>
+            <div className="text-base sm:text-xl font-bold text-indigo-300">
+              {report.summary.total_leads}
+            </div>
+            <div className="text-[10px] text-slate-500 mt-0.5">
+              Fair: {report.summary.total_fair_leads} | FB: {report.summary.total_fb_leads}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Section View Selector */}
+      <div className="flex sm:hidden items-center justify-between gap-2 border-b border-slate-800 pb-2">
+        <div className="flex items-center gap-1 bg-slate-800/80 p-1 rounded-xl text-xs">
+          <button
+            onClick={() => setActiveTab("both")}
+            className={`px-2.5 py-1 rounded-lg font-medium transition ${
+              activeTab === "both" ? "bg-primary text-white" : "text-slate-400"
+            }`}
+          >
+            All
+          </button>
+          <button
+            onClick={() => setActiveTab("employees")}
+            className={`px-2.5 py-1 rounded-lg font-medium transition ${
+              activeTab === "employees" ? "bg-primary text-white" : "text-slate-400"
+            }`}
+          >
+            Employees
+          </button>
+          <button
+            onClick={() => setActiveTab("customers")}
+            className={`px-2.5 py-1 rounded-lg font-medium transition ${
+              activeTab === "customers" ? "bg-primary text-white" : "text-slate-400"
+            }`}
+          >
+            Customers
+          </button>
+        </div>
+
+        {/* Card vs Table toggle for mobile */}
+        <div className="flex items-center gap-1 bg-slate-800/80 p-1 rounded-xl text-xs">
+          <button
+            onClick={() => setMobileViewMode("cards")}
+            className={`flex items-center gap-1 px-2 py-1 rounded-lg font-medium transition ${
+              mobileViewMode === "cards" ? "bg-slate-700 text-white" : "text-slate-400"
+            }`}
+            title="Card View (Mobile Optimized)"
+          >
+            <LayoutGrid className="h-3 w-3" />
+            <span>Cards</span>
+          </button>
+          <button
+            onClick={() => setMobileViewMode("table")}
+            className={`flex items-center gap-1 px-2 py-1 rounded-lg font-medium transition ${
+              mobileViewMode === "table" ? "bg-slate-700 text-white" : "text-slate-400"
+            }`}
+            title="Table View (Full Excel Sheet)"
+          >
+            <TableIcon className="h-3 w-3" />
+            <span>Table</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Error state */}
+      {error && (
+        <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">
+          <div className="font-semibold mb-1">Failed to load report data:</div>
+          <div>{error}</div>
+        </div>
+      )}
+
+      {/* Loading state */}
+      {loading && !report && (
+        <div className="flex h-64 items-center justify-center rounded-2xl border border-slate-800 bg-slate-900/40">
+          <div className="flex flex-col items-center gap-3">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            <div className="text-xs text-slate-400">Loading performance report & ledger...</div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* SECTION 1: EMPLOYEE MONTHLY PERFORMANCE REPORT */}
+      {/* ============================================================ */}
+      {report && (activeTab === "both" || activeTab === "employees") && (
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5 backdrop-blur">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-4 mb-4 border-b border-slate-800">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary/20 text-xs font-bold text-primary">
+                  1
+                </span>
+                <h2 className="text-base sm:text-lg font-bold text-white">
+                  Section 1: Employee Monthly Performance Report
+                </h2>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Target vs actual sales, lead breakdown, and progressive milestones (Till 5th, 10th, 15th, 20th, 25th, 30th)
+              </p>
+            </div>
+            <div className="text-xs text-slate-400">
+              Showing <span className="text-white font-semibold">{report.monthly_performances.length}</span> Employees
+            </div>
+          </div>
+
+          {/* Desktop & Tablet Table (or Mobile when Table toggle is chosen) */}
+          <div className={`${mobileViewMode === "cards" ? "hidden sm:block" : "block"} overflow-x-auto`}>
+            <table className="w-full text-left text-xs text-slate-300 border-collapse">
+              <thead>
+                <tr className="border-b border-slate-800 bg-slate-800/40 text-[11px] uppercase tracking-wider text-slate-400">
+                  <th className="py-2.5 px-3 font-semibold sticky left-0 bg-slate-900/90 z-10">Employee & Position</th>
+                  <th className="py-2.5 px-2 font-semibold">Month</th>
+                  <th className="py-2.5 px-2 font-semibold text-right">Target (TG)</th>
+                  <th className="py-2.5 px-2 font-semibold text-right text-emerald-400">New Sales</th>
+                  <th className="py-2.5 px-2 font-semibold text-right text-blue-400">EMI</th>
+                  <th className="py-2.5 px-2 font-semibold text-right">Total Lead</th>
+                  <th className="py-2.5 px-2 font-semibold text-right">Fair Lead</th>
+                  <th className="py-2.5 px-2 font-semibold text-right">FB Leads</th>
+                  <th className="py-2.5 px-2 font-semibold text-right">HP</th>
+                  <th className="py-2.5 px-2 font-semibold text-right">P</th>
+                  <th className="py-2.5 px-2 font-semibold text-right">FUP</th>
+                  <th className="py-2.5 px-2 font-semibold text-center bg-slate-800/60" colSpan={5}>
+                    Prediction From Employee
+                  </th>
+                </tr>
+                <tr className="border-b border-slate-800/80 bg-slate-800/20 text-[10px] text-slate-400">
+                  <th colSpan={11} className="py-1 px-3"></th>
+                  <th className="py-1 px-1.5 text-center text-emerald-400">Sold Fair</th>
+                  <th className="py-1 px-1.5 text-center text-blue-400">Sold FB</th>
+                  <th className="py-1 px-1.5 text-center text-indigo-400">Sold Other</th>
+                  <th className="py-1 px-1.5 text-center text-amber-400">Hold</th>
+                  <th className="py-1 px-1.5 text-center text-rose-400">Cancel</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {report.monthly_performances.length === 0 ? (
+                  <tr>
+                    <td colSpan={16} className="py-8 text-center text-slate-500">
+                      No employee performance records found for {selectedMonth}.
+                    </td>
+                  </tr>
+                ) : (
+                  report.monthly_performances.map((emp: EmployeeMonthlyPerformance) => (
+                    <tr key={emp.employee_id} className="hover:bg-slate-800/30 transition">
+                      <td className="py-2.5 px-3 sticky left-0 bg-slate-900/90 z-10">
+                        <div className="font-semibold text-white">{emp.employee_name}</div>
+                        <div className="text-[11px] text-slate-400">{emp.position || "Staff"}</div>
+                      </td>
+                      <td className="py-2.5 px-2 whitespace-nowrap text-slate-300">{emp.month}</td>
+                      <td className="py-2.5 px-2 text-right font-medium text-slate-200">
+                        ৳{formatMoney(emp.target_sales || emp.target_collection)}
+                      </td>
+                      <td className="py-2.5 px-2 text-right font-semibold text-emerald-400">
+                        ৳{formatMoney(emp.actual_new_sales)}
+                      </td>
+                      <td className="py-2.5 px-2 text-right font-semibold text-blue-400">
+                        ৳{formatMoney(emp.actual_emi)}
+                      </td>
+                      <td className="py-2.5 px-2 text-right font-medium text-white">{emp.total_lead}</td>
+                      <td className="py-2.5 px-2 text-right text-slate-300">{emp.fair_lead}</td>
+                      <td className="py-2.5 px-2 text-right text-slate-300">{emp.fb_lead}</td>
+                      <td className="py-2.5 px-2 text-right text-rose-400 font-medium">{emp.hp}</td>
+                      <td className="py-2.5 px-2 text-right text-amber-400 font-medium">{emp.p}</td>
+                      <td className="py-2.5 px-2 text-right text-sky-400 font-medium">{emp.fup}</td>
+                      <td className="py-2.5 px-1.5 text-center text-emerald-400 bg-emerald-500/5 font-medium">
+                        {emp.prediction_sold_fair}
+                      </td>
+                      <td className="py-2.5 px-1.5 text-center text-blue-400 bg-blue-500/5 font-medium">
+                        {emp.prediction_sold_fb}
+                      </td>
+                      <td className="py-2.5 px-1.5 text-center text-indigo-400 bg-indigo-500/5 font-medium">
+                        {emp.prediction_sold_other}
+                      </td>
+                      <td className="py-2.5 px-1.5 text-center text-amber-400 bg-amber-500/5 font-medium">
+                        {emp.prediction_hold}
+                      </td>
+                      <td className="py-2.5 px-1.5 text-center text-rose-400 bg-rose-500/5 font-medium">
+                        {emp.prediction_cancel}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile Card View for Section 1 */}
+          <div className={`${mobileViewMode === "cards" ? "block sm:hidden" : "hidden"} space-y-3`}>
+            {report.monthly_performances.length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-500">
+                No employee performance records found for {selectedMonth}.
+              </div>
+            ) : (
+              report.monthly_performances.map((emp: EmployeeMonthlyPerformance) => {
+                const isExpanded = expandedEmployeeId === emp.employee_id;
+                return (
+                  <div
+                    key={emp.employee_id}
+                    className="rounded-xl border border-slate-800 bg-slate-800/40 p-3.5 transition"
+                  >
+                    {/* Header */}
+                    <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-slate-800/80">
+                      <div>
+                        <div className="font-bold text-white text-sm">{emp.employee_name}</div>
+                        <div className="text-xs text-slate-400">{emp.position || "Staff"} • {emp.month}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[10px] text-slate-400 uppercase">Target (TG)</div>
+                        <div className="text-xs font-bold text-slate-200">
+                          ৳{formatMoney(emp.target_sales || emp.target_collection)}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Sales Metrics */}
+                    <div className="grid grid-cols-2 gap-2 py-2.5 border-b border-slate-800/60 text-xs">
+                      <div className="bg-emerald-500/10 rounded-lg p-2 border border-emerald-500/20">
+                        <div className="text-[10px] text-emerald-400">New Sales</div>
+                        <div className="font-bold text-emerald-300">৳{formatMoney(emp.actual_new_sales)}</div>
+                      </div>
+                      <div className="bg-blue-500/10 rounded-lg p-2 border border-blue-500/20">
+                        <div className="text-[10px] text-blue-400">EMI Collected</div>
+                        <div className="font-bold text-blue-300">৳{formatMoney(emp.actual_emi)}</div>
+                      </div>
+                    </div>
+
+                    {/* Lead Statistics */}
+                    <div className="grid grid-cols-4 gap-1.5 py-2 border-b border-slate-800/60 text-center text-[11px]">
+                      <div className="bg-slate-900/60 rounded p-1">
+                        <div className="text-[9px] text-slate-400">Total</div>
+                        <div className="font-bold text-white">{emp.total_lead}</div>
+                      </div>
+                      <div className="bg-slate-900/60 rounded p-1">
+                        <div className="text-[9px] text-rose-400">HP</div>
+                        <div className="font-bold text-rose-300">{emp.hp}</div>
+                      </div>
+                      <div className="bg-slate-900/60 rounded p-1">
+                        <div className="text-[9px] text-amber-400">P</div>
+                        <div className="font-bold text-amber-300">{emp.p}</div>
+                      </div>
+                      <div className="bg-slate-900/60 rounded p-1">
+                        <div className="text-[9px] text-sky-400">FUP</div>
+                        <div className="font-bold text-sky-300">{emp.fup}</div>
+                      </div>
+                    </div>
+
+                    {/* Predictions Row */}
+                    <div className="pt-2 text-xs">
+                      <div className="text-[10px] text-slate-400 mb-1 font-medium">Predictions from Employee:</div>
+                      <div className="flex flex-wrap gap-1 text-[11px]">
+                        <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          Fair: {emp.prediction_sold_fair}
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                          FB: {emp.prediction_sold_fb}
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                          Hold: {emp.prediction_hold}
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                          Cancel: {emp.prediction_cancel}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Toggle Milestones Accordion */}
+                    {emp.intervals && emp.intervals.length > 0 && (
+                      <>
+                        <button
+                          onClick={() => setExpandedEmployeeId(isExpanded ? null : emp.employee_id)}
+                          className="mt-3 flex w-full items-center justify-between rounded-lg bg-slate-900/80 px-2.5 py-1.5 text-[11px] text-slate-300 hover:text-white transition"
+                        >
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3 w-3 text-primary" />
+                            <span>Milestones Progress (Till 5th, 10th...)</span>
+                          </span>
+                          {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                        </button>
+
+                        {/* Expanded Milestones Content */}
+                        {isExpanded && (
+                          <div className="mt-2 space-y-1.5 rounded-lg border border-slate-800 bg-slate-900/90 p-2.5 text-[11px]">
+                            {emp.intervals.map((inv: PerformanceIntervalSummary, idx: number) => (
+                              <div
+                                key={idx}
+                                className="flex items-center justify-between py-1 border-b border-slate-800/60 last:border-0"
+                              >
+                                <span className="font-medium text-slate-300">{inv.label}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-emerald-400 font-semibold">
+                                    ৳{formatMoney(inv.new_sales)}
+                                  </span>
+                                  <span className="text-slate-400">Leads: {inv.total_lead}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* PROGRESS SUMMARIES / MILESTONES (Company-wide or Selected Employee) */}
+          {report.monthly_performances.length > 0 &&
+            report.monthly_performances[0].intervals &&
+            report.monthly_performances[0].intervals.length > 0 && (
+              <div className="mt-6 pt-4 border-t border-slate-800">
+                <div className="flex items-center gap-2 mb-3">
+                  <Clock className="h-4 w-4 text-primary" />
+                  <h3 className="text-xs sm:text-sm font-bold text-white">
+                    Progress Summaries / Cumulative Milestones (Till 5th, Till 10th, Till 15th, etc.)
+                  </h3>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                  {report.monthly_performances[0].intervals.map((inv: PerformanceIntervalSummary, idx: number) => (
+                    <div
+                      key={idx}
+                      className="rounded-xl border border-slate-800 bg-slate-800/40 p-2.5 sm:p-3 hover:border-slate-700 transition"
+                    >
+                      <div className="flex items-center justify-between text-xs font-semibold text-slate-300 pb-1 border-b border-slate-800/60">
+                        <span>{inv.label}</span>
+                        <span className="text-[10px] text-slate-500">{inv.total_lead} Leads</span>
+                      </div>
+                      <div className="mt-2 space-y-1 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Sales:</span>
+                          <span className="font-semibold text-emerald-400">৳{formatMoney(inv.new_sales)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Coll:</span>
+                          <span className="font-semibold text-blue-400">৳{formatMoney(inv.total_collection)}</span>
+                        </div>
+                        <div className="flex justify-between border-t border-slate-800/40 pt-1">
+                          <span className="text-slate-400">Visits:</span>
+                          <span className="font-medium text-slate-200">
+                            {inv.outdoor_visits + inv.indoor_cx}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* SECTION 2: CUSTOMER-WISE COLLECTION REPORT */}
+      {/* ============================================================ */}
+      {report && (activeTab === "both" || activeTab === "customers") && (
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5 backdrop-blur">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-4 mb-4 border-b border-slate-800">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500/20 text-xs font-bold text-emerald-400">
+                  2
+                </span>
+                <h2 className="text-base sm:text-lg font-bold text-white">
+                  Section 2: Customer-wise Collection Report
+                </h2>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Customer collection ledger, IN/OUT visit plans, promised dates, and payment history
+              </p>
+            </div>
+            <div className="text-xs text-slate-400">
+              Showing <span className="text-white font-semibold">{filteredCustomers.length}</span> Customer Records
+            </div>
+          </div>
+
+          {/* Desktop & Tablet Table (or Mobile when Table toggle is chosen) */}
+          <div className={`${mobileViewMode === "cards" ? "hidden sm:block" : "block"} overflow-x-auto`}>
+            <table className="w-full text-left text-xs text-slate-300 border-collapse">
+              <thead>
+                <tr className="border-b border-slate-800 bg-slate-800/40 text-[11px] uppercase tracking-wider text-slate-400">
+                  <th className="py-2.5 px-3 font-semibold sticky left-0 bg-slate-900/90 z-10">Customer Name & Phone</th>
+                  <th className="py-2.5 px-2 font-semibold text-right text-emerald-400">Paid</th>
+                  <th className="py-2.5 px-2 font-semibold text-right text-rose-400">Unpaid</th>
+                  <th className="py-2.5 px-2 font-semibold">Collection Date</th>
+                  <th className="py-2.5 px-2 font-semibold">IN/OUT Plan</th>
+                  <th className="py-2.5 px-2 font-semibold">Date-1</th>
+                  <th className="py-2.5 px-2 font-semibold">Date-2</th>
+                  <th className="py-2.5 px-2 font-semibold text-right text-emerald-400">New Sales</th>
+                  <th className="py-2.5 px-2 font-semibold text-right text-sky-400">TB</th>
+                  <th className="py-2.5 px-2 font-semibold text-right text-blue-400">EMI</th>
+                  <th className="py-2.5 px-2 font-semibold text-amber-400">Next Collection Date</th>
+                  <th className="py-2.5 px-2 font-semibold">Lead Status</th>
+                  <th className="py-2.5 px-2 font-semibold text-right text-emerald-300">Total Collection</th>
+                  <th className="py-2.5 px-3 font-semibold">Remarks</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {filteredCustomers.length === 0 ? (
+                  <tr>
+                    <td colSpan={14} className="py-8 text-center text-slate-500">
+                      No customer collection records found matching your filters.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredCustomers.map((cust: CustomerCollectionItem) => (
+                    <tr key={cust.id} className="hover:bg-slate-800/30 transition">
+                      <td className="py-2.5 px-3 sticky left-0 bg-slate-900/90 z-10">
+                        <div className="font-semibold text-white">{cust.customer_name}</div>
+                        <div className="flex items-center gap-1 text-[11px] text-slate-400">
+                          {cust.customer_phone ? (
+                            <a
+                              href={`tel:${cust.customer_phone}`}
+                              className="text-primary hover:underline flex items-center gap-0.5"
+                            >
+                              <Phone className="h-2.5 w-2.5" />
+                              {cust.customer_phone}
+                            </a>
+                          ) : (
+                            <span>No phone</span>
+                          )}
+                          {cust.employee_name && (
+                            <span className="text-slate-500">• {cust.employee_name}</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-2 text-right font-semibold text-emerald-400">
+                        ৳{formatMoney(cust.paid_amount)}
+                      </td>
+                      <td className="py-2.5 px-2 text-right font-semibold text-rose-400">
+                        ৳{formatMoney(cust.unpaid_amount)}
+                      </td>
+                      <td className="py-2.5 px-2 whitespace-nowrap text-slate-300">
+                        {cust.collection_date || "-"}
+                      </td>
+                      <td className="py-2.5 px-2 whitespace-nowrap">
+                        <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-slate-800 text-slate-300 border border-slate-700">
+                          {cust.in_out_plan || "Indoor"}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-2 whitespace-nowrap text-slate-400">{cust.date_1 || "-"}</td>
+                      <td className="py-2.5 px-2 whitespace-nowrap text-slate-400">{cust.date_2 || "-"}</td>
+                      <td className="py-2.5 px-2 text-right font-medium text-emerald-400">
+                        ৳{formatMoney(cust.new_sales_amount)}
+                      </td>
+                      <td className="py-2.5 px-2 text-right font-medium text-sky-400">
+                        ৳{formatMoney(cust.tb_amount)}
+                      </td>
+                      <td className="py-2.5 px-2 text-right font-medium text-blue-400">
+                        ৳{formatMoney(cust.emi_amount)}
+                      </td>
+                      <td className="py-2.5 px-2 whitespace-nowrap">
+                        {cust.next_collection_date ? (
+                          <span className="flex items-center gap-1 font-semibold text-amber-400">
+                            <Calendar className="h-3 w-3" />
+                            {cust.next_collection_date}
+                          </span>
+                        ) : (
+                          <span className="text-slate-500">-</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-2 whitespace-nowrap">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${getStatusBadge(
+                            cust.lead_status
+                          )}`}
+                        >
+                          {cust.lead_status || "PENDING"}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-2 text-right font-bold text-emerald-300">
+                        ৳{formatMoney(cust.total_collection)}
+                      </td>
+                      <td className="py-2.5 px-3 max-w-[200px] truncate text-slate-400" title={cust.remarks || ""}>
+                        {cust.remarks || "-"}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile Card View for Section 2 */}
+          <div className={`${mobileViewMode === "cards" ? "block sm:hidden" : "hidden"} space-y-3`}>
+            {filteredCustomers.length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-500">
+                No customer collection records found matching your filters.
+              </div>
+            ) : (
+              filteredCustomers.map((cust: CustomerCollectionItem) => (
+                <div
+                  key={cust.id}
+                  className="rounded-xl border border-slate-800 bg-slate-800/40 p-3.5 transition"
+                >
+                  {/* Top Bar: Customer & Status */}
+                  <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-slate-800/80">
+                    <div>
+                      <div className="font-bold text-white text-sm">{cust.customer_name}</div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {cust.customer_phone ? (
+                          <a
+                            href={`tel:${cust.customer_phone}`}
+                            className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline"
+                          >
+                            <Phone className="h-3 w-3" />
+                            {cust.customer_phone}
+                          </a>
+                        ) : (
+                          <span className="text-xs text-slate-500">No phone</span>
+                        )}
+                        {cust.employee_name && (
+                          <span className="text-[11px] text-slate-400">• {cust.employee_name}</span>
+                        )}
+                      </div>
+                    </div>
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${getStatusBadge(
+                        cust.lead_status
+                      )}`}
+                    >
+                      {cust.lead_status || "PENDING"}
+                    </span>
+                  </div>
+
+                  {/* Financial Metrics */}
+                  <div className="grid grid-cols-3 gap-2 py-2.5 border-b border-slate-800/60 text-center text-xs">
+                    <div className="bg-emerald-500/10 rounded-lg p-2 border border-emerald-500/20">
+                      <div className="text-[10px] text-emerald-400">Paid</div>
+                      <div className="font-bold text-emerald-300">৳{formatMoney(cust.paid_amount)}</div>
+                    </div>
+                    <div className="bg-rose-500/10 rounded-lg p-2 border border-rose-500/20">
+                      <div className="text-[10px] text-rose-400">Unpaid</div>
+                      <div className="font-bold text-rose-300">৳{formatMoney(cust.unpaid_amount)}</div>
+                    </div>
+                    <div className="bg-emerald-500/5 rounded-lg p-2 border border-emerald-500/10">
+                      <div className="text-[10px] text-emerald-400">Total</div>
+                      <div className="font-bold text-emerald-200">৳{formatMoney(cust.total_collection)}</div>
+                    </div>
+                  </div>
+
+                  {/* Breakdown & Dates */}
+                  <div className="py-2 text-xs space-y-1.5 border-b border-slate-800/60">
+                    <div className="flex items-center justify-between text-slate-300">
+                      <span className="text-slate-400">IN/OUT Plan:</span>
+                      <span className="px-1.5 py-0.5 rounded bg-slate-900 text-slate-300 text-[11px] border border-slate-700">
+                        {cust.in_out_plan || "Indoor"}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-slate-300">
+                      <span className="text-slate-400">Collection Date:</span>
+                      <span className="text-slate-200">{cust.collection_date || "-"}</span>
+                    </div>
+
+                    {cust.next_collection_date && (
+                      <div className="flex items-center justify-between text-amber-400 font-medium">
+                        <span className="flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />
+                          <span>Next Collection:</span>
+                        </span>
+                        <span>{cust.next_collection_date}</span>
+                      </div>
+                    )}
+
+                    {(cust.date_1 || cust.date_2) && (
+                      <div className="flex items-center justify-between text-slate-400 text-[11px]">
+                        <span>Contact Dates:</span>
+                        <span>
+                          {cust.date_1 ? `D1: ${cust.date_1}` : ""} {cust.date_2 ? `• D2: ${cust.date_2}` : ""}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Remarks */}
+                  {cust.remarks && (
+                    <div className="pt-2 text-[11px] text-slate-400">
+                      <span className="text-slate-500">Remarks: </span>
+                      {cust.remarks}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
-
-export default function PerformanceCollectionPage() {
-  return (
-    <Suspense
-      fallback={
-        <DashboardLayout
-          title="Employee Performance & Collection Report"
-          subtitle="Loading report..."
-        >
-          <div className="py-12 text-center text-xs text-slate-400">Loading report...</div>
-        </DashboardLayout>
-      }
-    >
-      <PerformanceCollectionContent />
-    </Suspense>
-  );
-}
-

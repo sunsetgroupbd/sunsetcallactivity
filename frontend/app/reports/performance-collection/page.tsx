@@ -177,10 +177,10 @@ export default function PerformanceCollectionReportPage() {
             </div>
             <div>
               <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
-                Employee Performance & Collection Report
+                Performance & Collection Report
               </h1>
               <p className="text-xs sm:text-sm text-slate-400">
-                Monthly performance milestones & customer collection ledger (Excel Format)
+                Monthly performance & customer ledger
               </p>
             </div>
           </div>
@@ -443,11 +443,11 @@ export default function PerformanceCollectionReportPage() {
                   1
                 </span>
                 <h2 className="text-base sm:text-lg font-bold text-white">
-                  Section 1: Employee Monthly Performance Report
+                  Section 1: Employee Performance
                 </h2>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Target vs actual sales, lead breakdown, and progressive milestones (Till 5th, 10th, 15th, 20th, 25th, 30th)
+                Sales targets, lead breakdown & progressive milestones
               </p>
             </div>
             <div className="text-xs text-slate-400">
@@ -714,11 +714,11 @@ export default function PerformanceCollectionReportPage() {
                   2
                 </span>
                 <h2 className="text-base sm:text-lg font-bold text-white">
-                  Section 2: Customer-wise Collection Report
+                  Section 2: Customer Collection
                 </h2>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Customer collection ledger, IN/OUT visit plans, promised dates, and payment history
+                Customer collection ledger, visit plans & promised dates
               </p>
             </div>
             <div className="text-xs text-slate-400">

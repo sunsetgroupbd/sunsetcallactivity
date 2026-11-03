@@ -38,7 +38,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
     { name: "Sales & Collection", href: "/sales", icon: Banknote },
     { name: "Reports", href: "/reports", icon: FileSpreadsheet },
     { name: "Notice Board", href: "/notices", icon: BellRing },
-    ...(isAdmin
+    ...(isAdmin || isSubAdmin
       ? [
           { name: "Performance & Collection", href: "/reports/performance-collection", icon: Target },
           { name: "Employees", href: "/employees", icon: UserCheck },

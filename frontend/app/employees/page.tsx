@@ -20,6 +20,10 @@ import {
   AlertTriangle,
   Eye,
   EyeOff,
+  Upload,
+  FileSpreadsheet,
+  CheckCircle,
+  Info,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import {
@@ -35,7 +39,7 @@ import {
 } from "@/components/ui";
 import { useAuth } from "@/lib/auth-context";
 import { api, ApiError } from "@/lib/api";
-import { User, UserRole } from "@/types";
+import { User, UserRole, BulkUploadEmployeesResponse } from "@/types";
 import { formatReadableDate, formatEmployeeId } from "@/lib/utils";
 
 export function renderRoleBadge(userRole: UserRole) {
@@ -107,6 +111,7 @@ export default function EmployeesPage() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [designation, setDesignation] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -114,6 +119,27 @@ export default function EmployeesPage() {
   const [isActive, setIsActive] = useState(true);
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Bulk CSV Upload states
+  const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
+  const [bulkFile, setBulkFile] = useState<File | null>(null);
+  const [bulkDefaultPassword, setBulkDefaultPassword] = useState("Sunset@1234");
+  const [bulkShowPassword, setBulkShowPassword] = useState(false);
+  const [bulkResetExisting, setBulkResetExisting] = useState(false);
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const [bulkResult, setBulkResult] = useState<BulkUploadEmployeesResponse | null>(null);
+  const [bulkPreviewCount, setBulkPreviewCount] = useState<number>(0);
+  const [bulkPreviewSample, setBulkPreviewSample] = useState<
+    Array<{
+      id: string;
+      name: string;
+      username: string;
+      email: string;
+      phone: string;
+      designation: string;
+    }>
+  >([]);
 
   const [statusMessage, setStatusMessage] = useState<{
     type: "success" | "error" | "info";
@@ -196,6 +222,7 @@ export default function EmployeesPage() {
     setFullName("");
     setEmail("");
     setPhone("");
+    setDesignation("");
     setUsername("");
     setPassword("");
     setShowPassword(false);
@@ -211,6 +238,7 @@ export default function EmployeesPage() {
     setFullName(emp.full_name);
     setEmail(emp.email);
     setPhone(emp.phone || "");
+    setDesignation(emp.designation || "");
     setUsername(emp.username);
     setPassword("");
     setShowPassword(false);
@@ -218,6 +246,91 @@ export default function EmployeesPage() {
     setIsActive(emp.is_active);
     setFormError(null);
     setIsCreateOpen(true);
+  };
+
+  const handleBulkFileSelect = (file: File) => {
+    setBulkFile(file);
+    setBulkError(null);
+    setBulkResult(null);
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = e.target?.result as string;
+        if (!text) return;
+        const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+        if (lines.length <= 1) {
+          setBulkError("CSV file seems empty or has no data rows.");
+          return;
+        }
+
+        const headers = lines[0]
+          .split(",")
+          .map((h) => h.replace(/^"|"$/g, "").trim().toLowerCase());
+        const idCol = headers.findIndex(
+          (h) => h.includes("employee id") || h.includes("empid") || h === "id"
+        );
+        const nameCol = headers.findIndex((h) => h.includes("name"));
+        const userCol = headers.findIndex((h) => h.includes("username"));
+        const emailCol = headers.findIndex((h) => h.includes("email"));
+        const phoneCol = headers.findIndex((h) => h.includes("phone"));
+        const desigCol = headers.findIndex(
+          (h) => h.includes("designation") || h.includes("position")
+        );
+
+        setBulkPreviewCount(lines.length - 1);
+
+        const sample = lines.slice(1, 4).map((line) => {
+          const parts = line
+            .split(",")
+            .map((p) => p.replace(/^"|"$/g, "").trim());
+          return {
+            id: idCol !== -1 ? parts[idCol] || "-" : "-",
+            name: nameCol !== -1 ? parts[nameCol] || "-" : "-",
+            username: userCol !== -1 ? parts[userCol] || "-" : "-",
+            email: emailCol !== -1 ? parts[emailCol] || "-" : "-",
+            phone: phoneCol !== -1 ? parts[phoneCol] || "-" : "-",
+            designation: desigCol !== -1 ? parts[desigCol] || "-" : "-",
+          };
+        });
+        setBulkPreviewSample(sample);
+      } catch (err) {
+        console.error("Preview parse error", err);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleBulkSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bulkFile) {
+      setBulkError("Please select a CSV file to upload.");
+      return;
+    }
+    setBulkSubmitting(true);
+    setBulkError(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", bulkFile);
+      formData.append("default_password", bulkDefaultPassword.trim() || "Sunset@1234");
+      formData.append("reset_existing_passwords", String(bulkResetExisting));
+
+      const res = await api.employees.bulkUpload(formData);
+      setBulkResult(res);
+      await loadEmployees();
+      setStatusMessage({
+        type: "success",
+        text: res.message,
+      });
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
+        setBulkError(err.message);
+      } else {
+        setBulkError("Failed to upload CSV. Please ensure the CSV format is valid.");
+      }
+    } finally {
+      setBulkSubmitting(false);
+    }
   };
 
   const handleFormSubmit = async (e: React.FormEvent) => {
@@ -243,10 +356,12 @@ export default function EmployeesPage() {
           is_active: boolean;
           password?: string;
           phone?: string | null;
+          designation?: string | null;
         } = {
           full_name: fullName.trim(),
           email: email.trim(),
           phone: phone.trim() || null,
+          designation: designation.trim() || null,
           role,
           is_active: isActive,
         };
@@ -301,6 +416,7 @@ export default function EmployeesPage() {
           username: username.trim(),
           password: password.trim(),
           phone: phone.trim() || null,
+          designation: designation.trim() || null,
           role,
         });
         setEmployees((prev) => [created, ...prev]);
@@ -409,10 +525,28 @@ export default function EmployeesPage() {
                 </div>
               </div>
 
-              <Button variant="primary" size="sm" onClick={openCreateModal}>
-                <Plus className="w-4 h-4 mr-1.5" />
-                Add Employee
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setBulkFile(null);
+                    setBulkError(null);
+                    setBulkResult(null);
+                    setBulkPreviewCount(0);
+                    setBulkPreviewSample([]);
+                    setIsBulkUploadOpen(true);
+                  }}
+                  className="bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
+                >
+                  <Upload className="w-4 h-4 mr-1.5" />
+                  Import CSV
+                </Button>
+                <Button variant="primary" size="sm" onClick={openCreateModal}>
+                  <Plus className="w-4 h-4 mr-1.5" />
+                  Add Employee
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -496,9 +630,12 @@ export default function EmployeesPage() {
                     </div>
                   </div>
 
-                  {/* Name & Username */}
+                  {/* Name, Designation & Username */}
                   <div>
                     <h3 className="font-bold text-slate-900 text-sm leading-snug">{emp.full_name}</h3>
+                    {emp.designation && (
+                      <p className="text-xs font-medium text-emerald-700 mt-0.5">{emp.designation}</p>
+                    )}
                     <p className="text-xs text-slate-500 font-mono mt-0.5">@{emp.username}</p>
                   </div>
 
@@ -595,12 +732,19 @@ export default function EmployeesPage() {
                           {formatEmployeeId(emp.id, emp.created_at)}
                         </span>
                       </td>
-                      <td className="py-3 px-4 font-semibold text-slate-900">
-                        {emp.full_name}
-                        {currentUser?.id === emp.id && (
-                          <span className="ml-1.5 text-[10px] text-green-800 bg-green-50 px-1.5 py-0.5 rounded font-normal">
-                            (You)
-                          </span>
+                      <td className="py-3 px-4">
+                        <div className="font-semibold text-slate-900">
+                          {emp.full_name}
+                          {currentUser?.id === emp.id && (
+                            <span className="ml-1.5 text-[10px] text-green-800 bg-green-50 px-1.5 py-0.5 rounded font-normal">
+                              (You)
+                            </span>
+                          )}
+                        </div>
+                        {emp.designation && (
+                          <div className="text-[11px] text-emerald-700 font-medium">
+                            {emp.designation}
+                          </div>
                         )}
                       </td>
                       <td className="py-3 px-3 text-slate-600 font-mono text-[11px]">
@@ -748,6 +892,19 @@ export default function EmployeesPage() {
               />
             </div>
 
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                Designation / Position
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Manager (Sales & Marketing), Executive"
+                value={designation}
+                onChange={(e) => setDesignation(e.target.value)}
+                className="w-full border border-slate-300 rounded px-3 py-2 text-xs font-semibold text-slate-800 placeholder:text-slate-500 focus:ring-1 focus:ring-green-600 focus:outline-none"
+              />
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
@@ -874,6 +1031,209 @@ export default function EmployeesPage() {
                 disabled={formSubmitting || !!duplicateEmployee}
               >
                 {editingEmployee ? "Update Employee" : "Create Account"}
+              </Button>
+            </div>
+          </form>
+        </Modal>
+
+        {/* ── Bulk Upload CSV Modal ────────────────────────────────────────── */}
+        <Modal
+          isOpen={isBulkUploadOpen}
+          onClose={() => {
+            if (!bulkSubmitting) {
+              setIsBulkUploadOpen(false);
+            }
+          }}
+          title="Bulk Register / Update Employees via CSV"
+          description="Upload your sales team CSV file to register new employees or update existing ones"
+        >
+          <form onSubmit={handleBulkSubmit} className="space-y-4">
+            {bulkError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800">
+                {bulkError}
+              </div>
+            )}
+
+            {bulkResult && (
+              <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2">
+                <div className="flex items-center gap-2 text-xs font-bold text-emerald-800">
+                  <CheckCircle className="w-4 h-4 text-emerald-600" />
+                  <span>{bulkResult.message}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center text-xs pt-1">
+                  <div className="p-1.5 bg-white rounded border border-emerald-100">
+                    <span className="text-[10px] text-slate-500 block">Created</span>
+                    <span className="font-bold text-emerald-700">{bulkResult.created_count}</span>
+                  </div>
+                  <div className="p-1.5 bg-white rounded border border-emerald-100">
+                    <span className="text-[10px] text-slate-500 block">Updated</span>
+                    <span className="font-bold text-blue-700">{bulkResult.updated_count}</span>
+                  </div>
+                  <div className="p-1.5 bg-white rounded border border-emerald-100">
+                    <span className="text-[10px] text-slate-500 block">Skipped</span>
+                    <span className="font-bold text-slate-600">{bulkResult.skipped_count}</span>
+                  </div>
+                </div>
+
+                {bulkResult.errors && bulkResult.errors.length > 0 && (
+                  <div className="mt-2 text-[11px] text-amber-800 bg-amber-50 p-2 rounded border border-amber-200 max-h-28 overflow-y-auto space-y-1">
+                    <span className="font-semibold block">Notes & Warnings:</span>
+                    {bulkResult.errors.map((err, idx) => (
+                      <div key={idx} className="font-mono text-[10px]">• {err}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* File Upload Zone */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                Select CSV File *
+              </label>
+              <div className="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center hover:border-emerald-500 transition-colors bg-slate-50/50">
+                <input
+                  type="file"
+                  accept=".csv,text/csv,application/vnd.ms-excel"
+                  id="csv-file-input"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleBulkFileSelect(f);
+                  }}
+                />
+                <label
+                  htmlFor="csv-file-input"
+                  className="cursor-pointer flex flex-col items-center justify-center gap-1.5"
+                >
+                  <FileSpreadsheet className="w-8 h-8 text-emerald-600" />
+                  <span className="text-xs font-semibold text-slate-800">
+                    {bulkFile ? bulkFile.name : "Click to select CSV file (or drag & drop)"}
+                  </span>
+                  <span className="text-[10px] text-slate-500">
+                    Accepts columns: S.L, Name, Employee ID, Username, Email, Phone Number, Designation
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            {/* CSV Quick Preview */}
+            {bulkPreviewCount > 0 && (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs space-y-2">
+                <div className="flex items-center justify-between text-slate-700 font-semibold">
+                  <span className="flex items-center gap-1.5 text-emerald-700">
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    {bulkPreviewCount} Employee Records Detected
+                  </span>
+                  <span className="text-[10px] text-slate-400">Sample preview</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-[11px] border-collapse bg-white rounded border border-slate-200">
+                    <thead>
+                      <tr className="bg-slate-100 text-slate-600 font-semibold border-b border-slate-200">
+                        <th className="py-1 px-2">ID</th>
+                        <th className="py-1 px-2">Name</th>
+                        <th className="py-1 px-2">Email</th>
+                        <th className="py-1 px-2">Designation</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {bulkPreviewSample.map((s, idx) => (
+                        <tr key={idx}>
+                          <td className="py-1 px-2 font-mono">{s.id}</td>
+                          <td className="py-1 px-2 font-medium">{s.name}</td>
+                          <td className="py-1 px-2 text-slate-500">{s.email}</td>
+                          <td className="py-1 px-2 text-emerald-700">{s.designation}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Default Password Setting */}
+            <div className="space-y-1.5 pt-1 border-t border-slate-100">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                  Default Common Password *
+                </label>
+                <span className="text-[10px] text-slate-400">
+                  Assigned to all newly registered accounts
+                </span>
+              </div>
+              <div className="relative">
+                <input
+                  type={bulkShowPassword ? "text" : "password"}
+                  required
+                  placeholder="e.g. Sunset@1234"
+                  value={bulkDefaultPassword}
+                  onChange={(e) => setBulkDefaultPassword(e.target.value)}
+                  className="w-full border border-slate-300 rounded px-3 py-2 pr-9 text-xs font-semibold text-slate-800 placeholder:text-slate-500 focus:ring-1 focus:ring-green-600 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setBulkShowPassword((prev) => !prev)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-0.5 rounded focus:outline-none"
+                  title={bulkShowPassword ? "Hide password" : "Show password"}
+                >
+                  {bulkShowPassword ? (
+                    <EyeOff className="w-4 h-4 text-slate-500" />
+                  ) : (
+                    <Eye className="w-4 h-4 text-slate-500" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Smart Update & Password Option */}
+            <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3 space-y-2 text-xs">
+              <div className="flex items-start gap-2">
+                <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                <div className="text-blue-900 leading-relaxed text-[11px]">
+                  <strong>Smart Update:</strong> If an employee already exists in the system (matching Employee ID, username or email), their Name, Phone, and Designation will be updated automatically.
+                </div>
+              </div>
+
+              <label className="flex items-start gap-2 cursor-pointer pt-1 border-t border-blue-100">
+                <input
+                  type="checkbox"
+                  checked={bulkResetExisting}
+                  onChange={(e) => setBulkResetExisting(e.target.checked)}
+                  className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                />
+                <span className="text-[11px] text-slate-700 font-medium">
+                  Also reset existing employees' passwords to this default password
+                </span>
+              </label>
+
+              {bulkResetExisting && (
+                <div className="text-[10px] text-amber-700 font-semibold bg-amber-50 p-2 rounded border border-amber-200">
+                  ⚠️ Note: Existing employees will need to login with &quot;{bulkDefaultPassword || "the default password"}&quot; after import.
+                </div>
+              )}
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsBulkUploadOpen(false)}
+                disabled={bulkSubmitting}
+              >
+                {bulkResult ? "Done" : "Cancel"}
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                loading={bulkSubmitting}
+                disabled={bulkSubmitting || !bulkFile}
+              >
+                <Upload className="w-3.5 h-3.5 mr-1" />
+                {bulkSubmitting ? "Importing..." : "Import & Sync Employees"}
               </Button>
             </div>
           </form>

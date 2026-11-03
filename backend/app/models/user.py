@@ -31,6 +31,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(254), unique=True, index=True, nullable=False)
     phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     username: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
+    designation: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
     password_hash: Mapped[str] = mapped_column(String(200), nullable=False)
     role: Mapped[UserRole] = mapped_column(
         Enum(UserRole, name="userrole"), default=UserRole.EMPLOYEE, nullable=False

@@ -308,7 +308,9 @@ class PerformanceCollectionService:
 
             # Role formatted display
             pos_title = (
-                "Sales Executive"
+                emp.designation
+                if getattr(emp, "designation", None)
+                else "Sales Executive"
                 if emp.role == UserRole.EMPLOYEE
                 else "Team Lead"
                 if emp.role == UserRole.TL

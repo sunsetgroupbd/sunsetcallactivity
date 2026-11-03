@@ -23,6 +23,7 @@ import {
   FinancialTrendResponse,
   Notice,
   PerformanceCollectionReportResponse,
+  BulkUploadEmployeesResponse,
 } from "@/types";
 
 const API_BASE =
@@ -594,6 +595,7 @@ export const api = {
       full_name: string;
       email: string;
       phone?: string | null;
+      designation?: string | null;
       username: string;
       password: string;
       role: UserRole;
@@ -610,6 +612,7 @@ export const api = {
         full_name: string;
         email: string;
         phone?: string | null;
+        designation?: string | null;
         role: UserRole;
         is_active: boolean;
         password?: string;
@@ -623,6 +626,12 @@ export const api = {
     delete: async (userId: number): Promise<void> => {
       return request<void>(`/employees/${userId}`, {
         method: "DELETE",
+      });
+    },
+    bulkUpload: async (formData: FormData): Promise<BulkUploadEmployeesResponse> => {
+      return request<BulkUploadEmployeesResponse>("/employees/bulk-upload", {
+        method: "POST",
+        body: formData,
       });
     },
   },

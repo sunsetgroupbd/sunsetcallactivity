@@ -9,12 +9,22 @@ export interface User {
   id: number;
   email: string;
   phone?: string | null;
+  designation?: string | null;
   username: string;
   full_name: string;
   role: UserRole;
   is_active: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface BulkUploadEmployeesResponse {
+  total_rows: number;
+  created_count: number;
+  updated_count: number;
+  skipped_count: number;
+  errors: string[];
+  message: string;
 }
 
 export interface AuthTokenResponse {

@@ -1,9 +1,12 @@
 """Employees (user management) endpoints — admin write, self read."""
 from __future__ import annotations
 
-from typing import Optional
+import csv
+import io
+import re
+from typing import Optional, Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, UploadFile, File, Form, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import get_current_user, require_admin
@@ -12,7 +15,6 @@ from app.db.session import get_db
 from app.models.user import User, UserRole
 from app.repositories.user_repo import UserRepository
 from app.schemas.user import UserCreate, UserRead, UserUpdate
-from fastapi import HTTPException
 
 router = APIRouter(prefix="/employees", tags=["Employees"])
 
@@ -63,11 +65,182 @@ async def create_employee(
         email=data.email,
         phone=data.phone,
         username=data.username,
+        designation=data.designation,
         password_hash=hash_password(data.password),
         role=data.role,
         is_active=data.is_active,
     )
     return await repo.create(user)
+
+
+@router.post("/bulk-upload")
+async def bulk_upload_employees(
+    file: UploadFile = File(...),
+    default_password: str = Form("Sunset@1234"),
+    reset_existing_passwords: bool = Form(False),
+    _: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bulk register or update employees from a CSV file.
+
+    Existing employees retain their existing passwords unless
+    reset_existing_passwords is explicitly True.
+    """
+    if not file.filename or not file.filename.lower().endswith((".csv", ".txt")):
+        raise HTTPException(status_code=400, detail="Uploaded file must be a CSV file (.csv)")
+
+    raw_bytes = await file.read()
+    if not raw_bytes:
+        raise HTTPException(status_code=400, detail="Uploaded CSV file is empty")
+
+    try:
+        text_content = raw_bytes.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text_content = raw_bytes.decode("latin-1", errors="replace")
+
+    reader = csv.reader(io.StringIO(text_content))
+    rows = list(reader)
+    if not rows or len(rows) < 2:
+        raise HTTPException(status_code=400, detail="CSV contains no employee data rows")
+
+    # Header detection
+    headers = [h.strip() for h in rows[0]]
+    norm_headers = [re.sub(r"[^a-z0-9]", "", h.lower()) for h in headers]
+
+    def find_col_idx(*patterns: str) -> Optional[int]:
+        for p in patterns:
+            cleaned_p = re.sub(r"[^a-z0-9]", "", p.lower())
+            for idx, h in enumerate(norm_headers):
+                if cleaned_p in h or h in cleaned_p:
+                    return idx
+        return None
+
+    id_idx = find_col_idx("employee id", "employeeid", "empid", "id")
+    name_idx = find_col_idx("name", "fullname", "full name", "employee name")
+    username_idx = find_col_idx("username", "user name")
+    email_idx = find_col_idx("email", "emailaddress")
+    phone_idx = find_col_idx("phone number", "phone", "phonenumber", "mobile")
+    desig_idx = find_col_idx("designation", "position", "title")
+
+    if name_idx is None or email_idx is None:
+        raise HTTPException(
+            status_code=400,
+            detail="CSV must contain at least 'Name' and 'Email' columns."
+        )
+
+    clean_default_password = default_password.strip() if default_password else "Sunset@1234"
+    if len(clean_default_password) < 8:
+        clean_default_password = "Sunset@1234"
+    hashed_default = hash_password(clean_default_password)
+
+    repo = UserRepository(db)
+    created_count = 0
+    updated_count = 0
+    skipped_count = 0
+    errors: list[str] = []
+
+    for row_num, row in enumerate(rows[1:], start=2):
+        if not row or all(not str(cell).strip() for cell in row):
+            continue
+
+        def get_val(idx: Optional[int]) -> str:
+            if idx is not None and idx < len(row):
+                return str(row[idx]).strip()
+            return ""
+
+        raw_id = get_val(id_idx)
+        name = get_val(name_idx)
+        username = get_val(username_idx)
+        email = get_val(email_idx).lower()
+        phone = get_val(phone_idx)
+        designation = get_val(desig_idx)
+
+        if not name:
+            errors.append(f"Row {row_num}: Missing employee name, skipped.")
+            skipped_count += 1
+            continue
+
+        if not email or "@" not in email:
+            errors.append(f"Row {row_num}: Invalid or missing email '{email}', skipped.")
+            skipped_count += 1
+            continue
+
+        emp_id: Optional[int] = None
+        if raw_id:
+            try:
+                emp_id = int(raw_id)
+            except ValueError:
+                emp_id = None
+
+        if not username:
+            username = email.split("@")[0].strip()
+
+        # Check existing user
+        existing_user: Optional[User] = None
+        if emp_id is not None:
+            existing_user = await repo.get_by_id(emp_id)
+        if not existing_user and username:
+            existing_user = await repo.get_by_username(username)
+        if not existing_user and email:
+            existing_user = await repo.get_by_email(email)
+
+        if existing_user:
+            # UPDATE existing user
+            existing_user.full_name = name
+            if phone:
+                existing_user.phone = phone
+            if designation:
+                existing_user.designation = designation
+
+            # Only update email if not in conflict
+            if existing_user.email != email:
+                user_with_email = await repo.get_by_email(email)
+                if not user_with_email or user_with_email.id == existing_user.id:
+                    existing_user.email = email
+                else:
+                    errors.append(f"Row {row_num}: Email '{email}' in use by another user; kept existing email.")
+
+            if reset_existing_passwords:
+                existing_user.password_hash = hashed_default
+
+            await repo.update(existing_user)
+            updated_count += 1
+        else:
+            # CREATE new user
+            if await repo.get_by_email(email):
+                errors.append(f"Row {row_num}: Email '{email}' already registered, skipped.")
+                skipped_count += 1
+                continue
+
+            if await repo.get_by_username(username):
+                username = f"{username}{emp_id}" if emp_id else f"{username}_{row_num}"
+
+            new_user = User(
+                id=emp_id,
+                full_name=name,
+                email=email,
+                phone=phone or None,
+                username=username,
+                designation=designation or None,
+                password_hash=hashed_default,
+                role=UserRole.EMPLOYEE,
+                is_active=True,
+            )
+            try:
+                await repo.create(new_user)
+                created_count += 1
+            except Exception as exc:
+                errors.append(f"Row {row_num}: Could not create user {name} ({exc})")
+                skipped_count += 1
+
+    return {
+        "total_rows": len(rows) - 1,
+        "created_count": created_count,
+        "updated_count": updated_count,
+        "skipped_count": skipped_count,
+        "errors": errors[:50],
+        "message": f"Successfully processed {len(rows) - 1} records: {created_count} created, {updated_count} updated, {skipped_count} skipped.",
+    }
 
 
 @router.get("/{user_id}", response_model=UserRead)

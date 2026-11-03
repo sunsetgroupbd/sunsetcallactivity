@@ -29,7 +29,7 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
                         except Exception as e:
                             logger.warning("Error adding %s to sales_collection_entries: %s", col_name, e)
 
-                # Ensure users.phone exists
+                # Ensure users.phone and users.designation exist
                 result_users = await conn.execute(text("PRAGMA table_info(users)"))
                 user_cols = {row[1] for row in result_users.fetchall()}
                 if user_cols and "phone" not in user_cols:
@@ -38,6 +38,13 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
                         logger.info("Added phone to users table")
                     except Exception as e:
                         logger.warning("Error adding phone to users: %s", e)
+
+                if user_cols and "designation" not in user_cols:
+                    try:
+                        await conn.execute(text("ALTER TABLE users ADD COLUMN designation VARCHAR(150)"))
+                        logger.info("Added designation to users table")
+                    except Exception as e:
+                        logger.warning("Error adding designation to users: %s", e)
 
                 # Ensure daily_targets.emi_target exists
                 result_targets = await conn.execute(text("PRAGMA table_info(daily_targets)"))
@@ -59,6 +66,7 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
             "ALTER TABLE sales_collection_entries ADD COLUMN IF NOT EXISTS reschedule_count INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE sales_collection_entries ADD COLUMN IF NOT EXISTS reschedule_history JSONB",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS designation VARCHAR(150)",
             "ALTER TABLE daily_targets ADD COLUMN IF NOT EXISTS emi_target NUMERIC(15, 2)",
             """
             DO $$

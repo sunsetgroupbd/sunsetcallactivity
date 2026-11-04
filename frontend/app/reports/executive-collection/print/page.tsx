@@ -11,16 +11,22 @@ function PrintContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  const dateParam = searchParams.get("date") || toLocalDateString(new Date());
-  const teamIdParam = searchParams.get("team_id")
-    ? Number(searchParams.get("team_id"))
-    : undefined;
-
+  const [dateParam, setDateParam] = useState<string>("");
   const [reportData, setReportData] =
     useState<ExecutiveCollectionReportResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const teamIdParam = searchParams.get("team_id")
+    ? Number(searchParams.get("team_id"))
+    : undefined;
+
   useEffect(() => {
+    const d = searchParams.get("date") || toLocalDateString(new Date());
+    setDateParam(d);
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!dateParam) return;
     (async () => {
       try {
         const data = await api.reports.getExecutiveCollectionReport({
@@ -357,4 +363,3 @@ export default function ExecutiveCollectionPrintPage() {
     </Suspense>
   );
 }
-

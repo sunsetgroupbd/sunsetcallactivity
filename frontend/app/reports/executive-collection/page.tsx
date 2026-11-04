@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, Suspense } from "react";
 import Link from "next/link";
 import {
   FileSpreadsheet,
@@ -9,12 +9,6 @@ import {
   Printer,
   Download,
   RefreshCw,
-  TrendingUp,
-  Banknote,
-  Users,
-  Target,
-  ArrowLeft,
-  ChevronDown,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import {
@@ -23,27 +17,28 @@ import {
   CardTitle,
   CardContent,
   Button,
-  Badge,
   Skeleton,
 } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
 import {
   ExecutiveCollectionReportResponse,
-  ExecutiveCollectionRow,
   Team,
 } from "@/types";
 import { formatCurrencyBDT, toLocalDateString } from "@/lib/utils";
 
-export default function ExecutiveCollectionPage() {
-  const [reportDate, setReportDate] = useState<string>(
-    toLocalDateString(new Date())
-  );
+function ExecutiveCollectionContent() {
+  const [reportDate, setReportDate] = useState<string>("");
   const [selectedTeamId, setSelectedTeamId] = useState<string>("all");
   const [teams, setTeams] = useState<Team[]>([]);
   const [reportData, setReportData] =
     useState<ExecutiveCollectionReportResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Initialize date in client-side effect to avoid Next.js static prerender warning
+  useEffect(() => {
+    setReportDate(toLocalDateString(new Date()));
+  }, []);
 
   // Load available teams for filter
   useEffect(() => {
@@ -58,6 +53,7 @@ export default function ExecutiveCollectionPage() {
   }, []);
 
   const fetchReport = useCallback(async () => {
+    if (!reportDate) return;
     setLoading(true);
     setError(null);
     try {
@@ -80,8 +76,10 @@ export default function ExecutiveCollectionPage() {
   }, [reportDate, selectedTeamId]);
 
   useEffect(() => {
-    fetchReport();
-  }, [fetchReport]);
+    if (reportDate) {
+      fetchReport();
+    }
+  }, [fetchReport, reportDate]);
 
   const handleExportCSV = () => {
     if (!reportData) return;
@@ -368,7 +366,7 @@ export default function ExecutiveCollectionPage() {
             <div>
               <CardTitle className="text-base font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
                 <FileSpreadsheet className="w-5 h-5 text-emerald-700" />
-                Executive Wise Collection Sheet - {reportData?.date_display ?? reportDate}
+                Executive Wise Collection Sheet - {reportData?.date_display ?? (reportDate || "Today")}
               </CardTitle>
               <span className="text-xs text-slate-500 font-medium">
                 Official Report • Generated for {reportData?.month_display}
@@ -672,5 +670,24 @@ export default function ExecutiveCollectionPage() {
         </Card>
       </div>
     </DashboardLayout>
+  );
+}
+
+export default function ExecutiveCollectionPage() {
+  return (
+    <Suspense
+      fallback={
+        <DashboardLayout
+          title="Executive Wise Collection Sheet"
+          subtitle="Directorate and Team-wise breakdown with Management Target, Month-to-date Collection, and Dues"
+        >
+          <div className="p-8 text-center text-xs text-slate-500">
+            Loading Executive Collection Sheet...
+          </div>
+        </DashboardLayout>
+      }
+    >
+      <ExecutiveCollectionContent />
+    </Suspense>
   );
 }

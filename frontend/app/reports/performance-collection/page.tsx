@@ -102,6 +102,10 @@ function PerformanceCollectionReportContent() {
 
   const [checkpointRows, setCheckpointRows] = useState<MilestoneCheckpointItem[]>(initialCheckpoints);
 
+  // Table Scroll Containers
+  const section1TableRef = useRef<HTMLDivElement>(null);
+  const section2TableRef = useRef<HTMLDivElement>(null);
+
   // Customer Detail Modal States
   const [selectedCustomerDetail, setSelectedCustomerDetail] = useState<CustomerDetailResponse | null>(null);
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState<boolean>(false);
@@ -821,13 +825,40 @@ function PerformanceCollectionReportContent() {
                   </p>
                 </div>
               </div>
-              <div className="text-xs font-semibold text-slate-600 bg-white px-3 py-1 rounded-full border border-slate-200 shadow-2xs self-start sm:self-auto">
-                Showing <span className="text-emerald-700 font-bold">{report.monthly_performances.length}</span> Employees
+              <div className="flex items-center gap-2.5 self-start sm:self-auto">
+                <div className="text-xs font-semibold text-slate-600 bg-white px-3 py-1 rounded-full border border-slate-200 shadow-2xs">
+                  Showing <span className="text-emerald-700 font-bold">{report.monthly_performances.length}</span> Employees
+                </div>
+
+                {/* Simple Scroll Buttons: Left & Right */}
+                <div className="inline-flex items-center rounded-lg border border-slate-300 bg-white shadow-2xs overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => section1TableRef.current?.scrollBy({ left: -300, behavior: "smooth" })}
+                    className="p-1.5 hover:bg-slate-100 text-slate-700 border-r border-slate-200 transition"
+                    title="Scroll left"
+                    aria-label="Scroll left"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => section1TableRef.current?.scrollBy({ left: 300, behavior: "smooth" })}
+                    className="p-1.5 hover:bg-slate-100 text-slate-700 transition"
+                    title="Scroll right"
+                    aria-label="Scroll right"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             </div>
 
             {/* Desktop Table */}
-            <div className={`${mobileViewMode === "cards" ? "hidden sm:block" : "block"} overflow-x-auto custom-table-scrollbar`}>
+            <div
+              ref={section1TableRef}
+              className={`${mobileViewMode === "cards" ? "hidden sm:block" : "block"} overflow-x-auto custom-table-scrollbar`}
+            >
               <table className="w-full text-left text-xs border-collapse min-w-[1250px]">
                 <thead className="sticky top-0 z-20 shadow-xs">
                   <tr className="border-b border-slate-200 bg-slate-100 text-[11px] uppercase tracking-wider text-slate-700">
@@ -1258,13 +1289,40 @@ function PerformanceCollectionReportContent() {
                   </p>
                 </div>
               </div>
-              <div className="text-xs font-semibold text-slate-600 bg-white px-3 py-1 rounded-full border border-slate-200 shadow-2xs self-start sm:self-auto">
-                Showing <span className="text-sky-700 font-bold">{filteredCustomers.length}</span> Customer Records
+              <div className="flex items-center gap-2.5 self-start sm:self-auto">
+                <div className="text-xs font-semibold text-slate-600 bg-white px-3 py-1 rounded-full border border-slate-200 shadow-2xs">
+                  Showing <span className="text-sky-700 font-bold">{filteredCustomers.length}</span> Customer Records
+                </div>
+
+                {/* Simple Scroll Buttons: Left & Right */}
+                <div className="inline-flex items-center rounded-lg border border-slate-300 bg-white shadow-2xs overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => section2TableRef.current?.scrollBy({ left: -300, behavior: "smooth" })}
+                    className="p-1.5 hover:bg-slate-100 text-slate-700 border-r border-slate-200 transition"
+                    title="Scroll left"
+                    aria-label="Scroll left"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => section2TableRef.current?.scrollBy({ left: 300, behavior: "smooth" })}
+                    className="p-1.5 hover:bg-slate-100 text-slate-700 transition"
+                    title="Scroll right"
+                    aria-label="Scroll right"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             </div>
 
             {/* Desktop Table */}
-            <div className={`${mobileViewMode === "cards" ? "hidden sm:block" : "block"} overflow-x-auto custom-table-scrollbar`}>
+            <div
+              ref={section2TableRef}
+              className={`${mobileViewMode === "cards" ? "hidden sm:block" : "block"} overflow-x-auto custom-table-scrollbar`}
+            >
               <table className="w-full text-left text-xs border-collapse min-w-[1300px]">
                 <thead className="sticky top-0 z-20 shadow-xs">
                   <tr className="border-b border-slate-200 bg-slate-100 text-[11px] uppercase tracking-wider text-slate-700">

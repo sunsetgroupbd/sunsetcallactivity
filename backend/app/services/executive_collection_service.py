@@ -63,7 +63,6 @@ class ExecutiveCollectionService:
         emp_ids = [u.id for u in all_users]
 
         # 3. Fetch Targets for active period
-        # For each employee, find the most recent target row with effective_from <= target_date
         target_map: Dict[int, float] = {}
         if emp_ids:
             targets_stmt = (
@@ -77,7 +76,6 @@ class ExecutiveCollectionService:
             targets_res = await self.db.execute(targets_stmt)
             for t in targets_res.scalars().all():
                 if t.employee_id is not None and t.employee_id not in target_map:
-                    # Target priority: sales_target (management target)
                     s_tgt = float(t.sales_target or 0.0)
                     e_tgt = float(t.emi_target or 0.0)
                     target_map[t.employee_id] = s_tgt if s_tgt > 0.0 else (s_tgt + e_tgt)
@@ -150,7 +148,6 @@ class ExecutiveCollectionService:
             )
 
         # 5. Group into Teams and C.O.s
-        # Group users by team_id
         team_members_map: Dict[Optional[int], List[User]] = {}
         for u in all_users:
             team_members_map.setdefault(u.team_id, []).append(u)
@@ -163,31 +160,61 @@ class ExecutiveCollectionService:
         ]
         # Include users without a team if any exist
         if None in team_members_map and team_members_map[None]:
-            all_team_entries.append((None, "Unassigned Team", None))
+            all_team_entries.append((None, "Unassigned", None))
 
         for tid, tname, director in all_team_entries:
             members = team_members_map.get(tid, [])
             if not members:
                 continue
 
+            # If this is Unassigned, do not create artificial C.O. groups.
+            # List all unassigned staff sequentially in one clean table.
+            if tid is None:
+                unassigned_rows: List[ExecutiveCollectionRow] = []
+                for idx, m in enumerate(members, start=1):
+                    if m.id in user_rows:
+                        r = user_rows[m.id].model_copy()
+                        r.sl_no = idx
+                        unassigned_rows.append(r)
+
+                if unassigned_rows:
+                    group_total = self._sum_rows(unassigned_rows, label="Unassigned Total")
+                    team_groups.append(
+                        TeamGroup(
+                            team_id=None,
+                            team_name="Unassigned Staff",
+                            director_name=None,
+                            co_groups=[
+                                COGroup(
+                                    co_id=None,
+                                    co_name="Unassigned Staff (Assign Team in Employees Page)",
+                                    co_designation="",
+                                    rows=unassigned_rows,
+                                    totals=group_total,
+                                )
+                            ],
+                            totals=group_total,
+                        )
+                    )
+                continue
+
+            # For declared teams:
             # Group members by C.O. (reporting_manager_id)
-            # Find managers in this team or referenced as reporting managers
             co_buckets: Dict[Optional[int], List[User]] = {}
             for m in members:
-                # If m is himself a manager (reporting_manager_id is None or other),
-                # group subordinates under their reporting_manager_id
                 co_buckets.setdefault(m.reporting_manager_id, []).append(m)
 
-            # Build list of distinct CO IDs
+            # A C.O. is someone who actually has team members reporting to them,
+            # or has the explicit role TL or CO
+            co_manager_ids: List[int] = [
+                cid for cid, subs in co_buckets.items() if cid is not None and len(subs) > 0
+            ]
+            for m in members:
+                if m.role in (UserRole.TL, UserRole.CO) and m.id not in co_manager_ids:
+                    co_manager_ids.append(m.id)
+
             co_groups: List[COGroup] = []
             handled_user_ids = set()
-
-            # First, any user who is referenced as a reporting_manager
-            co_manager_ids = [cid for cid in co_buckets.keys() if cid is not None]
-            # Also any TL/CO or Manager in members who might not have subordinates yet
-            for m in members:
-                if (m.role in (UserRole.TL, UserRole.CO) or (m.designation and "manager" in m.designation.lower())) and m.id not in co_manager_ids:
-                    co_manager_ids.append(m.id)
 
             for co_id in co_manager_ids:
                 co_user = user_map.get(co_id)
@@ -215,11 +242,9 @@ class ExecutiveCollectionService:
                         handled_user_ids.add(sub.id)
 
                 if co_rows:
-                    # Assign serial numbers 1..N
                     for idx, row in enumerate(co_rows, start=1):
                         row.sl_no = idx
 
-                    # Compute CO Total
                     co_total = self._sum_rows(co_rows, label="C.O Total")
                     co_groups.append(
                         COGroup(
@@ -231,39 +256,42 @@ class ExecutiveCollectionService:
                         )
                     )
 
-            # Any remaining unassigned team members
+            # Any remaining team members without an assigned C.O. in this team
             remaining = [m for m in members if m.id not in handled_user_ids]
             if remaining:
                 other_rows: List[ExecutiveCollectionRow] = []
                 for idx, rem in enumerate(remaining, start=1):
-                    r = user_rows[rem.id].model_copy()
-                    r.sl_no = idx
-                    other_rows.append(r)
+                    if rem.id in user_rows:
+                        r = user_rows[rem.id].model_copy()
+                        r.sl_no = idx
+                        other_rows.append(r)
 
-                co_total = self._sum_rows(other_rows, label="C.O Total")
-                co_groups.append(
-                    COGroup(
-                        co_id=None,
-                        co_name=f"{tname} Members",
-                        co_designation="Team Members",
-                        rows=other_rows,
-                        totals=co_total,
+                if other_rows:
+                    grp_label = "Direct Members Total" if co_groups else f"{tname} Total"
+                    co_total = self._sum_rows(other_rows, label=grp_label)
+                    co_groups.append(
+                        COGroup(
+                            co_id=None,
+                            co_name=f"{tname} Direct Members" if co_groups else tname,
+                            co_designation="",
+                            rows=other_rows,
+                            totals=co_total,
+                        )
+                    )
+
+            if co_groups:
+                team_rows = [group.totals for group in co_groups]
+                team_total = self._sum_rows(team_rows, label=f"{tname} Total")
+
+                team_groups.append(
+                    TeamGroup(
+                        team_id=tid,
+                        team_name=tname,
+                        director_name=director,
+                        co_groups=co_groups,
+                        totals=team_total,
                     )
                 )
-
-            # Compute Team Total
-            team_rows = [group.totals for group in co_groups]
-            team_total = self._sum_rows(team_rows, label=f"{tname} Total")
-
-            team_groups.append(
-                TeamGroup(
-                    team_id=tid,
-                    team_name=tname,
-                    director_name=director,
-                    co_groups=co_groups,
-                    totals=team_total,
-                )
-            )
 
         # 6. Compute Grand Total across all teams
         all_team_totals = [tg.totals for tg in team_groups]

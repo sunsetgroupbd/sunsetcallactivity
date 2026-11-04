@@ -39,3 +39,4 @@ class Team(Base):
         foreign_keys="User.team_id",
         lazy="selectin",
     )
+

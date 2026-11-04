@@ -37,3 +37,4 @@ class TeamRead(TeamBase):
 class TeamBulkAssign(BaseModel):
     team_id: int
     employee_ids: list[int]
+

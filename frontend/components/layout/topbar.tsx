@@ -29,7 +29,7 @@ export function Topbar({
   }, []);
 
   return (
-    <header className="sticky top-0 z-20 h-16 bg-white border-b border-slate-200 px-4 sm:px-6 flex items-center justify-between">
+    <header className="sticky top-0 z-40 h-16 bg-white border-b border-slate-200 px-4 sm:px-6 flex items-center justify-between">
       {/* Left: Desktop Sidebar Collapse Toggle, Mobile Toggle & Page Title */}
       <div className="flex items-center gap-2.5 sm:gap-3">
         {onToggleCollapse && (

@@ -688,18 +688,18 @@ function ExecutiveCollectionContent() {
         )}
 
         {/* ═════════════════════════════════════════════════════════════════════ */}
-        {/* VIEW 2: Spreadsheet Table View (with Sticky First 2 Freeze Columns)  */}
+        {/* VIEW 2: Spreadsheet Table View (with Sticky Freeze Columns & Header) */}
         {/* ═════════════════════════════════════════════════════════════════════ */}
         {viewMode === "table" && (
-          <Card className="border-slate-300 shadow-sm overflow-hidden bg-white">
-            <CardHeader className="bg-slate-50/90 border-b border-slate-200 py-3 px-3.5 sm:px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <Card className="border-slate-300 shadow-sm overflow-hidden bg-white isolate">
+            <CardHeader className="bg-slate-50 border-b border-slate-200 py-3 px-3.5 sm:px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
                 <CardTitle className="text-sm sm:text-base font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
                   <FileSpreadsheet className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-700 shrink-0" />
                   <span>Executive Wise Collection Sheet - {reportData?.date_display ?? (reportDate || "Today")}</span>
                 </CardTitle>
                 <span className="text-[11px] text-slate-500 font-medium">
-                  Swipe horizontally • Employee Name is frozen on the left
+                  Swipe horizontally • Employee Name is frozen on the left • Header is frozen at top
                 </span>
               </div>
 
@@ -710,32 +710,32 @@ function ExecutiveCollectionContent() {
               </div>
             </CardHeader>
 
-            <div className="overflow-x-auto relative">
+            <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-230px)] min-h-[380px] relative">
               <table className="w-full border-collapse text-[11px] font-sans">
-                <thead>
-                  <tr className="bg-slate-200/90 text-slate-800 border-y border-slate-300 uppercase tracking-wider font-extrabold text-[10px]">
-                    {/* Freeze Column 1: SL.No */}
-                    <th className="sticky left-0 z-30 bg-slate-200 py-2.5 px-2 border-r border-slate-300 text-center w-10">
+                <thead className="sticky top-0 z-20 shadow-xs">
+                  <tr className="bg-slate-200 text-slate-800 border-y border-slate-300 uppercase tracking-wider font-extrabold text-[10px]">
+                    {/* Freeze Column 1: SL.No (Top & Left intersection) */}
+                    <th className="sticky top-0 left-0 z-30 bg-slate-200 py-2.5 px-2 border-r border-slate-300 text-center w-10">
                       SL
                     </th>
-                    {/* Freeze Column 2: Employee Name with shadow */}
-                    <th className="sticky left-10 z-30 bg-slate-200 py-2.5 px-3 border-r-2 border-slate-300 shadow-[2px_0_5px_rgba(0,0,0,0.06)] text-left min-w-[170px]">
+                    {/* Freeze Column 2: Employee Name with shadow (Top & Left intersection) */}
+                    <th className="sticky top-0 left-10 z-30 bg-slate-200 py-2.5 px-3 border-r-2 border-slate-300 shadow-[2px_0_5px_rgba(0,0,0,0.06)] text-left min-w-[170px]">
                       Team / Employee Name
                     </th>
-                    <th className="py-2.5 px-2.5 border-r border-slate-300 text-left min-w-[110px]">Position</th>
-                    <th className="py-2.5 px-2 border-r border-slate-300 text-center w-14">Client</th>
-                    <th className="py-2.5 px-2 border-r border-slate-300 text-center w-14">Sahre</th>
-                    <th className="py-2.5 px-2.5 border-r border-slate-300 text-right min-w-[105px]">Mgt Given Target</th>
-                    <th className="py-2.5 px-2.5 border-r border-slate-300 text-right min-w-[105px] bg-emerald-50 text-emerald-900">
+                    <th className="sticky top-0 bg-slate-200 py-2.5 px-2.5 border-r border-slate-300 text-left min-w-[110px]">Position</th>
+                    <th className="sticky top-0 bg-slate-200 py-2.5 px-2 border-r border-slate-300 text-center w-14">Client</th>
+                    <th className="sticky top-0 bg-slate-200 py-2.5 px-2 border-r border-slate-300 text-center w-14">Sahre</th>
+                    <th className="sticky top-0 bg-slate-200 py-2.5 px-2.5 border-r border-slate-300 text-right min-w-[105px]">Mgt Given Target</th>
+                    <th className="sticky top-0 bg-emerald-100 py-2.5 px-2.5 border-r border-slate-300 text-right min-w-[105px] text-emerald-950 font-black">
                       {reportData?.date_range_label || "Achived"}
                     </th>
-                    <th className="py-2.5 px-2 border-r border-slate-300 text-center w-16">Achivemt %</th>
-                    <th className="py-2.5 px-2.5 border-r border-slate-300 text-right min-w-[95px]">Dues</th>
-                    <th className="py-2.5 px-2 border-r border-slate-300 text-center w-14">Token</th>
-                    <th className="py-2.5 px-2 border-r border-slate-300 text-center w-16">Sold Share</th>
-                    <th className="py-2.5 px-2.5 border-r border-slate-300 text-right min-w-[95px]">New Sales</th>
-                    <th className="py-2.5 px-2.5 border-r border-slate-300 text-right min-w-[90px]">EMI</th>
-                    <th className="py-2.5 px-2.5 text-right min-w-[105px] bg-slate-300/80 font-black">Total Collection</th>
+                    <th className="sticky top-0 bg-slate-200 py-2.5 px-2 border-r border-slate-300 text-center w-16">Achivemt %</th>
+                    <th className="sticky top-0 bg-slate-200 py-2.5 px-2.5 border-r border-slate-300 text-right min-w-[95px]">Dues</th>
+                    <th className="sticky top-0 bg-slate-200 py-2.5 px-2 border-r border-slate-300 text-center w-14">Token</th>
+                    <th className="sticky top-0 bg-slate-200 py-2.5 px-2 border-r border-slate-300 text-center w-16">Sold Share</th>
+                    <th className="sticky top-0 bg-slate-200 py-2.5 px-2.5 border-r border-slate-300 text-right min-w-[95px]">New Sales</th>
+                    <th className="sticky top-0 bg-slate-200 py-2.5 px-2.5 border-r border-slate-300 text-right min-w-[90px]">EMI</th>
+                    <th className="sticky top-0 bg-slate-300 py-2.5 px-2.5 text-right min-w-[105px] text-slate-900 font-black">Total Collection</th>
                   </tr>
                 </thead>
 
@@ -759,7 +759,7 @@ function ExecutiveCollectionContent() {
                       <React.Fragment key={tGroup.team_id ?? tGroup.team_name}>
                         {/* Director Team Header Row */}
                         <tr className="bg-slate-100 border-y-2 border-slate-300 text-slate-900 font-extrabold">
-                          <td colSpan={14} className="py-2 px-3 text-xs bg-gradient-to-r from-slate-200 via-slate-100 to-white sticky left-0 z-20">
+                          <td colSpan={14} className="py-2 px-3 text-xs bg-slate-100 sticky left-0 z-10 border-b border-slate-200">
                             <span className="text-slate-900 uppercase tracking-wide font-black">
                               {tGroup.team_name}
                             </span>

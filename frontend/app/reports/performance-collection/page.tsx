@@ -1179,47 +1179,6 @@ function PerformanceCollectionReportContent() {
                   })
                 )}
               </table>
-
-              {/* Floating Bottom Scroll Pill Helper */}
-              <div className="sticky bottom-3 z-30 flex justify-center pointer-events-none mt-2 pb-2">
-                <div className="pointer-events-auto inline-flex items-center gap-2 bg-slate-900/90 text-white backdrop-blur px-3 py-1.5 rounded-full shadow-lg border border-slate-700 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => scrollTable1(-300)}
-                    disabled={!table1Scroll.canLeft}
-                    className="p-1 hover:bg-slate-800 rounded disabled:opacity-30 transition"
-                    title="Slide left"
-                  >
-                    <ChevronLeft className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => jumpTable1(false)}
-                    className="text-[11px] font-medium text-slate-300 hover:text-white px-1.5 transition"
-                  >
-                    Start
-                  </button>
-                  <span className="text-slate-600">•</span>
-                  <span className="text-[11px] text-slate-300 hidden sm:inline">Slide columns horizontally</span>
-                  <span className="text-slate-600">•</span>
-                  <button
-                    type="button"
-                    onClick={() => jumpTable1(true)}
-                    className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 px-1.5 transition"
-                  >
-                    View End (GL & Coll) →
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => scrollTable1(300)}
-                    disabled={!table1Scroll.canRight}
-                    className="p-1 hover:bg-slate-800 rounded disabled:opacity-30 transition"
-                    title="Slide right"
-                  >
-                    <ChevronRight className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
             </div>
 
             {/* Mobile Card View for Section 1 */}
@@ -1715,47 +1674,6 @@ function PerformanceCollectionReportContent() {
                   )}
                 </tbody>
               </table>
-
-              {/* Floating Bottom Scroll Pill Helper */}
-              <div className="sticky bottom-3 z-30 flex justify-center pointer-events-none mt-2 pb-2">
-                <div className="pointer-events-auto inline-flex items-center gap-2 bg-slate-900/90 text-white backdrop-blur px-3 py-1.5 rounded-full shadow-lg border border-slate-700 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => scrollTable2(-300)}
-                    disabled={!table2Scroll.canLeft}
-                    className="p-1 hover:bg-slate-800 rounded disabled:opacity-30 transition"
-                    title="Slide left"
-                  >
-                    <ChevronLeft className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => jumpTable2(false)}
-                    className="text-[11px] font-medium text-slate-300 hover:text-white px-1.5 transition"
-                  >
-                    Start
-                  </button>
-                  <span className="text-slate-600">•</span>
-                  <span className="text-[11px] text-slate-300 hidden sm:inline">Slide customer columns</span>
-                  <span className="text-slate-600">•</span>
-                  <button
-                    type="button"
-                    onClick={() => jumpTable2(true)}
-                    className="text-[11px] font-bold text-sky-400 hover:text-sky-300 px-1.5 transition"
-                  >
-                    View End (Coll & Remarks) →
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => scrollTable2(300)}
-                    disabled={!table2Scroll.canRight}
-                    className="p-1 hover:bg-slate-800 rounded disabled:opacity-30 transition"
-                    title="Slide right"
-                  >
-                    <ChevronRight className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
             </div>
 
             {/* Mobile Card View for Section 2 */}

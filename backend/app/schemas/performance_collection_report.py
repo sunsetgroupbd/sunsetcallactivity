@@ -77,6 +77,7 @@ class EmployeeMonthlyPerformance(BaseModel):
 class CustomerCollectionItem(BaseModel):
     """Section 2: Customer-wise Collection Report row."""
     id: int
+    customer_code: str = "CX-1001"
     customer_name: str
     customer_phone: Optional[str] = None
     paid_amount: Decimal = Decimal("0")
@@ -167,4 +168,38 @@ class MilestoneCheckpointRead(MilestoneCheckpointItem):
     employee_id: Optional[int] = None
     is_manual: bool = True
     updated_by_id: Optional[int] = None
+
+
+class CustomerTransactionItem(BaseModel):
+    id: int
+    report_date: date
+    category: str
+    amount: Decimal = Decimal("0")
+    paid_amount: Decimal = Decimal("0")
+    unpaid_amount: Decimal = Decimal("0")
+    payment_method: Optional[str] = None
+    expected_payment_date: Optional[date] = None
+    reschedule_count: int = 0
+    reschedule_history: Optional[List[dict]] = None
+    notes: Optional[str] = None
+    employee_name: Optional[str] = None
+
+
+class CustomerDetailResponse(BaseModel):
+    customer_code: str
+    customer_name: str
+    customer_phone: Optional[str] = None
+    lead_status: str = "P"
+    lead_source: Optional[str] = None
+    lead_source_date: Optional[date] = None
+    total_paid: Decimal = Decimal("0")
+    total_unpaid: Decimal = Decimal("0")
+    total_collection: Decimal = Decimal("0")
+    new_sales_amount: Decimal = Decimal("0")
+    emi_amount: Decimal = Decimal("0")
+    tb_amount: Decimal = Decimal("0")
+    next_collection_date: Optional[date] = None
+    next_collection_date_2: Optional[date] = None
+    assigned_employees: List[str] = Field(default_factory=list)
+    transactions: List[CustomerTransactionItem] = Field(default_factory=list)
 

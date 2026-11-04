@@ -591,7 +591,12 @@ function PrintablePerformanceCollectionContent() {
                 report.customer_collections.map((cust: CustomerCollectionItem) => (
                   <tr key={cust.id} className="border-b border-slate-200">
                     <td className="py-0.5 px-1 border border-slate-300 font-semibold text-slate-900">
-                      {cust.customer_name}
+                      <div className="flex items-center gap-1">
+                        <span className="font-mono text-[7.5px] font-bold text-sky-800 bg-sky-50 px-1 py-0.2 rounded border border-sky-200">
+                          {cust.customer_code || `CX-${1000 + cust.id}`}
+                        </span>
+                        <span>{cust.customer_name}</span>
+                      </div>
                       <span className="text-[8px] text-slate-500 font-normal block">
                         {cust.customer_phone || "-"} {cust.employee_name ? `• ${cust.employee_name}` : ""}
                       </span>

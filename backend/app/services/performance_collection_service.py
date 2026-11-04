@@ -7,13 +7,14 @@ from __future__ import annotations
 
 import calendar
 import json
+import re
 from datetime import date
 from decimal import Decimal
 from typing import List, Optional, Dict, Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 
 from app.models.milestone_checkpoint import MilestoneCheckpoint
 from app.models.report import DailyActivityReport
@@ -21,6 +22,8 @@ from app.models.user import User, UserRole
 from app.repositories.targets_repo import TargetsRepository
 from app.schemas.performance_collection_report import (
     CustomerCollectionItem,
+    CustomerDetailResponse,
+    CustomerTransactionItem,
     EmployeeMonthlyPerformance,
     PerformanceCollectionReportResponse,
     PerformanceCollectionSummaryTotals,
@@ -613,6 +616,7 @@ class PerformanceCollectionService:
 
         # 6. Process Section 2: Customer-wise Collection Report rows
         customer_item_id = 1
+        customer_code_map: Dict[str, str] = {}
         for r in all_reports:
             # Parse client contacts stored in report.notes if present
             client_contacts_dict: Dict[str, Any] = {}
@@ -738,10 +742,23 @@ class PerformanceCollectionService:
                 # Second Next Collection Date
                 next_coll_date_2 = date_2 if (date_2 and date_2 != next_coll_date) else None
 
+                # Stable Customer Code (e.g. CX-1001)
+                phone_raw = se.customer_phone or (matched_contact.get("phone_number") if matched_contact else None)
+                clean_phone = re.sub(r"\D", "", phone_raw or "")
+                if len(clean_phone) >= 7:
+                    cust_identity = f"phone:{clean_phone[-10:]}"
+                else:
+                    cust_identity = f"name:{cust_lower}"
+
+                if cust_identity not in customer_code_map:
+                    customer_code_map[cust_identity] = f"CX-{1001 + len(customer_code_map)}"
+                cust_code = customer_code_map[cust_identity]
+
                 item = CustomerCollectionItem(
                     id=se.id or customer_item_id,
+                    customer_code=cust_code,
                     customer_name=cust_name,
-                    customer_phone=se.customer_phone or (matched_contact.get("phone_number") if matched_contact else None),
+                    customer_phone=phone_raw,
                     paid_amount=paid,
                     unpaid_amount=unpaid,
                     collection_date=r.report_date if paid > 0 else None,
@@ -954,5 +971,119 @@ class PerformanceCollectionService:
 
         res = await self.db.execute(stmt)
         await self.db.commit()
-        return res.rowcount
+        return int(getattr(res, "rowcount", 0) or 0)
+
+    async def get_customer_detail(
+        self,
+        customer_code: Optional[str] = None,
+        customer_phone: Optional[str] = None,
+        customer_name: Optional[str] = None,
+    ) -> Optional[CustomerDetailResponse]:
+        """Fetch all lifetime transactions, commitments, and activity logs for a specific customer."""
+        from app.models.sales_collection import SalesCollectionEntry
+        from sqlalchemy import or_, func
+
+        stmt = (
+            select(SalesCollectionEntry)
+            .join(DailyActivityReport, SalesCollectionEntry.report_id == DailyActivityReport.id)
+            .options(joinedload(SalesCollectionEntry.report).joinedload(DailyActivityReport.employee))
+            .order_by(DailyActivityReport.report_date.desc(), SalesCollectionEntry.id.desc())
+        )
+
+        conditions = []
+        if customer_phone and customer_phone.strip():
+            clean_digits = re.sub(r"\D", "", customer_phone.strip())
+            if len(clean_digits) >= 6:
+                conditions.append(SalesCollectionEntry.customer_phone.like(f"%{clean_digits[-8:]}%"))
+        if customer_name and customer_name.strip():
+            conditions.append(func.lower(SalesCollectionEntry.customer_name) == customer_name.strip().lower())
+            conditions.append(func.lower(SalesCollectionEntry.description) == customer_name.strip().lower())
+
+        if not conditions:
+            return None
+
+        stmt = stmt.where(or_(*conditions))
+        res = await self.db.execute(stmt)
+        entries = res.scalars().all()
+
+        if not entries:
+            return None
+
+        assigned_emps = set()
+        transactions: List[CustomerTransactionItem] = []
+        tot_paid = Decimal("0")
+        tot_unpaid = Decimal("0")
+        tot_new_sales = Decimal("0")
+        tot_emi = Decimal("0")
+        tot_tb = Decimal("0")
+        lead_status = "P"
+        lead_src = "Direct Lead"
+        lead_src_date: Optional[date] = None
+        next_coll: Optional[date] = None
+        next_coll_2: Optional[date] = None
+        display_name = customer_name or entries[0].customer_name or "Customer"
+        display_phone = customer_phone or entries[0].customer_phone
+
+        for se in entries:
+            rep = se.report
+            if rep and rep.employee and rep.employee.full_name:
+                assigned_emps.add(rep.employee.full_name)
+
+            cat = (se.category or "").lower()
+            amt = Decimal(str(se.amount or 0))
+            is_commit = "commit" in cat or "token_to_booking" in cat
+            paid = Decimal("0") if is_commit else amt
+            unpaid = amt if is_commit else Decimal("0")
+
+            tot_paid += paid
+            tot_unpaid += unpaid
+
+            if "new_sales" in cat:
+                tot_new_sales += amt
+            elif "emi" in cat:
+                tot_emi += amt
+            elif "tb" in cat or "token" in cat:
+                tot_tb += amt
+
+            if se.expected_payment_date:
+                if not next_coll:
+                    next_coll = se.expected_payment_date
+                elif not next_coll_2 and se.expected_payment_date != next_coll:
+                    next_coll_2 = se.expected_payment_date
+
+            transactions.append(
+                CustomerTransactionItem(
+                    id=se.id,
+                    report_date=rep.report_date if rep else date.today(),
+                    category=se.category,
+                    amount=amt,
+                    paid_amount=paid,
+                    unpaid_amount=unpaid,
+                    payment_method=se.payment_method,
+                    expected_payment_date=se.expected_payment_date,
+                    reschedule_count=se.reschedule_count or 0,
+                    reschedule_history=se.reschedule_history,
+                    notes=se.notes or se.description,
+                    employee_name=rep.employee.full_name if (rep and rep.employee) else None,
+                )
+            )
+
+        return CustomerDetailResponse(
+            customer_code=customer_code or "CX-1001",
+            customer_name=display_name,
+            customer_phone=display_phone,
+            lead_status=lead_status,
+            lead_source=lead_src,
+            lead_source_date=lead_src_date or (transactions[-1].report_date if transactions else None),
+            total_paid=tot_paid,
+            total_unpaid=tot_unpaid,
+            total_collection=tot_paid + tot_unpaid,
+            new_sales_amount=tot_new_sales,
+            emi_amount=tot_emi,
+            tb_amount=tot_tb,
+            next_collection_date=next_coll,
+            next_collection_date_2=next_coll_2,
+            assigned_employees=sorted(list(assigned_emps)),
+            transactions=transactions,
+        )
 

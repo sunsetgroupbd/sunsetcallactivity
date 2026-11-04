@@ -183,6 +183,7 @@ export function exportPerformanceCollectionToCSV(
   lines.push(`"SECTION 2: CUSTOMER-WISE COLLECTION REPORT"`);
   lines.push(
     [
+      "Customer ID",
       "Cx Name",
       "Phone",
       "Paid (BDT)",
@@ -210,6 +211,7 @@ export function exportPerformanceCollectionToCSV(
   for (const c of data.customer_collections) {
     lines.push(
       [
+        c.customer_code || `CX-${1000 + c.id}`,
         c.customer_name,
         c.customer_phone || "-",
         c.paid_amount,

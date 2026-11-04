@@ -26,6 +26,7 @@ import {
   BulkUploadEmployeesResponse,
   MilestoneCheckpointsBulkSaveRequest,
   MilestoneCheckpointRead,
+  CustomerDetailResponse,
 } from "@/types";
 
 const API_BASE =
@@ -456,6 +457,17 @@ export const api = {
           method: "DELETE",
         }
       );
+    },
+    getCustomerDetail: async (params: {
+      customer_code?: string;
+      customer_phone?: string;
+      customer_name?: string;
+    }): Promise<CustomerDetailResponse> => {
+      const search = new URLSearchParams();
+      if (params.customer_code) search.set("customer_code", params.customer_code);
+      if (params.customer_phone) search.set("customer_phone", params.customer_phone);
+      if (params.customer_name) search.set("customer_name", params.customer_name);
+      return request<CustomerDetailResponse>(`/reports/customer-detail?${search.toString()}`);
     },
   },
 

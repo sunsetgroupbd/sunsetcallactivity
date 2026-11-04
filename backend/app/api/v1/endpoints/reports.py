@@ -23,6 +23,7 @@ from app.schemas.performance_collection_report import (
     PerformanceCollectionReportResponse,
     MilestoneCheckpointsBulkSaveRequest,
     MilestoneCheckpointRead,
+    CustomerDetailResponse,
 )
 from app.services.report_service import ReportService
 from app.services.dashboard_service import DashboardService
@@ -97,6 +98,26 @@ async def get_employee_performance_collection_report(
         date_to=date_to,
         lead_status_filter=lead_status,
     )
+
+
+@router.get("/customer-detail", response_model=Optional[CustomerDetailResponse])
+async def get_customer_detail(
+    customer_code: Optional[str] = Query(None, description="Customer code (e.g. CX-1001)"),
+    customer_name: Optional[str] = Query(None, description="Customer name"),
+    customer_phone: Optional[str] = Query(None, description="Customer phone number"),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Fetch complete customer transactions, collection ledger and history (Admin Only)."""
+    svc = PerformanceCollectionService(db)
+    detail = await svc.get_customer_detail(
+        customer_code=customer_code,
+        customer_phone=customer_phone,
+        customer_name=customer_name,
+    )
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Customer details not found")
+    return detail
 
 
 @router.post("/milestone-checkpoints", response_model=List[MilestoneCheckpointRead])

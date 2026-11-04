@@ -14,6 +14,7 @@ import type {
   CustomerCollectionItem,
   PerformanceIntervalSummary,
   MilestoneCheckpointItem,
+  CustomerDetailResponse,
 } from "@/types";
 import {
   FileSpreadsheet,
@@ -42,6 +43,8 @@ import {
   RotateCcw,
   X,
   Check,
+  ExternalLink,
+  UserCheck,
 } from "lucide-react";
 
 function PerformanceCollectionReportContent() {
@@ -92,6 +95,64 @@ function PerformanceCollectionReportContent() {
   );
 
   const [checkpointRows, setCheckpointRows] = useState<MilestoneCheckpointItem[]>(initialCheckpoints);
+
+  // Customer Detail Modal States
+  const [selectedCustomerDetail, setSelectedCustomerDetail] = useState<CustomerDetailResponse | null>(null);
+  const [isCustomerModalOpen, setIsCustomerModalOpen] = useState<boolean>(false);
+  const [customerModalLoading, setCustomerModalLoading] = useState<boolean>(false);
+
+  const handleOpenCustomerDetail = async (cust: CustomerCollectionItem) => {
+    setIsCustomerModalOpen(true);
+    setCustomerModalLoading(true);
+    setSelectedCustomerDetail(null);
+    try {
+      const data = await api.reports.getCustomerDetail({
+        customer_code: cust.customer_code,
+        customer_phone: cust.customer_phone || undefined,
+        customer_name: cust.customer_name,
+      });
+      setSelectedCustomerDetail(data);
+    } catch (err: unknown) {
+      console.warn("Could not fetch remote customer details, synthesizing from report row", err);
+      setSelectedCustomerDetail({
+        customer_code: cust.customer_code || `CX-${1000 + cust.id}`,
+        customer_name: cust.customer_name,
+        customer_phone: cust.customer_phone,
+        lead_status: cust.lead_status,
+        lead_source: cust.lead_source || "Direct Lead",
+        lead_source_date: cust.lead_source_date || cust.date_1,
+        total_paid: cust.paid_amount,
+        total_unpaid: cust.unpaid_amount,
+        total_collection: cust.total_collection,
+        new_sales_amount: cust.new_sales_amount,
+        emi_amount: cust.emi_amount,
+        tb_amount: cust.tb_amount,
+        next_collection_date: cust.next_collection_date,
+        next_collection_date_2: cust.next_collection_date_2,
+        assigned_employees: [cust.employee_name],
+        transactions: [
+          {
+            id: cust.id,
+            report_date: cust.collection_date || cust.date_1 || selectedMonth,
+            category:
+              cust.new_sales_amount > 0
+                ? "new_sales"
+                : cust.emi_amount > 0
+                ? "emi_collection"
+                : "tb_collection",
+            amount: cust.total_collection,
+            paid_amount: cust.paid_amount,
+            unpaid_amount: cust.unpaid_amount,
+            expected_payment_date: cust.next_collection_date,
+            notes: cust.remarks,
+            employee_name: cust.employee_name,
+          },
+        ],
+      });
+    } finally {
+      setCustomerModalLoading(false);
+    }
+  };
 
   // Auto-fill form inputs from current system report calculations
   const autoFillFromSystem = (scope: "company" | "employee", empIdStr: string) => {
@@ -1201,7 +1262,7 @@ function PerformanceCollectionReportContent() {
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-[11px] uppercase tracking-wider text-slate-600">
                     <th className="py-3 px-3 font-bold sticky left-0 bg-slate-50 z-10 border-r border-slate-200">
-                      Customer Name & Phone
+                      Customer ID & Name
                     </th>
                     <th className="py-3 px-2.5 font-bold text-right text-emerald-700">Paid</th>
                     <th className="py-3 px-2.5 font-bold text-right text-rose-700">Unpaid</th>
@@ -1232,7 +1293,25 @@ function PerformanceCollectionReportContent() {
                     filteredCustomers.map((cust: CustomerCollectionItem) => (
                       <tr key={cust.id} className="hover:bg-slate-50/80 transition-colors">
                         <td className="py-3 px-3 sticky left-0 bg-white hover:bg-slate-50/80 z-10 border-r border-slate-100">
-                          <div className="font-bold text-slate-900">{cust.customer_name}</div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenCustomerDetail(cust)}
+                              className="inline-flex items-center gap-1 font-mono text-[10px] font-extrabold text-sky-800 bg-sky-50 hover:bg-sky-100 px-1.5 py-0.5 rounded border border-sky-200 transition"
+                              title="Click to view complete customer profile & ledger"
+                            >
+                              <span>{cust.customer_code || `CX-${1000 + cust.id}`}</span>
+                              <ExternalLink className="h-2.5 w-2.5 text-sky-600" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenCustomerDetail(cust)}
+                              className="font-bold text-slate-900 hover:text-emerald-700 transition text-left"
+                              title="Click to view complete customer profile & ledger"
+                            >
+                              {cust.customer_name}
+                            </button>
+                          </div>
                           <div className="flex items-center gap-2 mt-0.5">
                             {cust.customer_phone ? (
                               <a
@@ -1342,7 +1421,22 @@ function PerformanceCollectionReportContent() {
                     {/* Header: Customer & Lead Status */}
                     <div className="flex items-start justify-between gap-2 pb-3 border-b border-slate-100">
                       <div>
-                        <div className="font-bold text-slate-900 text-sm">{cust.customer_name}</div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenCustomerDetail(cust)}
+                            className="font-mono text-[10px] font-extrabold text-sky-800 bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200"
+                          >
+                            {cust.customer_code || `CX-${1000 + cust.id}`}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenCustomerDetail(cust)}
+                            className="font-bold text-slate-900 text-sm hover:text-emerald-700 text-left"
+                          >
+                            {cust.customer_name}
+                          </button>
+                        </div>
                         <div className="flex items-center gap-2 mt-1">
                           {cust.customer_phone ? (
                             <a
@@ -1879,6 +1973,231 @@ function PerformanceCollectionReportContent() {
                     <span>Save Session Checkpoints</span>
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* CUSTOMER DETAILS & LIFETIME TRANSACTION LEDGER MODAL */}
+        {/* ============================================================ */}
+        {isCustomerModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
+            <div className="relative w-full max-w-4xl rounded-2xl bg-white shadow-2xl border border-slate-200 my-8 overflow-hidden flex flex-col max-h-[90vh]">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-100 bg-slate-50/80 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-100 text-sky-800 shrink-0">
+                    <Users className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs font-extrabold text-sky-800 bg-sky-100/80 px-2 py-0.5 rounded border border-sky-300">
+                        {selectedCustomerDetail?.customer_code || "Customer Profile"}
+                      </span>
+                      <h3 className="text-base font-bold text-slate-900">
+                        {selectedCustomerDetail?.customer_name || "Customer Detail"}
+                      </h3>
+                      {selectedCustomerDetail?.lead_status && (
+                        <span
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${getStatusBadge(
+                            selectedCustomerDetail.lead_status
+                          )}`}
+                        >
+                          {selectedCustomerDetail.lead_status}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
+                      {selectedCustomerDetail?.customer_phone && (
+                        <a
+                          href={`tel:${selectedCustomerDetail.customer_phone}`}
+                          className="inline-flex items-center gap-1 text-emerald-700 font-semibold hover:underline"
+                        >
+                          <Phone className="h-3 w-3" />
+                          <span>{selectedCustomerDetail.customer_phone}</span>
+                        </a>
+                      )}
+                      {selectedCustomerDetail?.lead_source && (
+                        <span>
+                          Source: <span className="font-medium text-slate-700">{selectedCustomerDetail.lead_source}</span>
+                          {selectedCustomerDetail.lead_source_date ? ` (${selectedCustomerDetail.lead_source_date})` : ""}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setIsCustomerModalOpen(false)}
+                  className="rounded-lg p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                  title="Close"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-4 sm:p-6 overflow-y-auto space-y-5">
+                {customerModalLoading ? (
+                  <div className="flex h-64 items-center justify-center">
+                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
+                  </div>
+                ) : !selectedCustomerDetail ? (
+                  <div className="py-12 text-center text-xs text-slate-400 font-medium">
+                    Customer information not available.
+                  </div>
+                ) : (
+                  <>
+                    {/* Financial KPI Summary Cards */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                      <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-200">
+                        <div className="text-[10px] font-bold text-emerald-800 uppercase">Paid Amount</div>
+                        <div className="text-lg font-black text-emerald-700 mt-0.5">
+                          ৳{formatMoney(selectedCustomerDetail.total_paid)}
+                        </div>
+                        <div className="text-[10px] text-emerald-800/80 mt-0.5">Physically Received</div>
+                      </div>
+
+                      <div className="bg-rose-50 rounded-xl p-3 border border-rose-200">
+                        <div className="text-[10px] font-bold text-rose-800 uppercase">Unpaid Amount</div>
+                        <div className="text-lg font-black text-rose-700 mt-0.5">
+                          ৳{formatMoney(selectedCustomerDetail.total_unpaid)}
+                        </div>
+                        <div className="text-[10px] text-rose-800/80 mt-0.5">Committed Balance</div>
+                      </div>
+
+                      <div className="bg-sky-50 rounded-xl p-3 border border-sky-200">
+                        <div className="text-[10px] font-bold text-sky-800 uppercase">Total Collection</div>
+                        <div className="text-lg font-black text-sky-900 mt-0.5">
+                          ৳{formatMoney(selectedCustomerDetail.total_collection)}
+                        </div>
+                        <div className="text-[10px] text-sky-800/80 mt-0.5">Paid + Unpaid</div>
+                      </div>
+
+                      <div className="bg-slate-50 rounded-xl p-3 border border-slate-200">
+                        <div className="text-[10px] font-bold text-slate-600 uppercase">Breakdown</div>
+                        <div className="text-xs font-semibold text-slate-800 mt-1 space-y-0.5">
+                          <div>Sales: <span className="font-bold text-emerald-700">৳{formatMoney(selectedCustomerDetail.new_sales_amount)}</span></div>
+                          <div>EMI: <span className="font-bold text-sky-700">৳{formatMoney(selectedCustomerDetail.emi_amount)}</span></div>
+                          <div>TB: <span className="font-bold text-slate-700">৳{formatMoney(selectedCustomerDetail.tb_amount)}</span></div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Next Collection Dates & Handling Executives */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl bg-amber-50/60 border border-amber-200 text-xs text-amber-900">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Calendar className="h-4 w-4 text-amber-700 shrink-0" />
+                        <span className="font-bold">Next Collection Date:</span>
+                        {selectedCustomerDetail.next_collection_date ? (
+                          <span className="font-extrabold text-amber-900 bg-white px-2 py-0.5 rounded border border-amber-300">
+                            {selectedCustomerDetail.next_collection_date}
+                          </span>
+                        ) : (
+                          <span className="text-slate-500 font-medium">Not scheduled</span>
+                        )}
+                        {selectedCustomerDetail.next_collection_date_2 && (
+                          <>
+                            <span className="font-bold ml-2">Next Date 2:</span>
+                            <span className="font-extrabold text-amber-900 bg-white px-2 py-0.5 rounded border border-amber-300">
+                              {selectedCustomerDetail.next_collection_date_2}
+                            </span>
+                          </>
+                        )}
+                      </div>
+
+                      {selectedCustomerDetail.assigned_employees?.length > 0 && (
+                        <div className="flex items-center gap-1.5 flex-wrap text-slate-600">
+                          <UserCheck className="h-3.5 w-3.5 text-slate-500" />
+                          <span className="font-semibold text-slate-700">Assigned:</span>
+                          <span className="font-bold text-slate-900">
+                            {selectedCustomerDetail.assigned_employees.join(", ")}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Transaction / Activity History Table */}
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2 flex items-center justify-between">
+                        <span>Transaction & Activity Records</span>
+                        <span className="text-[11px] text-slate-500 font-medium">
+                          Total {selectedCustomerDetail.transactions?.length || 0} Records
+                        </span>
+                      </h4>
+
+                      <div className="overflow-x-auto rounded-xl border border-slate-200">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-600 border-b border-slate-200">
+                            <tr>
+                              <th className="py-2.5 px-3">Date</th>
+                              <th className="py-2.5 px-2">Category</th>
+                              <th className="py-2.5 px-2 text-right text-emerald-800">Paid</th>
+                              <th className="py-2.5 px-2 text-right text-rose-800">Unpaid</th>
+                              <th className="py-2.5 px-2">Payment Mode</th>
+                              <th className="py-2.5 px-2">Next Date</th>
+                              <th className="py-2.5 px-2">Executive</th>
+                              <th className="py-2.5 px-3">Remarks</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 text-slate-700">
+                            {(!selectedCustomerDetail.transactions ||
+                              selectedCustomerDetail.transactions.length === 0) ? (
+                              <tr>
+                                <td colSpan={8} className="py-8 text-center text-slate-400">
+                                  No transaction records found for this customer.
+                                </td>
+                              </tr>
+                            ) : (
+                              selectedCustomerDetail.transactions.map((tx) => (
+                                <tr key={tx.id} className="hover:bg-slate-50 transition">
+                                  <td className="py-2 px-3 font-semibold text-slate-900 whitespace-nowrap">
+                                    {tx.report_date}
+                                  </td>
+                                  <td className="py-2 px-2 whitespace-nowrap">
+                                    <span className="font-medium text-slate-800 bg-slate-100 px-2 py-0.5 rounded text-[11px] border border-slate-200">
+                                      {tx.category.replace(/_/g, " ")}
+                                    </span>
+                                  </td>
+                                  <td className="py-2 px-2 text-right font-bold text-emerald-700 whitespace-nowrap">
+                                    ৳{formatMoney(tx.paid_amount)}
+                                  </td>
+                                  <td className="py-2 px-2 text-right font-bold text-rose-700 whitespace-nowrap">
+                                    ৳{formatMoney(tx.unpaid_amount)}
+                                  </td>
+                                  <td className="py-2 px-2 whitespace-nowrap text-slate-600">
+                                    {tx.payment_method || "-"}
+                                  </td>
+                                  <td className="py-2 px-2 whitespace-nowrap text-amber-800 font-semibold text-[11px]">
+                                    {tx.expected_payment_date || "-"}
+                                  </td>
+                                  <td className="py-2 px-2 whitespace-nowrap text-slate-700 font-medium">
+                                    {tx.employee_name || "-"}
+                                  </td>
+                                  <td className="py-2 px-3 text-slate-500 text-[11px] max-w-[200px] truncate" title={tx.notes || ""}>
+                                    {tx.notes || "-"}
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="flex items-center justify-end p-4 border-t border-slate-100 bg-slate-50/70 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsCustomerModalOpen(false)}
+                  className="px-5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-xs font-bold text-white shadow-2xs transition"
+                >
+                  Close
+                </button>
               </div>
             </div>
           </div>

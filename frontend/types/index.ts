@@ -545,6 +545,7 @@ export interface EmployeeMonthlyPerformance {
 
 export interface CustomerCollectionItem {
   id: number;
+  customer_code?: string;
   customer_name: string;
   customer_phone?: string | null;
   paid_amount: number;
@@ -650,6 +651,40 @@ export interface MilestoneCheckpointRead {
   admin_notes?: string | null;
   is_manual: boolean;
   updated_by_id?: number | null;
+}
+
+export interface CustomerTransactionItem {
+  id: number;
+  report_date: string;
+  category: string;
+  amount: number;
+  paid_amount: number;
+  unpaid_amount: number;
+  payment_method?: string | null;
+  expected_payment_date?: string | null;
+  reschedule_count?: number;
+  reschedule_history?: RescheduleHistoryItem[] | null;
+  notes?: string | null;
+  employee_name?: string | null;
+}
+
+export interface CustomerDetailResponse {
+  customer_code: string;
+  customer_name: string;
+  customer_phone?: string | null;
+  lead_status: string;
+  lead_source?: string | null;
+  lead_source_date?: string | null;
+  total_paid: number;
+  total_unpaid: number;
+  total_collection: number;
+  new_sales_amount: number;
+  emi_amount: number;
+  tb_amount: number;
+  next_collection_date?: string | null;
+  next_collection_date_2?: string | null;
+  assigned_employees: string[];
+  transactions: CustomerTransactionItem[];
 }
 
 

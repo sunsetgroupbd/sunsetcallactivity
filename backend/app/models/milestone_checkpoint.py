@@ -59,6 +59,15 @@ class MilestoneCheckpoint(Base):
     outdoor_visits: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     indoor_cx: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
+    # Prediction & Employee Metrics
+    total_calls: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    sold_fair: Mapped[Decimal] = mapped_column(Numeric(15, 2), default=Decimal("0.00"), nullable=False)
+    sold_fb: Mapped[Decimal] = mapped_column(Numeric(15, 2), default=Decimal("0.00"), nullable=False)
+    sold_other: Mapped[Decimal] = mapped_column(Numeric(15, 2), default=Decimal("0.00"), nullable=False)
+    gl: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    hold: Mapped[Decimal] = mapped_column(Numeric(15, 2), default=Decimal("0.00"), nullable=False)
+    cancel: Mapped[Decimal] = mapped_column(Numeric(15, 2), default=Decimal("0.00"), nullable=False)
+
     # Session remarks / evaluation notes
     admin_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 

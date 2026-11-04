@@ -75,6 +75,13 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
                         fup INTEGER NOT NULL DEFAULT 0,
                         outdoor_visits INTEGER NOT NULL DEFAULT 0,
                         indoor_cx INTEGER NOT NULL DEFAULT 0,
+                        total_calls INTEGER NOT NULL DEFAULT 0,
+                        sold_fair NUMERIC(15, 2) NOT NULL DEFAULT 0.0,
+                        sold_fb NUMERIC(15, 2) NOT NULL DEFAULT 0.0,
+                        sold_other NUMERIC(15, 2) NOT NULL DEFAULT 0.0,
+                        gl VARCHAR(100),
+                        hold NUMERIC(15, 2) NOT NULL DEFAULT 0.0,
+                        cancel NUMERIC(15, 2) NOT NULL DEFAULT 0.0,
                         admin_notes TEXT,
                         updated_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -83,6 +90,23 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
                 """))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_mc_month ON milestone_checkpoints(month)"))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_mc_emp ON milestone_checkpoints(employee_id)"))
+
+                result_mc = await conn.execute(text("PRAGMA table_info(milestone_checkpoints)"))
+                mc_cols = {row[1] for row in result_mc.fetchall()}
+                for col_name, col_type in [
+                    ("total_calls", "INTEGER DEFAULT 0"),
+                    ("sold_fair", "NUMERIC(15, 2) DEFAULT 0.0"),
+                    ("sold_fb", "NUMERIC(15, 2) DEFAULT 0.0"),
+                    ("sold_other", "NUMERIC(15, 2) DEFAULT 0.0"),
+                    ("gl", "VARCHAR(100)"),
+                    ("hold", "NUMERIC(15, 2) DEFAULT 0.0"),
+                    ("cancel", "NUMERIC(15, 2) DEFAULT 0.0"),
+                ]:
+                    if mc_cols and col_name not in mc_cols:
+                        try:
+                            await conn.execute(text(f"ALTER TABLE milestone_checkpoints ADD COLUMN {col_name} {col_type}"))
+                        except Exception:
+                            pass
         except Exception as exc:
             logger.warning("ensure_schema_updates sqlite warning: %s", exc)
     else:
@@ -114,6 +138,13 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
                 fup INTEGER NOT NULL DEFAULT 0,
                 outdoor_visits INTEGER NOT NULL DEFAULT 0,
                 indoor_cx INTEGER NOT NULL DEFAULT 0,
+                total_calls INTEGER NOT NULL DEFAULT 0,
+                sold_fair NUMERIC(15, 2) NOT NULL DEFAULT 0.0,
+                sold_fb NUMERIC(15, 2) NOT NULL DEFAULT 0.0,
+                sold_other NUMERIC(15, 2) NOT NULL DEFAULT 0.0,
+                gl VARCHAR(100),
+                hold NUMERIC(15, 2) NOT NULL DEFAULT 0.0,
+                cancel NUMERIC(15, 2) NOT NULL DEFAULT 0.0,
                 admin_notes TEXT,
                 updated_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
                 created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -122,6 +153,13 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
             """,
             "CREATE INDEX IF NOT EXISTS ix_mc_month ON milestone_checkpoints(month)",
             "CREATE INDEX IF NOT EXISTS ix_mc_emp ON milestone_checkpoints(employee_id)",
+            "ALTER TABLE milestone_checkpoints ADD COLUMN IF NOT EXISTS total_calls INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE milestone_checkpoints ADD COLUMN IF NOT EXISTS sold_fair NUMERIC(15, 2) NOT NULL DEFAULT 0.0",
+            "ALTER TABLE milestone_checkpoints ADD COLUMN IF NOT EXISTS sold_fb NUMERIC(15, 2) NOT NULL DEFAULT 0.0",
+            "ALTER TABLE milestone_checkpoints ADD COLUMN IF NOT EXISTS sold_other NUMERIC(15, 2) NOT NULL DEFAULT 0.0",
+            "ALTER TABLE milestone_checkpoints ADD COLUMN IF NOT EXISTS gl VARCHAR(100)",
+            "ALTER TABLE milestone_checkpoints ADD COLUMN IF NOT EXISTS hold NUMERIC(15, 2) NOT NULL DEFAULT 0.0",
+            "ALTER TABLE milestone_checkpoints ADD COLUMN IF NOT EXISTS cancel NUMERIC(15, 2) NOT NULL DEFAULT 0.0",
             """
             DO $$
             BEGIN

@@ -36,6 +36,96 @@ class PerformanceCollectionService:
         self.db = db
         self.targets_repo = TargetsRepository(db)
 
+    @staticmethod
+    def _aggregate_reports_metrics(rep_list: List[DailyActivityReport]) -> Dict[str, Any]:
+        act_new_sales = Decimal("0")
+        act_emi = Decimal("0")
+        act_tb = Decimal("0")
+        lead_total = 0
+        fair_total = 0
+        fb_total = 0
+        hp_total = 0
+        p_total = 0
+        fup_total = 0
+        calls_total = 0
+        outdoor_total = 0
+        indoor_total = 0
+        pred_fair = Decimal("0")
+        pred_fb = Decimal("0")
+        pred_other = Decimal("0")
+        pred_hold = Decimal("0")
+        pred_cancel = Decimal("0")
+
+        for r in rep_list:
+            for se in r.sales_collection_entries:
+                cat = (se.category or "").lower()
+                amt = Decimal(str(se.amount or 0))
+                desc = (se.description or "").lower() + " " + (se.notes or "").lower()
+
+                if "new_sales" in cat:
+                    if "commit" in cat or "payment" in cat:
+                        if "fair" in desc:
+                            pred_fair += amt
+                        elif "fb" in desc or "facebook" in desc:
+                            pred_fb += amt
+                        else:
+                            pred_other += amt
+                    else:
+                        act_new_sales += amt
+                elif "emi" in cat:
+                    act_emi += amt
+                elif "tb" in cat or "token" in cat:
+                    act_tb += amt
+
+                if "hold" in desc:
+                    pred_hold += amt
+                if "cancel" in desc:
+                    pred_cancel += amt
+
+            for ce in r.call_entries:
+                cat_name = (ce.lead_category or "").lower()
+                s_sum = (ce.slot_10am_1pm or 0) + (ce.slot_2pm_5pm or 0) + (ce.slot_5pm_6pm or 0)
+                ce_d = ce.total_dialed if ce.total_dialed is not None else s_sum
+                calls_total += ce_d
+                lead_total += ce_d
+                if "fair" in cat_name:
+                    fair_total += ce_d
+                elif "fb" in cat_name or "facebook" in cat_name:
+                    fb_total += ce_d
+                hp_total += ce.lead_status_hp or 0
+                p_total += ce.lead_status_p or 0
+                fup_total += ce.lead_status_fub or 0
+
+            for me in r.meeting_entries:
+                act = (me.activity_type or "").lower()
+                val = me.total_count or ((me.slot_10am_1pm or 0) + (me.slot_2pm_5pm or 0) + (me.slot_5pm_6pm or 0))
+                if "outdoor" in act:
+                    outdoor_total += val
+                elif "indoor" in act:
+                    indoor_total += val
+
+        return {
+            "new_sales": act_new_sales,
+            "emi": act_emi,
+            "tb": act_tb,
+            "total_collection": act_new_sales + act_emi + act_tb,
+            "total_lead": lead_total,
+            "fair_lead": fair_total,
+            "fb_lead": fb_total,
+            "hp": hp_total,
+            "p": p_total,
+            "fup": fup_total,
+            "total_calls": calls_total,
+            "outdoor_visits": outdoor_total,
+            "indoor_cx": indoor_total,
+            "prediction_sold_fair": pred_fair,
+            "prediction_sold_fb": pred_fb,
+            "prediction_sold_other": pred_other,
+            "prediction_hold": pred_hold,
+            "prediction_cancel": pred_cancel,
+            "total_lead_hp_p": hp_total + p_total,
+        }
+
     async def get_report_data(
         self,
         current_user: User,
@@ -97,7 +187,20 @@ class PerformanceCollectionService:
                 summary=PerformanceCollectionSummaryTotals(),
             )
 
-        # 3. Fetch all daily activity reports for these employees in the active range
+        # Determine 2 previous months (e.g. if active is Nov-26 -> Oct-26 and Sep-26)
+        if month > 2:
+            prev1_m, prev1_y = month - 1, year
+            prev2_m, prev2_y = month - 2, year
+        elif month == 2:
+            prev1_m, prev1_y = 1, year
+            prev2_m, prev2_y = 12, year - 1
+        else:
+            prev1_m, prev1_y = 12, year - 1
+            prev2_m, prev2_y = 11, year - 1
+
+        prev2_start = date(prev2_y, prev2_m, 1)
+
+        # 3. Fetch all daily activity reports for these employees covering 3 months (history + active)
         stmt = (
             select(DailyActivityReport)
             .options(
@@ -108,17 +211,20 @@ class PerformanceCollectionService:
             )
             .where(
                 DailyActivityReport.employee_id.in_(emp_ids),
-                DailyActivityReport.report_date >= active_start,
+                DailyActivityReport.report_date >= prev2_start,
                 DailyActivityReport.report_date <= active_end,
             )
             .order_by(DailyActivityReport.report_date.asc())
         )
         reports_res = await self.db.execute(stmt)
-        all_reports = reports_res.scalars().all()
+        all_3m_reports = reports_res.scalars().all()
 
-        # Group reports by employee_id
+        # Active month reports only for Section 2 and current period summary
+        all_reports = [r for r in all_3m_reports if r.report_date >= active_start and r.report_date <= active_end]
+
+        # Group reports by employee_id for all 3 months
         emp_reports_map: Dict[int, List[DailyActivityReport]] = {e.id: [] for e in employees}
-        for r in all_reports:
+        for r in all_3m_reports:
             emp_reports_map.setdefault(r.employee_id, []).append(r)
 
         # 4. Checkpoint day boundaries for Section 1 milestones
@@ -159,8 +265,27 @@ class PerformanceCollectionService:
 
         # 5. Process each employee's Section 1 performance data
         for emp in employees:
-            reports = emp_reports_map.get(emp.id, [])
-            
+            all_emp_reports = emp_reports_map.get(emp.id, [])
+            curr_reports = [r for r in all_emp_reports if r.report_date >= active_start and r.report_date <= active_end]
+            prev1_reports = [r for r in all_emp_reports if r.report_date.year == prev1_y and r.report_date.month == prev1_m]
+            prev2_reports = [r for r in all_emp_reports if r.report_date.year == prev2_y and r.report_date.month == prev2_m]
+
+            # Role formatted display
+            pos_title: str = (
+                emp.designation
+                if emp.designation
+                else "Sales Executive"
+                if emp.role == UserRole.EMPLOYEE
+                else "Team Lead"
+                if emp.role == UserRole.TL
+                else "Coordinator"
+                if emp.role == UserRole.CO
+                else "Management"
+            )
+            gl_title = "GL" if ("gl" in pos_title.lower() or "group lead" in pos_title.lower()) else (
+                "GL" if emp.role == UserRole.EMPLOYEE else pos_title
+            )
+
             # Target lookup
             target_obj = await self.targets_repo.get_effective_target(active_end, emp.id)
             target_sales = (
@@ -181,133 +306,86 @@ class PerformanceCollectionService:
             )
             target_coll = target_sales + target_tb + target_emi
 
-            # Full month metrics
-            act_new_sales = Decimal("0")
-            act_emi = Decimal("0")
-            act_tb = Decimal("0")
-            lead_total = 0
-            fair_total = 0
-            fb_total = 0
-            hp_total = 0
-            p_total = 0
-            fup_total = 0
+            # Active month aggregated metrics
+            curr_metrics = self._aggregate_reports_metrics(curr_reports)
+            m1_metrics = self._aggregate_reports_metrics(prev1_reports)
+            m2_metrics = self._aggregate_reports_metrics(prev2_reports)
 
-            # Prediction metrics
-            pred_fair = Decimal("0")
-            pred_fb = Decimal("0")
-            pred_other = Decimal("0")
-            pred_hold = Decimal("0")
-            pred_cancel = Decimal("0")
+            # Build previous 2 months history objects
+            m2_label = f"{calendar.month_abbr[prev2_m]}-{str(prev2_y)[-2:]}"
+            m1_label = f"{calendar.month_abbr[prev1_m]}-{str(prev1_y)[-2:]}"
+            curr_month_label = f"{calendar.month_abbr[month]}-{str(year)[-2:]}"
 
-            for r in reports:
-                # Sales entries
-                for se in r.sales_collection_entries:
-                    cat = (se.category or "").lower()
-                    amt = Decimal(str(se.amount or 0))
-                    desc = (se.description or "").lower() + " " + (se.notes or "").lower()
+            m2_perf = EmployeeMonthlyPerformance(
+                employee_id=emp.id,
+                employee_name=emp.full_name,
+                position=pos_title,
+                month=m2_label,
+                target_sales=target_sales,
+                target_collection=target_coll,
+                actual_new_sales=m2_metrics["new_sales"],
+                actual_emi=m2_metrics["emi"],
+                actual_tb=m2_metrics["tb"],
+                total_collection=m2_metrics["total_collection"],
+                total_lead=m2_metrics["total_lead"],
+                fair_lead=m2_metrics["fair_lead"],
+                fb_lead=m2_metrics["fb_lead"],
+                hp=m2_metrics["hp"],
+                p=m2_metrics["p"],
+                fup=m2_metrics["fup"],
+                total_calls=m2_metrics["total_calls"],
+                prediction_sold_fair=m2_metrics["prediction_sold_fair"],
+                prediction_sold_fb=m2_metrics["prediction_sold_fb"],
+                prediction_sold_other=m2_metrics["prediction_sold_other"],
+                gl=gl_title,
+                prediction_hold=m2_metrics["prediction_hold"],
+                prediction_cancel=m2_metrics["prediction_cancel"],
+                total_lead_hp_p=m2_metrics["total_lead_hp_p"],
+                intervals=[],
+                history_months=[],
+            )
 
-                    if "new_sales" in cat:
-                        if "commit" in cat or "payment" in cat:
-                            # Prediction / commitment
-                            if "fair" in desc:
-                                pred_fair += amt
-                            elif "fb" in desc or "facebook" in desc:
-                                pred_fb += amt
-                            else:
-                                pred_other += amt
-                        else:
-                            act_new_sales += amt
-                    elif "emi" in cat:
-                        act_emi += amt
-                    elif "tb" in cat or "token" in cat:
-                        act_tb += amt
-
-                    if "hold" in desc:
-                        pred_hold += amt
-                    if "cancel" in desc:
-                        pred_cancel += amt
-
-                # Call entries
-                for ce in r.call_entries:
-                    cat_name = (ce.lead_category or "").lower()
-                    s1 = ce.slot_10am_1pm or 0
-                    s2 = ce.slot_2pm_5pm or 0
-                    s3 = ce.slot_5pm_6pm or 0
-                    hp = ce.lead_status_hp or 0
-                    p = ce.lead_status_p or 0
-                    fub = ce.lead_status_fub or 0
-                    outcomes = hp + p + fub + (ce.lead_status_ni or 0)
-                    conn = ce.total_connected if (ce.total_connected and ce.total_connected >= outcomes) else outcomes
-                    dialed = max(ce.total_dialed if ce.total_dialed is not None else (s1 + s2 + s3), conn)
-
-                    lead_total += dialed
-                    if "fair" in cat_name:
-                        fair_total += dialed
-                    elif "fb" in cat_name or "facebook" in cat_name:
-                        fb_total += dialed
-
-                    hp_total += hp
-                    p_total += p
-                    fup_total += fub
-
-            tot_coll = act_new_sales + act_emi + act_tb
+            m1_perf = EmployeeMonthlyPerformance(
+                employee_id=emp.id,
+                employee_name=emp.full_name,
+                position=pos_title,
+                month=m1_label,
+                target_sales=target_sales,
+                target_collection=target_coll,
+                actual_new_sales=m1_metrics["new_sales"],
+                actual_emi=m1_metrics["emi"],
+                actual_tb=m1_metrics["tb"],
+                total_collection=m1_metrics["total_collection"],
+                total_lead=m1_metrics["total_lead"],
+                fair_lead=m1_metrics["fair_lead"],
+                fb_lead=m1_metrics["fb_lead"],
+                hp=m1_metrics["hp"],
+                p=m1_metrics["p"],
+                fup=m1_metrics["fup"],
+                total_calls=m1_metrics["total_calls"],
+                prediction_sold_fair=m1_metrics["prediction_sold_fair"],
+                prediction_sold_fb=m1_metrics["prediction_sold_fb"],
+                prediction_sold_other=m1_metrics["prediction_sold_other"],
+                gl=gl_title,
+                prediction_hold=m1_metrics["prediction_hold"],
+                prediction_cancel=m1_metrics["prediction_cancel"],
+                total_lead_hp_p=m1_metrics["total_lead_hp_p"],
+                intervals=[],
+                history_months=[],
+            )
 
             # Calculate interval summaries (Till 5th, Till 10th, ..., Till 30th/31st)
             intervals: List[PerformanceIntervalSummary] = []
             for m_day in milestone_days:
-                # Filter reports up to this checkpoint day
-                sub_reports = [r for r in reports if r.report_date.day <= m_day]
-                sub_new_sales = Decimal("0")
-                sub_emi = Decimal("0")
-                sub_tb = Decimal("0")
-                sub_leads = 0
-                sub_fair = 0
-                sub_fb = 0
-                sub_hp = 0
-                sub_p = 0
-                sub_fup = 0
-                sub_outdoor = 0
-                sub_indoor = 0
-
-                for r in sub_reports:
-                    for se in r.sales_collection_entries:
-                        cat = (se.category or "").lower()
-                        amt = Decimal(str(se.amount or 0))
-                        if "new_sales" in cat and "commit" not in cat:
-                            sub_new_sales += amt
-                        elif "emi" in cat:
-                            sub_emi += amt
-                        elif "tb" in cat:
-                            sub_tb += amt
-
-                    for ce in r.call_entries:
-                        cat_name = (ce.lead_category or "").lower()
-                        s_sum = (ce.slot_10am_1pm or 0) + (ce.slot_2pm_5pm or 0) + (ce.slot_5pm_6pm or 0)
-                        ce_d = ce.total_dialed if ce.total_dialed is not None else s_sum
-                        sub_leads += ce_d
-                        if "fair" in cat_name:
-                            sub_fair += ce_d
-                        elif "fb" in cat_name or "facebook" in cat_name:
-                            sub_fb += ce_d
-                        sub_hp += ce.lead_status_hp or 0
-                        sub_p += ce.lead_status_p or 0
-                        sub_fup += ce.lead_status_fub or 0
-
-                    for me in r.meeting_entries:
-                        act = (me.activity_type or "").lower()
-                        val = me.total_count or (
-                            (me.slot_10am_1pm or 0) + (me.slot_2pm_5pm or 0) + (me.slot_5pm_6pm or 0)
-                        )
-                        if "outdoor" in act:
-                            sub_outdoor += val
-                        elif "indoor" in act:
-                            sub_indoor += val
+                sub_reports = [r for r in curr_reports if r.report_date.day <= m_day]
+                sub_m = self._aggregate_reports_metrics(sub_reports)
+                label = f"Till {m_day}th" if m_day < 30 else "Till 30/31th"
 
                 if (emp.id, m_day) in employee_manual_map:
                     rec = employee_manual_map[(emp.id, m_day)]
                     intervals.append(
                         PerformanceIntervalSummary(
-                            label=rec.label or f"Till {m_day}th",
+                            label=rec.label or label,
                             end_day=m_day,
                             new_sales=rec.new_sales,
                             emi=rec.emi,
@@ -320,92 +398,99 @@ class PerformanceCollectionService:
                             fup=rec.fup,
                             outdoor_visits=rec.outdoor_visits,
                             indoor_cx=rec.indoor_cx,
+                            total_calls=getattr(rec, "total_calls", 0) or sub_m["total_calls"],
+                            sold_fair=getattr(rec, "sold_fair", Decimal("0")) or sub_m["prediction_sold_fair"],
+                            sold_fb=getattr(rec, "sold_fb", Decimal("0")) or sub_m["prediction_sold_fb"],
+                            sold_other=getattr(rec, "sold_other", Decimal("0")) or sub_m["prediction_sold_other"],
+                            gl=getattr(rec, "gl", None) or gl_title,
+                            hold=getattr(rec, "hold", Decimal("0")) or sub_m["prediction_hold"],
+                            cancel=getattr(rec, "cancel", Decimal("0")) or sub_m["prediction_cancel"],
+                            total_lead_hp_p=rec.hp + rec.p,
                             is_manual=True,
                             admin_notes=rec.admin_notes,
                         )
                     )
                 else:
-                    label = f"Till {m_day}th" if m_day != num_days else f"Till {num_days}th (Full Month)"
                     intervals.append(
                         PerformanceIntervalSummary(
                             label=label,
                             end_day=m_day,
-                            new_sales=sub_new_sales,
-                            emi=sub_emi,
-                            total_collection=sub_new_sales + sub_emi + sub_tb,
-                            total_lead=sub_leads,
-                            fair_lead=sub_fair,
-                            fb_lead=sub_fb,
-                            hp=sub_hp,
-                            p=sub_p,
-                            fup=sub_fup,
-                            outdoor_visits=sub_outdoor,
-                            indoor_cx=sub_indoor,
+                            new_sales=sub_m["new_sales"],
+                            emi=sub_m["emi"],
+                            total_collection=sub_m["total_collection"],
+                            total_lead=sub_m["total_lead"],
+                            fair_lead=sub_m["fair_lead"],
+                            fb_lead=sub_m["fb_lead"],
+                            hp=sub_m["hp"],
+                            p=sub_m["p"],
+                            fup=sub_m["fup"],
+                            outdoor_visits=sub_m["outdoor_visits"],
+                            indoor_cx=sub_m["indoor_cx"],
+                            total_calls=sub_m["total_calls"],
+                            sold_fair=sub_m["prediction_sold_fair"],
+                            sold_fb=sub_m["prediction_sold_fb"],
+                            sold_other=sub_m["prediction_sold_other"],
+                            gl=gl_title,
+                            hold=sub_m["prediction_hold"],
+                            cancel=sub_m["prediction_cancel"],
+                            total_lead_hp_p=sub_m["total_lead_hp_p"],
                             is_manual=False,
                         )
                     )
-
-            # Role formatted display
-            pos_title: str = (
-                emp.designation
-                if emp.designation
-                else "Sales Executive"
-                if emp.role == UserRole.EMPLOYEE
-                else "Team Lead"
-                if emp.role == UserRole.TL
-                else "Coordinator"
-                if emp.role == UserRole.CO
-                else "Management"
-            )
 
             monthly_performances.append(
                 EmployeeMonthlyPerformance(
                     employee_id=emp.id,
                     employee_name=emp.full_name,
                     position=pos_title,
-                    month=month_display,
+                    month=curr_month_label,
                     target_sales=target_sales,
                     target_collection=target_coll,
-                    actual_new_sales=act_new_sales,
-                    actual_emi=act_emi,
-                    actual_tb=act_tb,
-                    total_collection=tot_coll,
-                    total_lead=lead_total,
-                    fair_lead=fair_total,
-                    fb_lead=fb_total,
-                    hp=hp_total,
-                    p=p_total,
-                    fup=fup_total,
-                    prediction_sold_fair=pred_fair,
-                    prediction_sold_fb=pred_fb,
-                    prediction_sold_other=pred_other,
-                    prediction_hold=pred_hold,
-                    prediction_cancel=pred_cancel,
+                    actual_new_sales=curr_metrics["new_sales"],
+                    actual_emi=curr_metrics["emi"],
+                    actual_tb=curr_metrics["tb"],
+                    total_collection=curr_metrics["total_collection"],
+                    total_lead=curr_metrics["total_lead"],
+                    fair_lead=curr_metrics["fair_lead"],
+                    fb_lead=curr_metrics["fb_lead"],
+                    hp=curr_metrics["hp"],
+                    p=curr_metrics["p"],
+                    fup=curr_metrics["fup"],
+                    total_calls=curr_metrics["total_calls"],
+                    prediction_sold_fair=curr_metrics["prediction_sold_fair"],
+                    prediction_sold_fb=curr_metrics["prediction_sold_fb"],
+                    prediction_sold_other=curr_metrics["prediction_sold_other"],
+                    gl=gl_title,
+                    prediction_hold=curr_metrics["prediction_hold"],
+                    prediction_cancel=curr_metrics["prediction_cancel"],
+                    total_lead_hp_p=curr_metrics["total_lead_hp_p"],
                     intervals=intervals,
+                    history_months=[m2_perf, m1_perf],
                 )
             )
 
             # Accumulate summary totals
             summary_totals["total_target"] += target_sales
-            summary_totals["total_new_sales"] += act_new_sales
-            summary_totals["total_emi"] += act_emi
-            summary_totals["total_tb"] += act_tb
-            summary_totals["total_collection"] += tot_coll
-            summary_totals["total_leads"] += lead_total
-            summary_totals["total_fair_leads"] += fair_total
-            summary_totals["total_fb_leads"] += fb_total
-            summary_totals["total_hp"] += hp_total
-            summary_totals["total_p"] += p_total
-            summary_totals["total_fup"] += fup_total
+            summary_totals["total_new_sales"] += curr_metrics["new_sales"]
+            summary_totals["total_emi"] += curr_metrics["emi"]
+            summary_totals["total_tb"] += curr_metrics["tb"]
+            summary_totals["total_collection"] += curr_metrics["total_collection"]
+            summary_totals["total_leads"] += curr_metrics["total_lead"]
+            summary_totals["total_fair_leads"] += curr_metrics["fair_lead"]
+            summary_totals["total_fb_leads"] += curr_metrics["fb_lead"]
+            summary_totals["total_hp"] += curr_metrics["hp"]
+            summary_totals["total_p"] += curr_metrics["p"]
+            summary_totals["total_fup"] += curr_metrics["fup"]
 
         # 5. Compute Company-Wide Intervals (either manual session or aggregate across staff)
         company_intervals: List[PerformanceIntervalSummary] = []
         for idx, m_day in enumerate(milestone_days):
+            label = f"Till {m_day}th" if m_day < 30 else "Till 30/31th"
             if m_day in company_manual_map:
                 rec = company_manual_map[m_day]
                 company_intervals.append(
                     PerformanceIntervalSummary(
-                        label=rec.label or f"Till {m_day}th",
+                        label=rec.label or label,
                         end_day=m_day,
                         new_sales=rec.new_sales,
                         emi=rec.emi,
@@ -418,6 +503,14 @@ class PerformanceCollectionService:
                         fup=rec.fup,
                         outdoor_visits=rec.outdoor_visits,
                         indoor_cx=rec.indoor_cx,
+                        total_calls=getattr(rec, "total_calls", 0),
+                        sold_fair=getattr(rec, "sold_fair", Decimal("0")),
+                        sold_fb=getattr(rec, "sold_fb", Decimal("0")),
+                        sold_other=getattr(rec, "sold_other", Decimal("0")),
+                        gl=getattr(rec, "gl", None) or "Company GL",
+                        hold=getattr(rec, "hold", Decimal("0")),
+                        cancel=getattr(rec, "cancel", Decimal("0")),
+                        total_lead_hp_p=rec.hp + rec.p,
                         is_manual=True,
                         admin_notes=rec.admin_notes,
                     )
@@ -467,7 +560,30 @@ class PerformanceCollectionService:
                     (p.intervals[idx].indoor_cx for p in monthly_performances if len(p.intervals) > idx),
                     0,
                 )
-                label = f"Till {m_day}th" if m_day != num_days else f"Till {num_days}th (Full Month)"
+                c_calls = sum(
+                    (p.intervals[idx].total_calls for p in monthly_performances if len(p.intervals) > idx),
+                    0,
+                )
+                c_sold_fair = sum(
+                    (p.intervals[idx].sold_fair for p in monthly_performances if len(p.intervals) > idx),
+                    Decimal("0"),
+                )
+                c_sold_fb = sum(
+                    (p.intervals[idx].sold_fb for p in monthly_performances if len(p.intervals) > idx),
+                    Decimal("0"),
+                )
+                c_sold_other = sum(
+                    (p.intervals[idx].sold_other for p in monthly_performances if len(p.intervals) > idx),
+                    Decimal("0"),
+                )
+                c_hold = sum(
+                    (p.intervals[idx].hold for p in monthly_performances if len(p.intervals) > idx),
+                    Decimal("0"),
+                )
+                c_cancel = sum(
+                    (p.intervals[idx].cancel for p in monthly_performances if len(p.intervals) > idx),
+                    Decimal("0"),
+                )
                 company_intervals.append(
                     PerformanceIntervalSummary(
                         label=label,
@@ -483,6 +599,14 @@ class PerformanceCollectionService:
                         fup=c_fup,
                         outdoor_visits=c_outdoor,
                         indoor_cx=c_indoor,
+                        total_calls=c_calls,
+                        sold_fair=c_sold_fair,
+                        sold_fb=c_sold_fb,
+                        sold_other=c_sold_other,
+                        gl="All GLs",
+                        hold=c_hold,
+                        cancel=c_cancel,
+                        total_lead_hp_p=c_hp + c_p,
                         is_manual=False,
                     )
                 )
@@ -592,6 +716,28 @@ class PerformanceCollectionService:
                     if lead_status.upper() != lead_status_filter.upper():
                         continue
 
+                # Lead Source determination
+                notes_text = (se.notes or "").lower() + " " + (se.description or "").lower()
+                lead_src = "Direct Lead"
+                if "fair" in notes_text:
+                    lead_src = "Fair Lead"
+                elif "fb" in notes_text or "facebook" in notes_text:
+                    lead_src = "Facebook Lead"
+                elif "ref" in notes_text or "referral" in notes_text:
+                    lead_src = "Referral"
+                elif "outdoor" in notes_text:
+                    lead_src = "Outdoor Visit"
+                elif "indoor" in notes_text or "cx" in notes_text:
+                    lead_src = "Indoor CX"
+                elif matched_contact and matched_contact.get("source"):
+                    lead_src = str(matched_contact["source"])
+
+                # Lead Source Date
+                lead_src_date = date_1 or r.report_date
+
+                # Second Next Collection Date
+                next_coll_date_2 = date_2 if (date_2 and date_2 != next_coll_date) else None
+
                 item = CustomerCollectionItem(
                     id=se.id or customer_item_id,
                     customer_name=cust_name,
@@ -606,7 +752,10 @@ class PerformanceCollectionService:
                     tb_amount=tb_amt,
                     emi_amount=emi_amt,
                     next_collection_date=next_coll_date,
+                    next_collection_date_2=next_coll_date_2,
                     lead_status=lead_status,
+                    lead_source=lead_src,
+                    lead_source_date=lead_src_date,
                     total_collection=tot_amt,
                     remarks=se.notes or se.description,
                     employee_id=r.employee_id,
@@ -666,6 +815,13 @@ class PerformanceCollectionService:
                 existing.fup = cp.fup
                 existing.outdoor_visits = cp.outdoor_visits
                 existing.indoor_cx = cp.indoor_cx
+                existing.total_calls = cp.total_calls
+                existing.sold_fair = cp.sold_fair
+                existing.sold_fb = cp.sold_fb
+                existing.sold_other = cp.sold_other
+                existing.gl = cp.gl
+                existing.hold = cp.hold
+                existing.cancel = cp.cancel
                 existing.admin_notes = cp.admin_notes
                 existing.updated_by_id = admin_user.id
                 target_rec = existing
@@ -686,6 +842,13 @@ class PerformanceCollectionService:
                     fup=cp.fup,
                     outdoor_visits=cp.outdoor_visits,
                     indoor_cx=cp.indoor_cx,
+                    total_calls=cp.total_calls,
+                    sold_fair=cp.sold_fair,
+                    sold_fb=cp.sold_fb,
+                    sold_other=cp.sold_other,
+                    gl=cp.gl,
+                    hold=cp.hold,
+                    cancel=cp.cancel,
                     admin_notes=cp.admin_notes,
                     updated_by_id=admin_user.id,
                 )
@@ -710,6 +873,13 @@ class PerformanceCollectionService:
                     fup=target_rec.fup,
                     outdoor_visits=target_rec.outdoor_visits,
                     indoor_cx=target_rec.indoor_cx,
+                    total_calls=getattr(target_rec, "total_calls", 0),
+                    sold_fair=getattr(target_rec, "sold_fair", Decimal("0")),
+                    sold_fb=getattr(target_rec, "sold_fb", Decimal("0")),
+                    sold_other=getattr(target_rec, "sold_other", Decimal("0")),
+                    gl=getattr(target_rec, "gl", None),
+                    hold=getattr(target_rec, "hold", Decimal("0")),
+                    cancel=getattr(target_rec, "cancel", Decimal("0")),
                     admin_notes=target_rec.admin_notes,
                     is_manual=True,
                     updated_by_id=target_rec.updated_by_id,
@@ -752,6 +922,13 @@ class PerformanceCollectionService:
                 fup=r.fup,
                 outdoor_visits=r.outdoor_visits,
                 indoor_cx=r.indoor_cx,
+                total_calls=getattr(r, "total_calls", 0),
+                sold_fair=getattr(r, "sold_fair", Decimal("0")),
+                sold_fb=getattr(r, "sold_fb", Decimal("0")),
+                sold_other=getattr(r, "sold_other", Decimal("0")),
+                gl=getattr(r, "gl", None),
+                hold=getattr(r, "hold", Decimal("0")),
+                cancel=getattr(r, "cancel", Decimal("0")),
                 admin_notes=r.admin_notes,
                 is_manual=True,
                 updated_by_id=r.updated_by_id,

@@ -42,7 +42,7 @@ import { api, ApiError } from "@/lib/api";
 import { User, UserRole, BulkUploadEmployeesResponse } from "@/types";
 import { formatReadableDate, formatEmployeeId } from "@/lib/utils";
 
-export function renderRoleBadge(userRole: UserRole) {
+function renderRoleBadge(userRole: UserRole) {
   switch (userRole) {
     case "admin":
       return (

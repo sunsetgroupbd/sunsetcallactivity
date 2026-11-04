@@ -502,6 +502,14 @@ export interface PerformanceIntervalSummary {
   fup: number;
   outdoor_visits: number;
   indoor_cx: number;
+  total_calls?: number;
+  sold_fair?: number;
+  sold_fb?: number;
+  sold_other?: number;
+  gl?: string | null;
+  hold?: number;
+  cancel?: number;
+  total_lead_hp_p?: number;
   is_manual?: boolean;
   admin_notes?: string | null;
 }
@@ -523,12 +531,16 @@ export interface EmployeeMonthlyPerformance {
   hp: number;
   p: number;
   fup: number;
+  total_calls?: number;
   prediction_sold_fair: number;
   prediction_sold_fb: number;
   prediction_sold_other: number;
+  gl?: string | null;
   prediction_hold: number;
   prediction_cancel: number;
+  total_lead_hp_p?: number;
   intervals: PerformanceIntervalSummary[];
+  history_months?: EmployeeMonthlyPerformance[];
 }
 
 export interface CustomerCollectionItem {
@@ -545,7 +557,10 @@ export interface CustomerCollectionItem {
   tb_amount: number;
   emi_amount: number;
   next_collection_date?: string | null;
+  next_collection_date_2?: string | null;
   lead_status: string;
+  lead_source?: string | null;
+  lead_source_date?: string | null;
   total_collection: number;
   remarks?: string | null;
   employee_id: number;
@@ -592,6 +607,13 @@ export interface MilestoneCheckpointItem {
   fup?: number;
   outdoor_visits?: number;
   indoor_cx?: number;
+  total_calls?: number;
+  sold_fair?: number;
+  sold_fb?: number;
+  sold_other?: number;
+  gl?: string | null;
+  hold?: number;
+  cancel?: number;
   admin_notes?: string | null;
 }
 
@@ -618,6 +640,13 @@ export interface MilestoneCheckpointRead {
   fup: number;
   outdoor_visits: number;
   indoor_cx: number;
+  total_calls?: number;
+  sold_fair?: number;
+  sold_fb?: number;
+  sold_other?: number;
+  gl?: string | null;
+  hold?: number;
+  cancel?: number;
   admin_notes?: string | null;
   is_manual: boolean;
   updated_by_id?: number | null;

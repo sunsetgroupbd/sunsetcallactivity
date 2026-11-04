@@ -107,7 +107,7 @@ function getPaymentMethodBadge(method?: string | null) {
   }
 }
 
-export function renderCommitmentPercentageBadge(pct: number | null | undefined) {
+function renderCommitmentPercentageBadge(pct: number | null | undefined) {
   if (!pct || pct <= 0) return null;
   let colorClass = "bg-slate-100 text-slate-700 border-slate-300";
   if (pct >= 80) {

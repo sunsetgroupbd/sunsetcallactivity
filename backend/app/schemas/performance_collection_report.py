@@ -22,6 +22,14 @@ class PerformanceIntervalSummary(BaseModel):
     fup: int = 0
     outdoor_visits: int = 0
     indoor_cx: int = 0
+    total_calls: int = 0
+    sold_fair: Decimal = Decimal("0")
+    sold_fb: Decimal = Decimal("0")
+    sold_other: Decimal = Decimal("0")
+    gl: Optional[str] = None
+    hold: Decimal = Decimal("0")
+    cancel: Decimal = Decimal("0")
+    total_lead_hp_p: int = 0
     is_manual: bool = False
     admin_notes: Optional[str] = None
 
@@ -50,14 +58,20 @@ class EmployeeMonthlyPerformance(BaseModel):
     fup: int = 0
     
     # Predictions from Employee / Committed Pipeline
+    total_calls: int = 0
     prediction_sold_fair: Decimal = Decimal("0")
     prediction_sold_fb: Decimal = Decimal("0")
     prediction_sold_other: Decimal = Decimal("0")
+    gl: Optional[str] = None
     prediction_hold: Decimal = Decimal("0")
     prediction_cancel: Decimal = Decimal("0")
+    total_lead_hp_p: int = 0
     
     # Milestones (Till 5th, 10th, 15th, 20th, 25th, 30th/31st)
     intervals: List[PerformanceIntervalSummary] = Field(default_factory=list)
+    
+    # Previous months history (e.g. Sep-26, Oct-26 if active is Nov-26)
+    history_months: List[EmployeeMonthlyPerformance] = Field(default_factory=list)
 
 
 class CustomerCollectionItem(BaseModel):
@@ -79,8 +93,11 @@ class CustomerCollectionItem(BaseModel):
     tb_amount: Decimal = Decimal("0")
     emi_amount: Decimal = Decimal("0")
     
-    next_collection_date: Optional[date] = None  # Future promised payment date
+    next_collection_date: Optional[date] = None  # Primary next collection date
+    next_collection_date_2: Optional[date] = None  # Secondary next collection date
     lead_status: str = "P"  # HP, P, FUB, NI, CX, Sold, etc.
+    lead_source: Optional[str] = None  # Fair, FB, Referral, Direct, etc.
+    lead_source_date: Optional[date] = None  # Original lead entry date
     total_collection: Decimal = Decimal("0")
     remarks: Optional[str] = None
     
@@ -128,6 +145,13 @@ class MilestoneCheckpointItem(BaseModel):
     fup: int = 0
     outdoor_visits: int = 0
     indoor_cx: int = 0
+    total_calls: int = 0
+    sold_fair: Decimal = Decimal("0")
+    sold_fb: Decimal = Decimal("0")
+    sold_other: Decimal = Decimal("0")
+    gl: Optional[str] = None
+    hold: Decimal = Decimal("0")
+    cancel: Decimal = Decimal("0")
     admin_notes: Optional[str] = None
 
 

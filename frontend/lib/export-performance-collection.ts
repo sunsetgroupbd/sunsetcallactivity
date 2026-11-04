@@ -38,17 +38,54 @@ export function exportPerformanceCollectionToCSV(
       "HP",
       "P",
       "FUP",
-      "Prediction Sold (Fair)",
-      "Prediction Sold (FB)",
-      "Prediction Sold (Other)",
-      "Prediction Hold",
-      "Prediction Cancel",
+      "Total Calls",
+      "Sold from Fair Leads",
+      "Sold From FB Leads",
+      "Sold From Other Leads",
+      "GL",
+      "Hold",
+      "Cancel",
+      "Total Lead (HP+P) / Collection",
     ]
       .map(escapeCsv)
       .join(",")
   );
 
   for (const emp of data.monthly_performances) {
+    // If historical previous months exist, output them first
+    if (emp.history_months && emp.history_months.length > 0) {
+      for (const hm of emp.history_months) {
+        lines.push(
+          [
+            emp.employee_name,
+            emp.position,
+            hm.month,
+            hm.target_sales,
+            hm.actual_new_sales,
+            hm.actual_emi,
+            hm.total_collection,
+            hm.total_lead,
+            hm.fair_lead,
+            hm.fb_lead,
+            hm.hp,
+            hm.p,
+            hm.fup,
+            hm.total_calls || 0,
+            hm.prediction_sold_fair,
+            hm.prediction_sold_fb,
+            hm.prediction_sold_other,
+            hm.gl || emp.position,
+            hm.prediction_hold,
+            hm.prediction_cancel,
+            `${hm.hp + hm.p} / ${hm.total_collection}`,
+          ]
+            .map(escapeCsv)
+            .join(",")
+        );
+      }
+    }
+
+    // Active Month Row
     lines.push(
       [
         emp.employee_name,
@@ -64,11 +101,14 @@ export function exportPerformanceCollectionToCSV(
         emp.hp,
         emp.p,
         emp.fup,
+        emp.total_calls || 0,
         emp.prediction_sold_fair,
         emp.prediction_sold_fb,
         emp.prediction_sold_other,
+        emp.gl || emp.position,
         emp.prediction_hold,
         emp.prediction_cancel,
+        `${emp.hp + emp.p} / ${emp.total_collection}`,
       ]
         .map(escapeCsv)
         .join(",")
@@ -92,11 +132,14 @@ export function exportPerformanceCollectionToCSV(
             inv.hp,
             inv.p,
             inv.fup,
-            "-",
-            "-",
-            "-",
-            "-",
-            "-",
+            inv.total_calls || 0,
+            inv.sold_fair || 0,
+            inv.sold_fb || 0,
+            inv.sold_other || 0,
+            inv.gl || "-",
+            inv.hold || 0,
+            inv.cancel || 0,
+            `${inv.hp + inv.p} / ${inv.total_collection}`,
           ]
             .map(escapeCsv)
             .join(",")
@@ -140,19 +183,22 @@ export function exportPerformanceCollectionToCSV(
   lines.push(`"SECTION 2: CUSTOMER-WISE COLLECTION REPORT"`);
   lines.push(
     [
-      "Customer Name",
+      "Cx Name",
       "Phone",
       "Paid (BDT)",
       "Unpaid (BDT)",
       "Collection Date",
       "IN/OUT Plan",
-      "Date-1 (Initial)",
-      "Date-2 (Follow-up)",
+      "Date-1",
+      "Date 2",
       "New Sales (BDT)",
       "TB (BDT)",
       "EMI (BDT)",
-      "Next Collection Date",
+      "Next Collec Date 1",
+      "Next Collec Date 2",
       "Lead Status",
+      "Lead Source",
+      "Lead Source Date",
       "Total Collection (BDT)",
       "Executive",
       "Remarks",
@@ -176,7 +222,10 @@ export function exportPerformanceCollectionToCSV(
         c.tb_amount,
         c.emi_amount,
         c.next_collection_date || "-",
+        c.next_collection_date_2 || "-",
         c.lead_status,
+        c.lead_source || "Direct Lead",
+        c.lead_source_date || c.date_1 || "-",
         c.total_collection,
         c.employee_name,
         c.remarks || "-",

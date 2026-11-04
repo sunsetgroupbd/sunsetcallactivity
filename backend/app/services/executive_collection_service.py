@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import calendar
 from datetime import date
-from decimal import Decimal
 from typing import Dict, List, Optional, Tuple
 
 from sqlalchemy import select
@@ -65,7 +64,7 @@ class ExecutiveCollectionService:
 
         # 3. Fetch Targets for active period
         # For each employee, find the most recent target row with effective_from <= target_date
-        target_map: Dict[int, Decimal] = {}
+        target_map: Dict[int, float] = {}
         if emp_ids:
             targets_stmt = (
                 select(DailyTargets)
@@ -79,13 +78,13 @@ class ExecutiveCollectionService:
             for t in targets_res.scalars().all():
                 if t.employee_id is not None and t.employee_id not in target_map:
                     # Target priority: sales_target (management target)
-                    s_tgt = Decimal(str(t.sales_target or 0))
-                    e_tgt = Decimal(str(t.emi_target or 0))
-                    target_map[t.employee_id] = s_tgt if s_tgt > 0 else (s_tgt + e_tgt)
+                    s_tgt = float(t.sales_target or 0.0)
+                    e_tgt = float(t.emi_target or 0.0)
+                    target_map[t.employee_id] = s_tgt if s_tgt > 0.0 else (s_tgt + e_tgt)
 
         # 4. Fetch Daily Reports and Sales Collection Entries for Month-to-Date
-        emp_new_sales: Dict[int, Decimal] = {uid: Decimal("0.0") for uid in emp_ids}
-        emp_emi: Dict[int, Decimal] = {uid: Decimal("0.0") for uid in emp_ids}
+        emp_new_sales: Dict[int, float] = {uid: 0.0 for uid in emp_ids}
+        emp_emi: Dict[int, float] = {uid: 0.0 for uid in emp_ids}
         emp_token_count: Dict[int, int] = {uid: 0 for uid in emp_ids}
         emp_sold_shares: Dict[int, int] = {uid: 0 for uid in emp_ids}
         emp_customers: Dict[int, set[str]] = {uid: set() for uid in emp_ids}
@@ -105,33 +104,29 @@ class ExecutiveCollectionService:
                 eid = report.employee_id
                 for se in report.sales_collection_entries:
                     cat = (se.category or "").lower()
-                    amt = Decimal(str(se.amount or 0))
+                    amt = float(se.amount or 0.0)
                     cname = (se.customer_name or "").strip()
                     if cname:
                         emp_customers.setdefault(eid, set()).add(cname)
 
                     if "new_sales" in cat:
                         if "commit" not in cat and "payment" not in cat:
-                            emp_new_sales[eid] = emp_new_sales.get(eid, Decimal("0.0")) + amt
+                            emp_new_sales[eid] = emp_new_sales.get(eid, 0.0) + amt
                     elif "emi" in cat:
-                        emp_emi[eid] = emp_emi.get(eid, Decimal("0.0")) + amt
+                        emp_emi[eid] = emp_emi.get(eid, 0.0) + amt
                     elif "tb" in cat or "token" in cat:
                         emp_token_count[eid] = emp_token_count.get(eid, 0) + 1
 
         # Build raw row for each user
         user_rows: Dict[int, ExecutiveCollectionRow] = {}
         for u in all_users:
-            new_s = emp_new_sales.get(u.id, Decimal("0.0"))
-            emi_s = emp_emi.get(u.id, Decimal("0.0"))
-            tot_coll = new_s + emi_s
-            tgt = target_map.get(u.id, Decimal("0.0"))
+            new_s = round(emp_new_sales.get(u.id, 0.0), 2)
+            emi_s = round(emp_emi.get(u.id, 0.0), 2)
+            tot_coll = round(new_s + emi_s, 2)
+            tgt = round(target_map.get(u.id, 0.0), 2)
             achieved = tot_coll  # In sheet, achieved = total collection in that period
-            ach_pct = (
-                (achieved / tgt * Decimal("100")).quantize(Decimal("1"))
-                if tgt > Decimal("0.0")
-                else Decimal("0.0")
-            )
-            dues = tgt - achieved if tgt > achieved else Decimal("0.0")
+            ach_pct = round((achieved / tgt) * 100, 1) if tgt > 0.0 else 0.0
+            dues = round(tgt - achieved, 2) if tgt > achieved else 0.0
             client_c = u.client_count if u.client_count > 0 else len(emp_customers.get(u.id, set()))
 
             pos = u.designation or (u.role.value.replace("_", " ").title() if u.role else "")
@@ -197,7 +192,11 @@ class ExecutiveCollectionService:
             for co_id in co_manager_ids:
                 co_user = user_map.get(co_id)
                 co_name = co_user.full_name if co_user else f"C.O. ID #{co_id}"
-                co_desig = co_user.designation or (co_user.role.value.upper() if co_user else "Manager")
+                co_desig = (
+                    (co_user.designation or co_user.role.value.upper())
+                    if co_user
+                    else "Manager"
+                )
 
                 subordinates = co_buckets.get(co_id, [])
                 co_rows: List[ExecutiveCollectionRow] = []
@@ -283,20 +282,24 @@ class ExecutiveCollectionService:
     def _sum_rows(rows: List[ExecutiveCollectionRow], label: str) -> ExecutiveCollectionRow:
         tot_client = sum(r.client for r in rows)
         tot_share = sum(r.share for r in rows)
-        tot_target = sum(r.mgt_given_target for r in rows)
-        tot_achieved = sum(r.achieved for r in rows)
+        tot_target = round(sum(r.mgt_given_target for r in rows), 2)
+        tot_achieved = round(sum(r.achieved for r in rows), 2)
         tot_token = sum(r.token for r in rows)
         tot_sold_share = sum(r.sold_share for r in rows)
-        tot_new_sales = sum(r.new_sales for r in rows)
-        tot_emi = sum(r.emi for r in rows)
-        tot_collection = sum(r.total_collection for r in rows)
+        tot_new_sales = round(sum(r.new_sales for r in rows), 2)
+        tot_emi = round(sum(r.emi for r in rows), 2)
+        tot_collection = round(sum(r.total_collection for r in rows), 2)
 
         ach_pct = (
-            (tot_achieved / tot_target * Decimal("100")).quantize(Decimal("1"))
-            if tot_target > Decimal("0.0")
-            else Decimal("0.0")
+            round((tot_achieved / tot_target) * 100, 1)
+            if tot_target > 0.0
+            else 0.0
         )
-        dues = tot_target - tot_achieved if tot_target > tot_achieved else Decimal("0.0")
+        dues = (
+            round(tot_target - tot_achieved, 2)
+            if tot_target > tot_achieved
+            else 0.0
+        )
 
         return ExecutiveCollectionRow(
             name=label,

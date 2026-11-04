@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal
 from typing import Optional, List
 from pydantic import BaseModel
 
@@ -15,15 +14,15 @@ class ExecutiveCollectionRow(BaseModel):
     is_manager: bool = False
     client: int = 0
     share: int = 0
-    mgt_given_target: Decimal = Decimal("0.0")
-    achieved: Decimal = Decimal("0.0")
-    achievement_pct: Decimal = Decimal("0.0")
-    dues: Decimal = Decimal("0.0")
+    mgt_given_target: float = 0.0
+    achieved: float = 0.0
+    achievement_pct: float = 0.0
+    dues: float = 0.0
     token: int = 0
     sold_share: int = 0
-    new_sales: Decimal = Decimal("0.0")
-    emi: Decimal = Decimal("0.0")
-    total_collection: Decimal = Decimal("0.0")
+    new_sales: float = 0.0
+    emi: float = 0.0
+    total_collection: float = 0.0
 
 
 class COGroup(BaseModel):

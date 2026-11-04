@@ -347,33 +347,31 @@ function PrintablePerformanceCollectionContent() {
           <table className="w-full text-left text-[9px] border-collapse border border-slate-300">
             <thead>
               <tr className="bg-slate-100 text-[8.5px] uppercase font-bold text-slate-700">
-                <th className="py-1 px-1.5 border border-slate-300">Month / Period</th>
-                <th className="py-1 px-1 border border-slate-300 text-right">TG</th>
-                <th className="py-1 px-1 border border-slate-300 text-right text-emerald-800">New Sales</th>
-                <th className="py-1 px-1 border border-slate-300 text-right text-sky-800">EMI</th>
-                <th className="py-1 px-1 border border-slate-300 text-right">Total Lead</th>
-                <th className="py-1 px-1 border border-slate-300 text-right">Fair Lead</th>
-                <th className="py-1 px-1 border border-slate-300 text-right">FB Leads</th>
-                <th className="py-1 px-1 border border-slate-300 text-right text-rose-700">HP</th>
-                <th className="py-1 px-1 border border-slate-300 text-right text-amber-700">P</th>
-                <th className="py-1 px-1 border border-slate-300 text-right text-sky-700">Fup</th>
-                <th className="py-1 px-1 border border-slate-300 text-center bg-slate-200" colSpan={4}>
+                <th rowSpan={2} className="py-1 px-1.5 border border-slate-300">Month / Period</th>
+                <th rowSpan={2} className="py-1 px-1 border border-slate-300 text-right">TG</th>
+                <th rowSpan={2} className="py-1 px-1 border border-slate-300 text-right text-emerald-800">New Sales</th>
+                <th rowSpan={2} className="py-1 px-1 border border-slate-300 text-right text-sky-800">EMI</th>
+                <th rowSpan={2} className="py-1 px-1 border border-slate-300 text-right">Total Lead</th>
+                <th rowSpan={2} className="py-1 px-1 border border-slate-300 text-right">Fair Lead</th>
+                <th rowSpan={2} className="py-1 px-1 border border-slate-300 text-right">FB Leads</th>
+                <th rowSpan={2} className="py-1 px-1 border border-slate-300 text-right text-rose-700">HP</th>
+                <th rowSpan={2} className="py-1 px-1 border border-slate-300 text-right text-amber-700">P</th>
+                <th rowSpan={2} className="py-1 px-1 border border-slate-300 text-right text-sky-700">Fup</th>
+                <th colSpan={4} className="py-1 px-1 border border-slate-300 text-center bg-slate-200">
                   Prediction from Emp
                 </th>
-                <th className="py-1 px-1 border border-slate-300 text-center">GL</th>
-                <th className="py-1 px-1 border border-slate-300 text-center text-amber-800">Hold</th>
-                <th className="py-1 px-1 border border-slate-300 text-center text-rose-800">Cancel</th>
-                <th className="py-1 px-1.5 border border-slate-300 text-center text-emerald-900 font-bold">
+                <th rowSpan={2} className="py-1 px-1 border border-slate-300 text-center">GL</th>
+                <th rowSpan={2} className="py-1 px-1 border border-slate-300 text-center text-amber-800">Hold</th>
+                <th rowSpan={2} className="py-1 px-1 border border-slate-300 text-center text-rose-800">Cancel</th>
+                <th rowSpan={2} className="py-1 px-1.5 border border-slate-300 text-center text-emerald-900 font-bold">
                   Total Lead (HP+P) / Coll
                 </th>
               </tr>
               <tr className="bg-slate-50 text-[8px] font-bold text-slate-600 text-center">
-                <th colSpan={10} className="border border-slate-300"></th>
                 <th className="py-0.5 px-0.5 border border-slate-300">Total Calls</th>
                 <th className="py-0.5 px-0.5 border border-slate-300 text-emerald-800">Sold Fair</th>
                 <th className="py-0.5 px-0.5 border border-slate-300 text-sky-800">Sold FB</th>
                 <th className="py-0.5 px-0.5 border border-slate-300 text-purple-800">Sold Other</th>
-                <th colSpan={4} className="border border-slate-300"></th>
               </tr>
             </thead>
             {report.monthly_performances.map((emp: EmployeeMonthlyPerformance) => {

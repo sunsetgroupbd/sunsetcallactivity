@@ -7,12 +7,14 @@ import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
 import { BottomNav } from "./bottom-nav";
 import { Loader2, ShieldAlert } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
   title: string;
   subtitle?: string;
   adminOnly?: boolean;
+  fullWidth?: boolean;
 }
 
 export function DashboardLayout({
@@ -20,10 +22,48 @@ export function DashboardLayout({
   title,
   subtitle,
   adminOnly = false,
+  fullWidth = false,
 }: DashboardLayoutProps) {
   const { user, loading, isAdmin } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const router = useRouter();
+
+  // Load persisted collapse state
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("sunset_sidebar_collapsed");
+      if (saved !== null) {
+        setIsSidebarCollapsed(saved === "true");
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const toggleSidebarCollapse = () => {
+    setIsSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("sunset_sidebar_collapsed", String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
+
+  // Keyboard shortcut Ctrl+B or Cmd+B to toggle sidebar
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        toggleSidebarCollapse();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -49,11 +89,23 @@ export function DashboardLayout({
   if (adminOnly && !isAdmin) {
     return (
       <div className="min-h-screen bg-slate-50 flex">
-        <Sidebar isOpen={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />
-        <div className="md:pl-64 flex flex-col flex-1">
+        <Sidebar
+          isOpen={mobileMenuOpen}
+          onClose={() => setMobileMenuOpen(false)}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={toggleSidebarCollapse}
+        />
+        <div
+          className={cn(
+            "flex flex-col flex-1 min-w-0 transition-all duration-300 ease-in-out",
+            isSidebarCollapsed ? "md:pl-16" : "md:pl-64"
+          )}
+        >
           <Topbar
             title="Access Restricted"
             onOpenMobileMenu={() => setMobileMenuOpen(true)}
+            isSidebarCollapsed={isSidebarCollapsed}
+            onToggleCollapse={toggleSidebarCollapse}
           />
           <main className="flex-1 p-6 flex items-center justify-center">
             <div className="max-w-md w-full bg-white p-8 rounded-lg border border-slate-200 text-center shadow-xs">
@@ -80,16 +132,33 @@ export function DashboardLayout({
   return (
     <div className="min-h-screen bg-slate-50 flex">
       {/* Sidebar Navigation (Desktop & Mobile Drawer) */}
-      <Sidebar isOpen={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />
+      <Sidebar
+        isOpen={mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={toggleSidebarCollapse}
+      />
 
       {/* Main Content Area */}
-      <div className="md:pl-64 flex flex-col flex-1 min-w-0">
+      <div
+        className={cn(
+          "flex flex-col flex-1 min-w-0 transition-all duration-300 ease-in-out",
+          isSidebarCollapsed ? "md:pl-16" : "md:pl-64"
+        )}
+      >
         <Topbar
           title={title}
           subtitle={subtitle}
           onOpenMobileMenu={() => setMobileMenuOpen(true)}
+          isSidebarCollapsed={isSidebarCollapsed}
+          onToggleCollapse={toggleSidebarCollapse}
         />
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto pb-20 md:pb-8">
+        <main
+          className={cn(
+            "flex-1 p-4 sm:p-6 lg:p-8 w-full mx-auto pb-20 md:pb-8",
+            fullWidth ? "max-w-none" : "max-w-7xl"
+          )}
+        >
           {children}
         </main>
       </div>

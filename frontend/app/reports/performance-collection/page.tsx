@@ -572,6 +572,7 @@ function PerformanceCollectionReportContent() {
     <DashboardLayout
       title="Performance & Collection Report"
       subtitle="Monthly performance benchmarks, milestone intervals & customer collection ledger"
+      fullWidth={true}
     >
       <div className="space-y-6 pb-12">
         {/* Top Header & Actions Bar */}

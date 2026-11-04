@@ -45,14 +45,17 @@ class ExecutiveCollectionService:
         teams_res = await self.db.execute(teams_stmt)
         teams = list(teams_res.scalars().all())
 
-        # 2. Fetch Users
+        # 2. Fetch Users (Exclude system Admin and Sub-Admin accounts)
         users_stmt = (
             select(User)
             .options(
                 selectinload(User.team),
                 selectinload(User.reporting_manager),
             )
-            .where(User.is_active.is_(True))
+            .where(
+                User.is_active.is_(True),
+                User.role.notin_([UserRole.ADMIN, UserRole.SUB_ADMIN]),
+            )
             .order_by(User.full_name.asc())
         )
         if team_id:

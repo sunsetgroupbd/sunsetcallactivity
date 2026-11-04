@@ -990,7 +990,7 @@ class PerformanceCollectionService:
             .order_by(DailyActivityReport.report_date.desc(), SalesCollectionEntry.id.desc())
         )
 
-        conditions = []
+        conditions: List[Any] = []
         if customer_phone and customer_phone.strip():
             clean_digits = re.sub(r"\D", "", customer_phone.strip())
             if len(clean_digits) >= 6:

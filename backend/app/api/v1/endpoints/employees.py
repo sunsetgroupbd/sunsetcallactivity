@@ -68,6 +68,10 @@ async def create_employee(
         "password_hash": hash_password(data.password),
         "role": data.role,
         "is_active": data.is_active,
+        "team_id": data.team_id,
+        "reporting_manager_id": data.reporting_manager_id,
+        "client_count": data.client_count or 0,
+        "client_share_count": data.client_share_count or 0,
     }
     if data.id is not None:
         user_kwargs["id"] = data.id

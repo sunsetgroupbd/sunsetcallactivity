@@ -25,9 +25,11 @@ from app.schemas.performance_collection_report import (
     MilestoneCheckpointRead,
     CustomerDetailResponse,
 )
+from app.schemas.executive_collection_report import ExecutiveCollectionReportResponse
 from app.services.report_service import ReportService
 from app.services.dashboard_service import DashboardService
 from app.services.performance_collection_service import PerformanceCollectionService
+from app.services.executive_collection_service import ExecutiveCollectionService
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 
@@ -98,6 +100,18 @@ async def get_employee_performance_collection_report(
         date_to=date_to,
         lead_status_filter=lead_status,
     )
+
+
+@router.get("/executive-collection", response_model=ExecutiveCollectionReportResponse)
+async def get_executive_collection_report(
+    date: Optional[date] = Query(None, description="Report target date (e.g. 2026-11-03)"),
+    team_id: Optional[int] = Query(None, description="Optional team filter"),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate Executive Wise Collection Sheet matching the executive team layout."""
+    svc = ExecutiveCollectionService(db)
+    return await svc.get_report_data(report_date=date, team_id=team_id)
 
 
 @router.get("/customer-detail", response_model=Optional[CustomerDetailResponse])

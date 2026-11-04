@@ -24,6 +24,8 @@ import {
   FileSpreadsheet,
   CheckCircle,
   Info,
+  Layers,
+  Save,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import {
@@ -39,7 +41,7 @@ import {
 } from "@/components/ui";
 import { useAuth } from "@/lib/auth-context";
 import { api, ApiError } from "@/lib/api";
-import { User, UserRole, BulkUploadEmployeesResponse } from "@/types";
+import { User, UserRole, BulkUploadEmployeesResponse, Team } from "@/types";
 import { formatReadableDate, formatEmployeeId } from "@/lib/utils";
 
 function renderRoleBadge(userRole: UserRole) {
@@ -117,8 +119,26 @@ export default function EmployeesPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [role, setRole] = useState<UserRole>("employee");
   const [isActive, setIsActive] = useState(true);
+  const [teamId, setTeamId] = useState<number | "">("");
+  const [reportingManagerId, setReportingManagerId] = useState<number | "">("");
+  const [clientCount, setClientCount] = useState<number>(0);
+  const [clientShareCount, setClientShareCount] = useState<number>(0);
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Teams & Hierarchy states
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [isManageTeamsOpen, setIsManageTeamsOpen] = useState(false);
+  const [newTeamName, setNewTeamName] = useState("");
+  const [newTeamDirector, setNewTeamDirector] = useState("");
+  const [newTeamOrder, setNewTeamOrder] = useState(0);
+  const [editingTeamId, setEditingTeamId] = useState<number | null>(null);
+  const [editTeamName, setEditTeamName] = useState("");
+  const [editTeamDirector, setEditTeamDirector] = useState("");
+  const [editTeamOrder, setEditTeamOrder] = useState(0);
+  const [editTeamActive, setEditTeamActive] = useState(true);
+  const [teamFormSubmitting, setTeamFormSubmitting] = useState(false);
+  const [teamFormError, setTeamFormError] = useState<string | null>(null);
 
   // Bulk CSV Upload states
   const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
@@ -175,9 +195,19 @@ export default function EmployeesPage() {
     }
   }, [debouncedSearch, roleFilter, statusFilter]);
 
+  const loadTeams = useCallback(async () => {
+    try {
+      const data = await api.teams.list(true);
+      setTeams(data);
+    } catch (err) {
+      console.error("Failed to load teams:", err);
+    }
+  }, []);
+
   useEffect(() => {
     loadEmployees();
-  }, [loadEmployees]);
+    loadTeams();
+  }, [loadEmployees, loadTeams]);
 
   // Instant client-side filter fallback so typing has 0ms perceived latency
   const displayedEmployees = useMemo(() => {
@@ -229,6 +259,10 @@ export default function EmployeesPage() {
     setShowPassword(false);
     setRole("employee");
     setIsActive(true);
+    setTeamId("");
+    setReportingManagerId("");
+    setClientCount(0);
+    setClientShareCount(0);
     setFormError(null);
     setIsCreateOpen(true);
   };
@@ -245,6 +279,10 @@ export default function EmployeesPage() {
     setShowPassword(false);
     setRole(emp.role);
     setIsActive(emp.is_active);
+    setTeamId(emp.team_id ?? "");
+    setReportingManagerId(emp.reporting_manager_id ?? "");
+    setClientCount(emp.client_count || 0);
+    setClientShareCount(emp.client_share_count || 0);
     setFormError(null);
     setIsCreateOpen(true);
   };
@@ -335,6 +373,88 @@ export default function EmployeesPage() {
     }
   };
 
+  const handleCreateTeam = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTeamName.trim()) return;
+    setTeamFormSubmitting(true);
+    setTeamFormError(null);
+    try {
+      await api.teams.create({
+        name: newTeamName.trim(),
+        director_name: newTeamDirector.trim() || null,
+        display_order: Number(newTeamOrder) || 0,
+        is_active: true,
+      });
+      setNewTeamName("");
+      setNewTeamDirector("");
+      setNewTeamOrder(0);
+      await loadTeams();
+      setStatusMessage({
+        type: "success",
+        text: `Team "${newTeamName.trim()}" created successfully.`,
+      });
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
+        setTeamFormError(err.message);
+      } else {
+        setTeamFormError("Failed to create team.");
+      }
+    } finally {
+      setTeamFormSubmitting(false);
+    }
+  };
+
+  const handleUpdateTeam = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTeamId || !editTeamName.trim()) return;
+    setTeamFormSubmitting(true);
+    setTeamFormError(null);
+    try {
+      await api.teams.update(editingTeamId, {
+        name: editTeamName.trim(),
+        director_name: editTeamDirector.trim() || null,
+        display_order: Number(editTeamOrder) || 0,
+        is_active: editTeamActive,
+      });
+      setEditingTeamId(null);
+      await loadTeams();
+      await loadEmployees();
+      setStatusMessage({
+        type: "success",
+        text: `Team "${editTeamName.trim()}" updated successfully.`,
+      });
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
+        setTeamFormError(err.message);
+      } else {
+        setTeamFormError("Failed to update team.");
+      }
+    } finally {
+      setTeamFormSubmitting(false);
+    }
+  };
+
+  const handleDeleteTeam = async (id: number, name: string) => {
+    if (!window.confirm(`Are you sure you want to delete team "${name}"? Members assigned to this team will be unassigned.`)) {
+      return;
+    }
+    try {
+      await api.teams.delete(id);
+      await loadTeams();
+      await loadEmployees();
+      setStatusMessage({
+        type: "success",
+        text: `Team "${name}" deleted successfully.`,
+      });
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
+        setTeamFormError(err.message);
+      } else {
+        setTeamFormError("Failed to delete team.");
+      }
+    }
+  };
+
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormSubmitting(true);
@@ -359,6 +479,10 @@ export default function EmployeesPage() {
           password?: string;
           phone?: string | null;
           designation?: string | null;
+          team_id?: number | null;
+          reporting_manager_id?: number | null;
+          client_count?: number;
+          client_share_count?: number;
         } = {
           full_name: fullName.trim(),
           email: email.trim(),
@@ -366,6 +490,10 @@ export default function EmployeesPage() {
           designation: designation.trim() || null,
           role,
           is_active: isActive,
+          team_id: teamId ? Number(teamId) : null,
+          reporting_manager_id: reportingManagerId ? Number(reportingManagerId) : null,
+          client_count: Number(clientCount) || 0,
+          client_share_count: Number(clientShareCount) || 0,
         };
         if (password.trim()) {
           payload.password = password.trim();
@@ -420,6 +548,10 @@ export default function EmployeesPage() {
           phone: phone.trim() || null,
           designation: designation.trim() || null,
           role,
+          team_id: teamId ? Number(teamId) : null,
+          reporting_manager_id: reportingManagerId ? Number(reportingManagerId) : null,
+          client_count: Number(clientCount) || 0,
+          client_share_count: Number(clientShareCount) || 0,
         });
         setEmployees((prev) => [created, ...prev]);
         await loadEmployees();
@@ -527,7 +659,20 @@ export default function EmployeesPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setTeamFormError(null);
+                    setEditingTeamId(null);
+                    setIsManageTeamsOpen(true);
+                  }}
+                  className="bg-indigo-50 text-indigo-800 border-indigo-300 hover:bg-indigo-100 font-semibold"
+                >
+                  <Layers className="w-4 h-4 mr-1.5 text-indigo-600" />
+                  Manage Teams
+                </Button>
                 <Button
                   variant="secondary"
                   size="sm"
@@ -638,7 +783,19 @@ export default function EmployeesPage() {
                     {emp.designation && (
                       <p className="text-xs font-medium text-emerald-700 mt-0.5">{emp.designation}</p>
                     )}
-                    <p className="text-xs text-slate-500 font-mono mt-0.5">@{emp.username}</p>
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      <span className="text-xs text-slate-500 font-mono">@{emp.username}</span>
+                      {emp.team_name && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-200">
+                          {emp.team_name}
+                        </span>
+                      )}
+                      {emp.reporting_manager_name && (
+                        <span className="text-[10px] font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                          C.O: {emp.reporting_manager_name}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Contact Info (Email & Phone) */}
@@ -696,9 +853,10 @@ export default function EmployeesPage() {
                 <tr className="bg-slate-100/70 border-b border-slate-200 text-slate-700 text-[11px] font-semibold">
                   <th className="py-2.5 px-3 w-28">Employee ID</th>
                   <th className="py-2.5 px-4">Full Name</th>
+                  <th className="py-2.5 px-3">Team & C.O.</th>
+                  <th className="py-2.5 px-3 text-center">Clients / Share</th>
                   <th className="py-2.5 px-3">Username</th>
-                  <th className="py-2.5 px-3">Email</th>
-                  <th className="py-2.5 px-3">Phone</th>
+                  <th className="py-2.5 px-3">Contact</th>
                   <th className="py-2.5 px-3 text-center">Role</th>
                   <th className="py-2.5 px-3 text-center">Status</th>
                   <th className="py-2.5 px-3">Member Since</th>
@@ -749,17 +907,36 @@ export default function EmployeesPage() {
                           </div>
                         )}
                       </td>
+                      <td className="py-3 px-3">
+                        {emp.team_name ? (
+                          <div className="font-semibold text-blue-900 text-[11px]">
+                            {emp.team_name}
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 text-[11px] italic">Unassigned</span>
+                        )}
+                        {emp.reporting_manager_name && (
+                          <div className="text-[10px] text-slate-500 font-medium">
+                            C.O: {emp.reporting_manager_name}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3 px-3 text-center">
+                        <span className="inline-flex items-center gap-1.5 font-mono text-[11px] bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+                          <span className="text-slate-700 font-semibold" title="Clients">{emp.client_count || 0} C</span>
+                          <span className="text-slate-300">/</span>
+                          <span className="text-emerald-700 font-semibold" title="Shares">{emp.client_share_count || 0} S</span>
+                        </span>
+                      </td>
                       <td className="py-3 px-3 text-slate-600 font-mono text-[11px]">
                         @{emp.username}
                       </td>
-                      <td className="py-3 px-3 text-slate-600">{emp.email}</td>
-                      <td className="py-3 px-3 text-slate-700 font-mono text-[11px] whitespace-nowrap">
-                        {emp.phone ? (
-                          <a href={`tel:${emp.phone}`} className="hover:text-green-700 hover:underline">
+                      <td className="py-3 px-3">
+                        <div className="text-slate-700 text-[11px]">{emp.email}</div>
+                        {emp.phone && (
+                          <div className="text-emerald-700 font-mono text-[10px] font-medium">
                             {emp.phone}
-                          </a>
-                        ) : (
-                          <span className="text-slate-400">—</span>
+                          </div>
                         )}
                       </td>
                       <td className="py-3 px-3 text-center">
@@ -1013,6 +1190,97 @@ export default function EmployeesPage() {
                   </select>
                 </div>
               )}
+            </div>
+
+            {/* Team & Hierarchy Assignment */}
+            <div className="pt-3 border-t border-slate-200 space-y-3 bg-slate-50/70 p-3 rounded-lg border">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-indigo-600" />
+                  Team & Hierarchy Assignment
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsManageTeamsOpen(true);
+                  }}
+                  className="text-[11px] font-semibold text-indigo-700 hover:text-indigo-900 hover:underline"
+                >
+                  + Add / Edit Teams
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    Assigned Team
+                  </label>
+                  <select
+                    value={teamId}
+                    onChange={(e) => setTeamId(e.target.value ? Number(e.target.value) : "")}
+                    className="w-full border border-slate-300 rounded px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white"
+                  >
+                    <option value="">None (Unassigned)</option>
+                    {teams.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} {t.director_name ? `(${t.director_name})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    Reporting Manager (C.O.)
+                  </label>
+                  <select
+                    value={reportingManagerId}
+                    onChange={(e) => setReportingManagerId(e.target.value ? Number(e.target.value) : "")}
+                    className="w-full border border-slate-300 rounded px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white"
+                  >
+                    <option value="">None (Reports to Top / Director)</option>
+                    {employees
+                      .filter((e) => !editingEmployee || e.id !== editingEmployee.id)
+                      .map((e) => (
+                        <option key={e.id} value={e.id}>
+                          {e.full_name} ({e.designation || e.role.toUpperCase()})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    Client Count
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={clientCount}
+                    onChange={(e) => setClientCount(Number(e.target.value) || 0)}
+                    className="w-full border border-slate-300 rounded px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-0.5">Base assigned clients (or auto from sales)</p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    Assigned Share Count
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={clientShareCount}
+                    onChange={(e) => setClientShareCount(Number(e.target.value) || 0)}
+                    className="w-full border border-slate-300 rounded px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-0.5">Column 'Sahre' in executive report</p>
+                </div>
+              </div>
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
@@ -1289,6 +1557,224 @@ export default function EmployeesPage() {
               >
                 Delete Account
               </Button>
+            </div>
+          </div>
+        </Modal>
+        {/* ── Manage Teams Modal ────────────────────────────────────────────── */}
+        <Modal
+          isOpen={isManageTeamsOpen}
+          onClose={() => {
+            setIsManageTeamsOpen(false);
+            setEditingTeamId(null);
+          }}
+          title="Manage Dynamic Teams & Hierarchy"
+          description="Create, rename, reorder, or remove team groupings. Renaming a team automatically updates all assigned members."
+        >
+          <div className="space-y-4">
+            {teamFormError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800">
+                {teamFormError}
+              </div>
+            )}
+
+            {/* Existing Teams List */}
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider block mb-2">
+                Current Teams ({teams.length})
+              </span>
+
+              {teams.length === 0 ? (
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-500 text-center">
+                  No teams created yet. Add your first team below.
+                </div>
+              ) : (
+                teams.map((t) => (
+                  <div
+                    key={t.id}
+                    className="p-3 bg-white border border-slate-200 rounded-lg shadow-2xs flex flex-col gap-2 transition hover:border-slate-300"
+                  >
+                    {editingTeamId === t.id ? (
+                      <form onSubmit={handleUpdateTeam} className="space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">
+                              Team Name *
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={editTeamName}
+                              onChange={(e) => setEditTeamName(e.target.value)}
+                              className="w-full border border-slate-300 rounded px-2.5 py-1 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-600 bg-white"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">
+                              Director / Head Name
+                            </label>
+                            <input
+                              type="text"
+                              value={editTeamDirector}
+                              onChange={(e) => setEditTeamDirector(e.target.value)}
+                              placeholder="e.g. Gazi Sir"
+                              className="w-full border border-slate-300 rounded px-2.5 py-1 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-600 bg-white"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-1">
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-1.5 text-xs">
+                              <span className="text-[11px] text-slate-600 font-medium">Order:</span>
+                              <input
+                                type="number"
+                                value={editTeamOrder}
+                                onChange={(e) => setEditTeamOrder(Number(e.target.value) || 0)}
+                                className="w-14 border border-slate-300 rounded px-1.5 py-0.5 text-xs text-center"
+                              />
+                            </div>
+                            <label className="flex items-center gap-1 text-xs text-slate-700 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={editTeamActive}
+                                onChange={(e) => setEditTeamActive(e.target.checked)}
+                                className="rounded text-indigo-600"
+                              />
+                              <span>Active</span>
+                            </label>
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setEditingTeamId(null)}
+                              disabled={teamFormSubmitting}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              type="submit"
+                              variant="primary"
+                              size="sm"
+                              loading={teamFormSubmitting}
+                              className="bg-indigo-600 hover:bg-indigo-700"
+                            >
+                              <Save className="w-3.5 h-3.5 mr-1" />
+                              Save Changes
+                            </Button>
+                          </div>
+                        </div>
+                      </form>
+                    ) : (
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-900 text-xs">{t.name}</span>
+                            {t.director_name && (
+                              <span className="text-[11px] text-indigo-700 font-medium bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-200">
+                                {t.director_name}
+                              </span>
+                            )}
+                            <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded font-mono">
+                              Seq #{t.display_order}
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-slate-500 mt-0.5 block">
+                            {t.member_count} active {t.member_count === 1 ? "member" : "members"} assigned
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingTeamId(t.id);
+                              setEditTeamName(t.name);
+                              setEditTeamDirector(t.director_name || "");
+                              setEditTeamOrder(t.display_order);
+                              setEditTeamActive(t.is_active);
+                            }}
+                            className="p-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition"
+                            title="Edit Team"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteTeam(t.id, t.name)}
+                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition"
+                            title="Delete Team"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Add New Team Box */}
+            <div className="pt-3 border-t border-slate-200">
+              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider block mb-2">
+                + Create New Team
+              </span>
+              <form onSubmit={handleCreateTeam} className="space-y-2 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">
+                      Team Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Gazi Sir Team"
+                      value={newTeamName}
+                      onChange={(e) => setNewTeamName(e.target.value)}
+                      className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-600 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">
+                      Director Name
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Gazi Sir"
+                      value={newTeamDirector}
+                      onChange={(e) => setNewTeamDirector(e.target.value)}
+                      className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-600 bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <span className="text-[11px] text-slate-600 font-medium">Display Sequence:</span>
+                    <input
+                      type="number"
+                      value={newTeamOrder}
+                      onChange={(e) => setNewTeamOrder(Number(e.target.value) || 0)}
+                      className="w-16 border border-slate-300 rounded px-1.5 py-0.5 text-xs text-center bg-white"
+                    />
+                  </div>
+
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    size="sm"
+                    loading={teamFormSubmitting}
+                    disabled={teamFormSubmitting || !newTeamName.trim()}
+                    className="bg-indigo-600 hover:bg-indigo-700"
+                  >
+                    <Plus className="w-3.5 h-3.5 mr-1" />
+                    Add Team
+                  </Button>
+                </div>
+              </form>
             </div>
           </div>
         </Modal>

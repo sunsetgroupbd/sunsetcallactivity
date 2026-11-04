@@ -50,6 +50,7 @@ export function Sidebar({
     ...(isAdmin || isSubAdmin
       ? [
           { name: "Performance & Collection", href: "/reports/performance-collection", icon: Target },
+          { name: "Executive Collection", href: "/reports/executive-collection", icon: FileSpreadsheet },
           { name: "Employees", href: "/employees", icon: UserCheck },
           { name: "Settings", href: "/settings", icon: Settings },
         ]

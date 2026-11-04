@@ -14,8 +14,69 @@ export interface User {
   full_name: string;
   role: UserRole;
   is_active: boolean;
+  team_id?: number | null;
+  team_name?: string | null;
+  reporting_manager_id?: number | null;
+  reporting_manager_name?: string | null;
+  client_count?: number;
+  client_share_count?: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface Team {
+  id: number;
+  name: string;
+  director_name?: string | null;
+  display_order: number;
+  is_active: boolean;
+  member_count: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ExecutiveCollectionRow {
+  sl_no?: number | null;
+  employee_id?: number | null;
+  name: string;
+  position: string;
+  is_manager: boolean;
+  client: number;
+  share: number;
+  mgt_given_target: number;
+  achieved: number;
+  achievement_pct: number;
+  dues: number;
+  token: number;
+  sold_share: number;
+  new_sales: number;
+  emi: number;
+  total_collection: number;
+}
+
+export interface COGroup {
+  co_id?: number | null;
+  co_name: string;
+  co_designation: string;
+  rows: ExecutiveCollectionRow[];
+  totals: ExecutiveCollectionRow;
+}
+
+export interface TeamGroup {
+  team_id?: number | null;
+  team_name: string;
+  director_name?: string | null;
+  co_groups: COGroup[];
+  totals: ExecutiveCollectionRow;
+}
+
+export interface ExecutiveCollectionReportResponse {
+  report_date: string;
+  date_display: string;
+  month_display: string;
+  date_range_label: string;
+  teams: TeamGroup[];
+  grand_total: ExecutiveCollectionRow;
 }
 
 export interface BulkUploadEmployeesResponse {

@@ -27,6 +27,8 @@ import {
   MilestoneCheckpointsBulkSaveRequest,
   MilestoneCheckpointRead,
   CustomerDetailResponse,
+  ExecutiveCollectionReportResponse,
+  Team,
 } from "@/types";
 
 const API_BASE =
@@ -417,6 +419,18 @@ export const api = {
         `/reports/employee-performance-collection${q ? `?${q}` : ""}`
       );
     },
+    getExecutiveCollectionReport: async (params?: {
+      date?: string;
+      team_id?: number;
+    }): Promise<ExecutiveCollectionReportResponse> => {
+      const search = new URLSearchParams();
+      if (params?.date) search.set("date", params.date);
+      if (params?.team_id) search.set("team_id", String(params.team_id));
+      const q = search.toString();
+      return request<ExecutiveCollectionReportResponse>(
+        `/reports/executive-collection${q ? `?${q}` : ""}`
+      );
+    },
     saveMilestoneCheckpoints: async (
       data: MilestoneCheckpointsBulkSaveRequest
     ): Promise<MilestoneCheckpointRead[]> => {
@@ -742,6 +756,10 @@ export const api = {
       username: string;
       password: string;
       role: UserRole;
+      team_id?: number | null;
+      reporting_manager_id?: number | null;
+      client_count?: number;
+      client_share_count?: number;
     }): Promise<User> => {
       return request<User>("/employees", {
         method: "POST",
@@ -759,6 +777,10 @@ export const api = {
         role: UserRole;
         is_active: boolean;
         password?: string;
+        team_id?: number | null;
+        reporting_manager_id?: number | null;
+        client_count?: number;
+        client_share_count?: number;
       }>
     ): Promise<User> => {
       return request<User>(`/employees/${userId}`, {
@@ -775,6 +797,49 @@ export const api = {
       return request<BulkUploadEmployeesResponse>("/employees/bulk-upload", {
         method: "POST",
         body: formData,
+      });
+    },
+  },
+
+  teams: {
+    list: async (includeInactive = false): Promise<Team[]> => {
+      const q = includeInactive ? "?include_inactive=true" : "";
+      return request<Team[]>(`/teams${q}`);
+    },
+    create: async (data: {
+      name: string;
+      director_name?: string | null;
+      display_order?: number;
+      is_active?: boolean;
+    }): Promise<Team> => {
+      return request<Team>("/teams", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+    update: async (
+      teamId: number,
+      data: Partial<{
+        name: string;
+        director_name?: string | null;
+        display_order?: number;
+        is_active?: boolean;
+      }>
+    ): Promise<Team> => {
+      return request<Team>(`/teams/${teamId}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      });
+    },
+    delete: async (teamId: number): Promise<void> => {
+      return request<void>(`/teams/${teamId}`, {
+        method: "DELETE",
+      });
+    },
+    bulkAssign: async (teamId: number, employeeIds: number[]): Promise<{ message: string }> => {
+      return request<{ message: string }>(`/teams/${teamId}/assign`, {
+        method: "POST",
+        body: JSON.stringify({ team_id: teamId, employee_ids: employeeIds }),
       });
     },
   },

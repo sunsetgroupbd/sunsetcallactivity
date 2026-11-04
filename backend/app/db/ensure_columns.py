@@ -29,7 +29,7 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
                         except Exception as e:
                             logger.warning("Error adding %s to sales_collection_entries: %s", col_name, e)
 
-                # Ensure users.phone and users.designation exist
+                # Ensure users.phone, users.designation, users.team_id, users.reporting_manager_id, users.client_share_count exist
                 result_users = await conn.execute(text("PRAGMA table_info(users)"))
                 user_cols = {row[1] for row in result_users.fetchall()}
                 if user_cols and "phone" not in user_cols:
@@ -45,6 +45,60 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
                         logger.info("Added designation to users table")
                     except Exception as e:
                         logger.warning("Error adding designation to users: %s", e)
+
+                if user_cols and "team_id" not in user_cols:
+                    try:
+                        await conn.execute(text("ALTER TABLE users ADD COLUMN team_id INTEGER REFERENCES teams(id) ON DELETE SET NULL"))
+                        logger.info("Added team_id to users table")
+                    except Exception as e:
+                        logger.warning("Error adding team_id to users: %s", e)
+
+                if user_cols and "reporting_manager_id" not in user_cols:
+                    try:
+                        await conn.execute(text("ALTER TABLE users ADD COLUMN reporting_manager_id INTEGER REFERENCES users(id) ON DELETE SET NULL"))
+                        logger.info("Added reporting_manager_id to users table")
+                    except Exception as e:
+                        logger.warning("Error adding reporting_manager_id to users: %s", e)
+
+                if user_cols and "client_count" not in user_cols:
+                    try:
+                        await conn.execute(text("ALTER TABLE users ADD COLUMN client_count INTEGER NOT NULL DEFAULT 0"))
+                        logger.info("Added client_count to users table")
+                    except Exception as e:
+                        logger.warning("Error adding client_count to users: %s", e)
+
+                if user_cols and "client_share_count" not in user_cols:
+                    try:
+                        await conn.execute(text("ALTER TABLE users ADD COLUMN client_share_count INTEGER NOT NULL DEFAULT 0"))
+                        logger.info("Added client_share_count to users table")
+                    except Exception as e:
+                        logger.warning("Error adding client_share_count to users: %s", e)
+
+                # Ensure teams table exists for dynamic team hierarchy
+                await conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS teams (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name VARCHAR(100) NOT NULL UNIQUE,
+                        director_name VARCHAR(150),
+                        display_order INTEGER NOT NULL DEFAULT 0,
+                        is_active BOOLEAN NOT NULL DEFAULT 1,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_teams_name ON teams(name)"))
+
+                # Seed default teams if empty
+                res_teams = await conn.execute(text("SELECT COUNT(*) FROM teams"))
+                team_count = res_teams.scalar() or 0
+                if team_count == 0:
+                    await conn.execute(text("""
+                        INSERT INTO teams (name, director_name, display_order, is_active)
+                        VALUES 
+                            ('Gazi Sir Team', 'Gazi Sir', 1, 1),
+                            ('Hasib Sir Team', 'Hasib Sir', 2, 1)
+                    """))
+                    logger.info("Seeded default teams: Gazi Sir Team and Hasib Sir Team")
 
                 # Ensure daily_targets.emi_target exists
                 result_targets = await conn.execute(text("PRAGMA table_info(daily_targets)"))
@@ -119,6 +173,29 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
             "ALTER TABLE sales_collection_entries ADD COLUMN IF NOT EXISTS reschedule_history JSONB",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS designation VARCHAR(150)",
+            """
+            CREATE TABLE IF NOT EXISTS teams (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) NOT NULL UNIQUE,
+                director_name VARCHAR(150),
+                display_order INTEGER NOT NULL DEFAULT 0,
+                is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS ix_teams_name ON teams(name)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS team_id INTEGER REFERENCES teams(id) ON DELETE SET NULL",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS reporting_manager_id INTEGER REFERENCES users(id) ON DELETE SET NULL",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS client_count INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS client_share_count INTEGER NOT NULL DEFAULT 0",
+            """
+            INSERT INTO teams (name, director_name, display_order, is_active)
+            VALUES 
+                ('Gazi Sir Team', 'Gazi Sir', 1, TRUE),
+                ('Hasib Sir Team', 'Hasib Sir', 2, TRUE)
+            ON CONFLICT (name) DO NOTHING
+            """,
             "ALTER TABLE daily_targets ADD COLUMN IF NOT EXISTS emi_target NUMERIC(15, 2)",
             """
             CREATE TABLE IF NOT EXISTS milestone_checkpoints (

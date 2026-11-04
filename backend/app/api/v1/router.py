@@ -14,6 +14,7 @@ from app.api.v1.endpoints import (
     settings,
     reminders,
     notices,
+    teams,
 )
 
 api_router = APIRouter()
@@ -28,3 +29,4 @@ api_router.include_router(employees.router)
 api_router.include_router(settings.router)
 api_router.include_router(reminders.router)
 api_router.include_router(notices.router)
+api_router.include_router(teams.router)

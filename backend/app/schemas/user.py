@@ -17,6 +17,10 @@ class UserBase(BaseModel):
     username: str = Field(..., min_length=3, max_length=100, pattern=r"^[\w.-]+$")
     role: UserRole = UserRole.EMPLOYEE
     is_active: bool = True
+    team_id: Optional[int] = None
+    reporting_manager_id: Optional[int] = None
+    client_count: int = 0
+    client_share_count: int = 0
 
 
 class UserCreate(UserBase):
@@ -34,10 +38,16 @@ class UserUpdate(BaseModel):
     role: Optional[UserRole] = None
     is_active: Optional[bool] = None
     password: Optional[str] = Field(None, min_length=8, max_length=128)
+    team_id: Optional[int] = None
+    reporting_manager_id: Optional[int] = None
+    client_count: Optional[int] = None
+    client_share_count: Optional[int] = None
 
 
 class UserRead(UserBase):
     id: int
+    team_name: Optional[str] = None
+    reporting_manager_name: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

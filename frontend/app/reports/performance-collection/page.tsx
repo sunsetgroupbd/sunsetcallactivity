@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, Suspense } from "react";
+import { useEffect, useState, useMemo, useRef, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
@@ -30,6 +30,12 @@ import {
   Layers,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
+  ChevronsLeft,
+  ChevronsRight,
+  ArrowLeftRight,
+  Maximize2,
+  Minimize2,
   Phone,
   ShieldAlert,
   ArrowRight,
@@ -95,6 +101,82 @@ function PerformanceCollectionReportContent() {
   );
 
   const [checkpointRows, setCheckpointRows] = useState<MilestoneCheckpointItem[]>(initialCheckpoints);
+
+  // Horizontal Scroll & Viewport Height Controls
+  const [section1HeightMode, setSection1HeightMode] = useState<"compact" | "full">("compact");
+  const [section2HeightMode, setSection2HeightMode] = useState<"compact" | "full">("compact");
+
+  const section1TableRef = useRef<HTMLDivElement>(null);
+  const section1TopScrollRef = useRef<HTMLDivElement>(null);
+  const [table1Scroll, setTable1Scroll] = useState({ canLeft: false, canRight: true });
+
+  const section2TableRef = useRef<HTMLDivElement>(null);
+  const section2TopScrollRef = useRef<HTMLDivElement>(null);
+  const [table2Scroll, setTable2Scroll] = useState({ canLeft: false, canRight: true });
+
+  const handleTable1Scroll = () => {
+    if (!section1TableRef.current) return;
+    const { scrollLeft, scrollWidth, clientWidth } = section1TableRef.current;
+    if (section1TopScrollRef.current && Math.abs(section1TopScrollRef.current.scrollLeft - scrollLeft) > 1) {
+      section1TopScrollRef.current.scrollLeft = scrollLeft;
+    }
+    setTable1Scroll({
+      canLeft: scrollLeft > 10,
+      canRight: scrollLeft < scrollWidth - clientWidth - 10,
+    });
+  };
+
+  const handleTopScroll1 = () => {
+    if (!section1TopScrollRef.current || !section1TableRef.current) return;
+    const { scrollLeft } = section1TopScrollRef.current;
+    if (Math.abs(section1TableRef.current.scrollLeft - scrollLeft) > 1) {
+      section1TableRef.current.scrollLeft = scrollLeft;
+    }
+  };
+
+  const scrollTable1 = (delta: number) => {
+    if (section1TableRef.current) {
+      section1TableRef.current.scrollBy({ left: delta, behavior: "smooth" });
+    }
+  };
+
+  const jumpTable1 = (toEnd: boolean) => {
+    if (section1TableRef.current) {
+      section1TableRef.current.scrollTo({ left: toEnd ? 9999 : 0, behavior: "smooth" });
+    }
+  };
+
+  const handleTable2Scroll = () => {
+    if (!section2TableRef.current) return;
+    const { scrollLeft, scrollWidth, clientWidth } = section2TableRef.current;
+    if (section2TopScrollRef.current && Math.abs(section2TopScrollRef.current.scrollLeft - scrollLeft) > 1) {
+      section2TopScrollRef.current.scrollLeft = scrollLeft;
+    }
+    setTable2Scroll({
+      canLeft: scrollLeft > 10,
+      canRight: scrollLeft < scrollWidth - clientWidth - 10,
+    });
+  };
+
+  const handleTopScroll2 = () => {
+    if (!section2TopScrollRef.current || !section2TableRef.current) return;
+    const { scrollLeft } = section2TopScrollRef.current;
+    if (Math.abs(section2TableRef.current.scrollLeft - scrollLeft) > 1) {
+      section2TableRef.current.scrollLeft = scrollLeft;
+    }
+  };
+
+  const scrollTable2 = (delta: number) => {
+    if (section2TableRef.current) {
+      section2TableRef.current.scrollBy({ left: delta, behavior: "smooth" });
+    }
+  };
+
+  const jumpTable2 = (toEnd: boolean) => {
+    if (section2TableRef.current) {
+      section2TableRef.current.scrollTo({ left: toEnd ? 9999 : 0, behavior: "smooth" });
+    }
+  };
 
   // Customer Detail Modal States
   const [selectedCustomerDetail, setSelectedCustomerDetail] = useState<CustomerDetailResponse | null>(null);
@@ -819,38 +901,132 @@ function PerformanceCollectionReportContent() {
               </div>
             </div>
 
+            {/* View Mode & Horizontal Scroll Toolbar */}
+            <div className="flex flex-wrap items-center justify-between gap-2.5 px-4 py-2.5 bg-slate-50 border-b border-slate-200 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                  <ArrowLeftRight className="h-3.5 w-3.5 text-emerald-700" />
+                  Horizontal Scroll:
+                </span>
+                <div className="inline-flex items-center rounded-lg border border-slate-300 bg-white shadow-2xs overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => scrollTable1(-300)}
+                    disabled={!table1Scroll.canLeft}
+                    className="p-1.5 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-white text-slate-700 transition"
+                    title="Slide columns left"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => jumpTable1(false)}
+                    className="px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-100 border-x border-slate-200 transition"
+                    title="Jump to Start (TG / New Sales / Leads)"
+                  >
+                    Start (TG/Leads)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => jumpTable1(true)}
+                    className="px-2 py-1 text-[11px] font-bold text-emerald-700 hover:bg-emerald-50 border-r border-slate-200 transition"
+                    title="Jump to End (Prediction / GL / Collection)"
+                  >
+                    End (GL & Coll) →
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => scrollTable1(300)}
+                    disabled={!table1Scroll.canRight}
+                    className="p-1.5 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-white text-slate-700 transition"
+                    title="Slide columns right"
+                  >
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500 hidden md:inline text-[11px]">View Height:</span>
+                <div className="inline-flex items-center rounded-lg border border-slate-200 bg-white p-0.5 shadow-2xs text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setSection1HeightMode("compact")}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-md font-semibold transition ${
+                      section1HeightMode === "compact"
+                        ? "bg-emerald-700 text-white shadow-2xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                    title="Comfortable scroll window with pinned visible horizontal scrollbar"
+                  >
+                    <Minimize2 className="h-3 w-3" />
+                    <span>Scroll Window</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSection1HeightMode("full")}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-md font-semibold transition ${
+                      section1HeightMode === "full"
+                        ? "bg-emerald-700 text-white shadow-2xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                    title="Full length view without vertical height limitation"
+                  >
+                    <Maximize2 className="h-3 w-3" />
+                    <span>Full Height</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Synchronized Top Horizontal Scrollbar */}
+            <div
+              ref={section1TopScrollRef}
+              onScroll={handleTopScroll1}
+              className="overflow-x-auto bg-slate-100/70 border-b border-slate-200 custom-table-scrollbar"
+              title="Drag this horizontal scrollbar to slide table columns left or right"
+            >
+              <div style={{ width: 1400, height: 8 }} />
+            </div>
+
             {/* Desktop Table */}
-            <div className={`${mobileViewMode === "cards" ? "hidden sm:block" : "block"} overflow-x-auto`}>
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50 text-[11px] uppercase tracking-wider text-slate-700">
-                    <th rowSpan={2} className="py-2.5 px-3 font-bold sticky left-0 bg-slate-50 z-20 border-r border-b border-slate-200 whitespace-nowrap min-w-[100px]">
+            <div
+              ref={section1TableRef}
+              onScroll={handleTable1Scroll}
+              className={`${mobileViewMode === "cards" ? "hidden sm:block" : "block"} overflow-x-auto custom-table-scrollbar ${
+                section1HeightMode === "compact" ? "max-h-[72vh] overflow-y-auto" : ""
+              } relative`}
+            >
+              <table className="w-full text-left text-xs border-collapse min-w-[1250px]">
+                <thead className="sticky top-0 z-20 shadow-xs">
+                  <tr className="border-b border-slate-200 bg-slate-100 text-[11px] uppercase tracking-wider text-slate-700">
+                    <th rowSpan={2} className="py-2.5 px-3 font-bold sticky left-0 bg-slate-100 z-30 border-r border-b border-slate-200 whitespace-nowrap min-w-[100px]">
                       Month / Period
                     </th>
-                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-right border-b border-slate-200 whitespace-nowrap min-w-[80px]">TG</th>
-                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-right text-emerald-700 border-b border-slate-200 whitespace-nowrap min-w-[80px]">New Sales</th>
-                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-right text-sky-700 border-b border-slate-200 whitespace-nowrap min-w-[80px]">EMI</th>
-                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-right border-b border-slate-200 whitespace-nowrap min-w-[55px]">Total Lead</th>
-                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-right border-b border-slate-200 whitespace-nowrap min-w-[55px]">Fair Lead</th>
-                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-right border-b border-slate-200 whitespace-nowrap min-w-[55px]">FB Leads</th>
-                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-right text-rose-700 border-b border-slate-200 whitespace-nowrap min-w-[40px]">HP</th>
-                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-right text-amber-700 border-b border-slate-200 whitespace-nowrap min-w-[40px]">P</th>
-                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-right text-sky-700 border-b border-slate-200 whitespace-nowrap min-w-[40px]">Fup</th>
-                    <th colSpan={4} className="py-1.5 px-2 font-bold text-center bg-slate-100 border-x border-b border-slate-200 text-slate-800 whitespace-nowrap">
+                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-right border-b border-slate-200 whitespace-nowrap min-w-[70px]">TG</th>
+                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-right text-emerald-700 border-b border-slate-200 whitespace-nowrap min-w-[75px]">New Sales</th>
+                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-right text-sky-700 border-b border-slate-200 whitespace-nowrap min-w-[75px]">EMI</th>
+                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-right border-b border-slate-200 whitespace-nowrap min-w-[50px]">Total Lead</th>
+                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-right border-b border-slate-200 whitespace-nowrap min-w-[50px]">Fair Lead</th>
+                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-right border-b border-slate-200 whitespace-nowrap min-w-[50px]">FB Leads</th>
+                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-right text-rose-700 border-b border-slate-200 whitespace-nowrap min-w-[38px]">HP</th>
+                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-right text-amber-700 border-b border-slate-200 whitespace-nowrap min-w-[38px]">P</th>
+                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-right text-sky-700 border-b border-slate-200 whitespace-nowrap min-w-[38px]">Fup</th>
+                    <th colSpan={4} className="py-1.5 px-2 font-bold text-center bg-slate-200 border-x border-b border-slate-300 text-slate-800 whitespace-nowrap">
                       Prediction from Emp
                     </th>
-                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-center border-b border-slate-200 whitespace-nowrap min-w-[45px]">GL</th>
-                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-center text-amber-700 border-b border-slate-200 whitespace-nowrap min-w-[45px]">Hold</th>
-                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-center text-rose-700 border-b border-slate-200 whitespace-nowrap min-w-[45px]">Cancel</th>
-                    <th rowSpan={2} className="py-2.5 px-3 font-bold text-center bg-slate-100 border-l border-b border-slate-200 text-slate-800 whitespace-nowrap min-w-[130px]">
-                      Total Lead (HP+P) / Collection
+                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-center border-b border-slate-200 whitespace-nowrap min-w-[42px]">GL</th>
+                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-center text-amber-700 border-b border-slate-200 whitespace-nowrap min-w-[42px]">Hold</th>
+                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-center text-rose-700 border-b border-slate-200 whitespace-nowrap min-w-[42px]">Cancel</th>
+                    <th rowSpan={2} className="py-2.5 px-2.5 font-bold text-center bg-slate-200 border-l border-b border-slate-300 text-slate-800 whitespace-nowrap min-w-[125px]">
+                      Total Lead (HP+P) / Coll
                     </th>
                   </tr>
-                  <tr className="border-b border-slate-200 bg-slate-50/90 text-[10px] text-slate-600 font-semibold">
-                    <th className="py-1 px-1.5 text-center text-slate-800 bg-slate-100/70 border-l border-slate-200 whitespace-nowrap min-w-[65px]">Total Calls</th>
-                    <th className="py-1 px-1.5 text-center text-emerald-700 bg-emerald-50/50 whitespace-nowrap min-w-[75px]">Sold from Fair Leads</th>
-                    <th className="py-1 px-1.5 text-center text-sky-700 bg-sky-50/50 whitespace-nowrap min-w-[75px]">Sold From FB Leads</th>
-                    <th className="py-1 px-1.5 text-center text-purple-700 bg-purple-50/50 border-r border-slate-200 whitespace-nowrap min-w-[75px]">Sold from Other Leads</th>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-[10px] text-slate-600 font-semibold">
+                    <th className="py-1 px-1.5 text-center text-slate-800 bg-slate-100 border-l border-slate-200 whitespace-nowrap min-w-[65px]">Total Calls</th>
+                    <th className="py-1 px-1 text-center text-emerald-700 bg-emerald-50 whitespace-nowrap min-w-[70px]">Sold Fair</th>
+                    <th className="py-1 px-1 text-center text-sky-700 bg-sky-50 whitespace-nowrap min-w-[70px]">Sold FB</th>
+                    <th className="py-1 px-1 text-center text-purple-700 bg-purple-50 border-r border-slate-200 whitespace-nowrap min-w-[70px]">Sold Other</th>
                   </tr>
                 </thead>
                 {report.monthly_performances.length === 0 ? (
@@ -907,7 +1083,7 @@ function PerformanceCollectionReportContent() {
                         {/* 1. Historical Month Rows (e.g. Sep-26, Oct-26) */}
                         {historyRows.map((hm: EmployeeMonthlyPerformance, hIdx: number) => (
                           <tr key={`hist-${hIdx}`} className="bg-slate-50/50 hover:bg-slate-100/60 transition">
-                            <td className="py-2.5 px-3 font-bold text-slate-700 sticky left-0 bg-slate-50/50 border-r border-slate-200">
+                            <td className="py-2.5 px-3 font-bold text-slate-700 sticky left-0 bg-slate-50 border-r border-slate-200 z-10">
                               {hm.month}
                             </td>
                             <td className="py-2.5 px-2 text-right font-medium text-slate-600">৳{formatMoney(hm.target_sales)}</td>
@@ -936,7 +1112,7 @@ function PerformanceCollectionReportContent() {
 
                         {/* 2. Active Month Summary Row (e.g. Nov-26) */}
                         <tr className="bg-emerald-50/30 hover:bg-emerald-50/50 font-medium transition border-y border-emerald-200/50">
-                          <td className="py-2.5 px-3 font-extrabold text-emerald-900 sticky left-0 bg-emerald-50/40 border-r border-slate-200">
+                          <td className="py-2.5 px-3 font-extrabold text-emerald-900 sticky left-0 bg-emerald-50 border-r border-slate-200 z-10">
                             {emp.month}
                           </td>
                           <td className="py-2.5 px-2 text-right font-semibold text-slate-900">৳{formatMoney(emp.target_sales || emp.target_collection)}</td>
@@ -965,13 +1141,15 @@ function PerformanceCollectionReportContent() {
                         {/* 3. The 6 Milestone Rows: Till 5th, Till 10th, ..., Till 30/31th */}
                         {intervalRows.map((inv: PerformanceIntervalSummary, iIdx: number) => (
                           <tr key={`inv-${iIdx}`} className={`hover:bg-slate-50 transition ${inv.is_manual ? "bg-amber-50/20" : "bg-white"}`}>
-                            <td className="py-2 px-3 font-semibold text-slate-800 sticky left-0 bg-white border-r border-slate-200 flex items-center justify-between">
-                              <span>{inv.label}</span>
-                              {inv.is_manual && (
-                                <span className="text-[8px] font-extrabold text-amber-800 bg-amber-100 px-1 py-0.2 rounded border border-amber-300">
-                                  Verified
-                                </span>
-                              )}
+                            <td className="py-2 px-3 font-semibold text-slate-800 sticky left-0 bg-white border-r border-slate-200 z-10">
+                              <div className="flex items-center justify-between gap-1">
+                                <span>{inv.label}</span>
+                                {inv.is_manual && (
+                                  <span className="text-[8px] font-extrabold text-amber-800 bg-amber-100 px-1 py-0.2 rounded border border-amber-300">
+                                    Verified
+                                  </span>
+                                )}
+                              </div>
                             </td>
                             <td className="py-2 px-2 text-right text-slate-400">-</td>
                             <td className="py-2 px-2 text-right font-bold text-emerald-700">৳{formatMoney(inv.new_sales)}</td>
@@ -1001,6 +1179,47 @@ function PerformanceCollectionReportContent() {
                   })
                 )}
               </table>
+
+              {/* Floating Bottom Scroll Pill Helper */}
+              <div className="sticky bottom-3 z-30 flex justify-center pointer-events-none mt-2 pb-2">
+                <div className="pointer-events-auto inline-flex items-center gap-2 bg-slate-900/90 text-white backdrop-blur px-3 py-1.5 rounded-full shadow-lg border border-slate-700 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => scrollTable1(-300)}
+                    disabled={!table1Scroll.canLeft}
+                    className="p-1 hover:bg-slate-800 rounded disabled:opacity-30 transition"
+                    title="Slide left"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => jumpTable1(false)}
+                    className="text-[11px] font-medium text-slate-300 hover:text-white px-1.5 transition"
+                  >
+                    Start
+                  </button>
+                  <span className="text-slate-600">•</span>
+                  <span className="text-[11px] text-slate-300 hidden sm:inline">Slide columns horizontally</span>
+                  <span className="text-slate-600">•</span>
+                  <button
+                    type="button"
+                    onClick={() => jumpTable1(true)}
+                    className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 px-1.5 transition"
+                  >
+                    View End (GL & Coll) →
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => scrollTable1(300)}
+                    disabled={!table1Scroll.canRight}
+                    className="p-1 hover:bg-slate-800 rounded disabled:opacity-30 transition"
+                    title="Slide right"
+                  >
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* Mobile Card View for Section 1 */}
@@ -1254,30 +1473,124 @@ function PerformanceCollectionReportContent() {
               </div>
             </div>
 
+            {/* View Mode & Horizontal Scroll Toolbar */}
+            <div className="flex flex-wrap items-center justify-between gap-2.5 px-4 py-2.5 bg-slate-50 border-b border-slate-200 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                  <ArrowLeftRight className="h-3.5 w-3.5 text-sky-700" />
+                  Horizontal Scroll:
+                </span>
+                <div className="inline-flex items-center rounded-lg border border-slate-300 bg-white shadow-2xs overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => scrollTable2(-300)}
+                    disabled={!table2Scroll.canLeft}
+                    className="p-1.5 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-white text-slate-700 transition"
+                    title="Slide columns left"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => jumpTable2(false)}
+                    className="px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-100 border-x border-slate-200 transition"
+                    title="Jump to Start (Customer ID & Name)"
+                  >
+                    Start (Customer)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => jumpTable2(true)}
+                    className="px-2 py-1 text-[11px] font-bold text-sky-700 hover:bg-sky-50 border-r border-slate-200 transition"
+                    title="Jump to End (Total Collection & Remarks)"
+                  >
+                    End (Coll & Remarks) →
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => scrollTable2(300)}
+                    disabled={!table2Scroll.canRight}
+                    className="p-1.5 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-white text-slate-700 transition"
+                    title="Slide columns right"
+                  >
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500 hidden md:inline text-[11px]">View Height:</span>
+                <div className="inline-flex items-center rounded-lg border border-slate-200 bg-white p-0.5 shadow-2xs text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setSection2HeightMode("compact")}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-md font-semibold transition ${
+                      section2HeightMode === "compact"
+                        ? "bg-sky-700 text-white shadow-2xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                    title="Comfortable scroll window with pinned visible horizontal scrollbar"
+                  >
+                    <Minimize2 className="h-3 w-3" />
+                    <span>Scroll Window</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSection2HeightMode("full")}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-md font-semibold transition ${
+                      section2HeightMode === "full"
+                        ? "bg-sky-700 text-white shadow-2xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                    title="Full length view without vertical height limitation"
+                  >
+                    <Maximize2 className="h-3 w-3" />
+                    <span>Full Height</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Synchronized Top Horizontal Scrollbar */}
+            <div
+              ref={section2TopScrollRef}
+              onScroll={handleTopScroll2}
+              className="overflow-x-auto bg-slate-100/70 border-b border-slate-200 custom-table-scrollbar"
+              title="Drag this horizontal scrollbar to slide table columns left or right"
+            >
+              <div style={{ width: 1400, height: 8 }} />
+            </div>
+
             {/* Desktop Table */}
-            <div className={`${mobileViewMode === "cards" ? "hidden sm:block" : "block"} overflow-x-auto`}>
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50 text-[11px] uppercase tracking-wider text-slate-600">
-                    <th className="py-3 px-3 font-bold sticky left-0 bg-slate-50 z-10 border-r border-slate-200">
+            <div
+              ref={section2TableRef}
+              onScroll={handleTable2Scroll}
+              className={`${mobileViewMode === "cards" ? "hidden sm:block" : "block"} overflow-x-auto custom-table-scrollbar ${
+                section2HeightMode === "compact" ? "max-h-[72vh] overflow-y-auto" : ""
+              } relative`}
+            >
+              <table className="w-full text-left text-xs border-collapse min-w-[1300px]">
+                <thead className="sticky top-0 z-20 shadow-xs">
+                  <tr className="border-b border-slate-200 bg-slate-100 text-[11px] uppercase tracking-wider text-slate-700">
+                    <th className="py-3 px-3 font-bold sticky left-0 bg-slate-100 z-30 border-r border-slate-200">
                       Customer ID & Name
                     </th>
-                    <th className="py-3 px-2.5 font-bold text-right text-emerald-700">Paid</th>
-                    <th className="py-3 px-2.5 font-bold text-right text-rose-700">Unpaid</th>
-                    <th className="py-3 px-2.5 font-bold">Collection Date</th>
-                    <th className="py-3 px-2.5 font-bold">IN/OUT Plan</th>
-                    <th className="py-3 px-2.5 font-bold">Date-1</th>
-                    <th className="py-3 px-2.5 font-bold">Date-2</th>
-                    <th className="py-3 px-2.5 font-bold text-right text-emerald-700">New Sales</th>
-                    <th className="py-3 px-2.5 font-bold text-right text-sky-700">TB</th>
-                    <th className="py-3 px-2.5 font-bold text-right text-sky-700">EMI</th>
-                    <th className="py-3 px-2.5 font-bold text-amber-700">Next Collec Date</th>
-                    <th className="py-3 px-2.5 font-bold text-amber-700">Next Collec Date 2</th>
-                    <th className="py-3 px-2.5 font-bold">Lead Status</th>
-                    <th className="py-3 px-2.5 font-bold">Lead Source</th>
-                    <th className="py-3 px-2.5 font-bold">Lead Source Date</th>
-                    <th className="py-3 px-2.5 font-bold text-right text-emerald-800">Total Collection</th>
-                    <th className="py-3 px-3 font-bold">Remarks</th>
+                    <th className="py-3 px-2.5 font-bold text-right text-emerald-700 whitespace-nowrap min-w-[75px]">Paid</th>
+                    <th className="py-3 px-2.5 font-bold text-right text-rose-700 whitespace-nowrap min-w-[75px]">Unpaid</th>
+                    <th className="py-3 px-2.5 font-bold whitespace-nowrap min-w-[95px]">Collection Date</th>
+                    <th className="py-3 px-2.5 font-bold whitespace-nowrap min-w-[85px]">IN/OUT Plan</th>
+                    <th className="py-3 px-2.5 font-bold whitespace-nowrap min-w-[85px]">Date-1</th>
+                    <th className="py-3 px-2.5 font-bold whitespace-nowrap min-w-[85px]">Date-2</th>
+                    <th className="py-3 px-2.5 font-bold text-right text-emerald-700 whitespace-nowrap min-w-[75px]">New Sales</th>
+                    <th className="py-3 px-2.5 font-bold text-right text-sky-700 whitespace-nowrap min-w-[70px]">TB</th>
+                    <th className="py-3 px-2.5 font-bold text-right text-sky-700 whitespace-nowrap min-w-[70px]">EMI</th>
+                    <th className="py-3 px-2.5 font-bold text-amber-700 whitespace-nowrap min-w-[110px]">Next Collec Date</th>
+                    <th className="py-3 px-2.5 font-bold text-amber-700 whitespace-nowrap min-w-[110px]">Next Collec Date 2</th>
+                    <th className="py-3 px-2.5 font-bold whitespace-nowrap min-w-[80px]">Lead Status</th>
+                    <th className="py-3 px-2.5 font-bold whitespace-nowrap min-w-[90px]">Lead Source</th>
+                    <th className="py-3 px-2.5 font-bold whitespace-nowrap min-w-[100px]">Lead Source Date</th>
+                    <th className="py-3 px-2.5 font-bold text-right text-emerald-800 whitespace-nowrap min-w-[95px]">Total Collection</th>
+                    <th className="py-3 px-3 font-bold whitespace-nowrap min-w-[120px]">Remarks</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -1402,6 +1715,47 @@ function PerformanceCollectionReportContent() {
                   )}
                 </tbody>
               </table>
+
+              {/* Floating Bottom Scroll Pill Helper */}
+              <div className="sticky bottom-3 z-30 flex justify-center pointer-events-none mt-2 pb-2">
+                <div className="pointer-events-auto inline-flex items-center gap-2 bg-slate-900/90 text-white backdrop-blur px-3 py-1.5 rounded-full shadow-lg border border-slate-700 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => scrollTable2(-300)}
+                    disabled={!table2Scroll.canLeft}
+                    className="p-1 hover:bg-slate-800 rounded disabled:opacity-30 transition"
+                    title="Slide left"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => jumpTable2(false)}
+                    className="text-[11px] font-medium text-slate-300 hover:text-white px-1.5 transition"
+                  >
+                    Start
+                  </button>
+                  <span className="text-slate-600">•</span>
+                  <span className="text-[11px] text-slate-300 hidden sm:inline">Slide customer columns</span>
+                  <span className="text-slate-600">•</span>
+                  <button
+                    type="button"
+                    onClick={() => jumpTable2(true)}
+                    className="text-[11px] font-bold text-sky-400 hover:text-sky-300 px-1.5 transition"
+                  >
+                    View End (Coll & Remarks) →
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => scrollTable2(300)}
+                    disabled={!table2Scroll.canRight}
+                    className="p-1 hover:bg-slate-800 rounded disabled:opacity-30 transition"
+                    title="Slide right"
+                  >
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* Mobile Card View for Section 2 */}

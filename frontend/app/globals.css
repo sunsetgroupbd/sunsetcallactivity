@@ -34,6 +34,28 @@ input::placeholder, textarea::placeholder {
   opacity: 1;
 }
 
+/* Highly visible horizontal scrollbars for large reporting tables */
+.custom-table-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #f1f5f9;
+}
+.custom-table-scrollbar::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+.custom-table-scrollbar::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 6px;
+}
+.custom-table-scrollbar::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 6px;
+  border: 2px solid #f1f5f9;
+}
+.custom-table-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
 @page {
   size: A4 portrait;
   margin: 10mm 12mm 12mm 12mm;

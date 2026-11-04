@@ -84,30 +84,49 @@ export function SupervisorBar({
 
   return (
     <div className="mb-4">
-      <div className="bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 shadow-sm text-white flex flex-col md:flex-row md:items-center justify-between gap-3">
-        {/* Left: Compact Badge & Title */}
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center shrink-0">
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 sm:px-3.5 sm:py-2.5 shadow-sm text-white flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3">
+        {/* Left / Top: Compact Badge, Title & Mobile Unlock */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center shrink-0">
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            </div>
+            <span className="text-xs font-bold text-white tracking-wide">
+              Supervisor Mode
+            </span>
+            <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full border border-slate-700 font-medium">
+              {isAdmin ? "Admin" : "Sub-Admin"}
+            </span>
           </div>
-          <span className="text-xs font-bold text-white tracking-wide">
-            Supervisor Mode
-          </span>
-          <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full border border-slate-700 font-medium">
-            {isAdmin ? "Admin" : "Sub-Admin"}
-          </span>
+
+          {/* Unlock Button on Mobile Header */}
+          {report?.status === "submitted" && (
+            <div className="md:hidden">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleReopen}
+                loading={reopening}
+                className="bg-amber-500/10 text-amber-300 border-amber-500/40 hover:bg-amber-500/20 text-xs font-semibold h-7 px-2 shadow-xs"
+                title="Unlock report for edits"
+              >
+                <Unlock className="w-3 h-3 mr-1 text-amber-400" />
+                Unlock
+              </Button>
+            </div>
+          )}
         </div>
 
-        {/* Right: Employee Dropdown + Direct Links + Unlock */}
-        <div className="flex flex-wrap items-center gap-2.5">
-          {/* Employee Selector */}
-          <div className="flex items-center gap-1.5 bg-white rounded-lg px-2.5 py-1 shadow-2xs border border-slate-200">
+        {/* Right / Bottom: Employee Selector & Quick Links */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-2.5 w-full md:w-auto min-w-0">
+          {/* Employee Selector - Responsive Full Width on Mobile with Truncation */}
+          <div className="flex items-center gap-2 bg-white rounded-lg px-2.5 py-1.5 shadow-2xs border border-slate-200 w-full sm:w-72 md:w-80 min-w-0">
             <Users className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
             <select
               value={selectedEmployeeId ?? ""}
               onChange={(e) => onSelectEmployee(Number(e.target.value))}
               disabled={loading || employees.length === 0}
-              className="bg-white text-xs font-bold text-slate-900 focus:outline-none cursor-pointer pr-1"
+              className="bg-white text-xs font-bold text-slate-900 focus:outline-none cursor-pointer w-full min-w-0 truncate pr-1"
             >
               {employees.map((emp) => {
                 const roleTag =
@@ -125,13 +144,13 @@ export function SupervisorBar({
             </select>
           </div>
 
-          {/* Quick Page Links (Clean, No "Jump:" prefix) */}
+          {/* Quick Page Links: Calls, Meetings, Sales, Reports */}
           {selectedEmployeeId && (
-            <div className="flex items-center gap-0.5 bg-slate-800/80 p-0.5 rounded-lg border border-slate-700">
+            <div className="flex items-center gap-0.5 bg-slate-800/80 p-0.5 rounded-lg border border-slate-700 w-full sm:w-auto justify-between sm:justify-start">
               {currentPage !== "calls" && (
                 <Link
                   href={`/calls?date=${reportDate}&employee_id=${selectedEmployeeId}`}
-                  className="px-2 py-1 rounded text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
+                  className="flex-1 sm:flex-initial text-center px-2 py-1 rounded text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
                 >
                   Calls
                 </Link>
@@ -139,7 +158,7 @@ export function SupervisorBar({
               {currentPage !== "meetings" && (
                 <Link
                   href={`/meetings?date=${reportDate}&employee_id=${selectedEmployeeId}`}
-                  className="px-2 py-1 rounded text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
+                  className="flex-1 sm:flex-initial text-center px-2 py-1 rounded text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
                 >
                   Meetings
                 </Link>
@@ -147,33 +166,35 @@ export function SupervisorBar({
               {currentPage !== "sales" && (
                 <Link
                   href={`/sales?date=${reportDate}&employee_id=${selectedEmployeeId}`}
-                  className="px-2 py-1 rounded text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
+                  className="flex-1 sm:flex-initial text-center px-2 py-1 rounded text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
                 >
                   Sales
                 </Link>
               )}
               <Link
                 href={`/reports?employee_id=${selectedEmployeeId}&start_date=${reportDate}&end_date=${reportDate}`}
-                className="px-2 py-1 rounded text-xs font-semibold text-emerald-400 hover:text-emerald-300 hover:bg-slate-700 transition-colors"
+                className="flex-1 sm:flex-initial text-center px-2 py-1 rounded text-xs font-semibold text-emerald-400 hover:text-emerald-300 hover:bg-slate-700 transition-colors"
               >
                 Reports
               </Link>
             </div>
           )}
 
-          {/* Unlock Button */}
+          {/* Unlock Button for Desktop View */}
           {report?.status === "submitted" && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleReopen}
-              loading={reopening}
-              className="bg-amber-500/10 text-amber-300 border-amber-500/40 hover:bg-amber-500/20 text-xs font-semibold h-7 px-2.5 shadow-xs"
-              title="Unlock report for edits"
-            >
-              <Unlock className="w-3 h-3 mr-1 text-amber-400" />
-              Unlock
-            </Button>
+            <div className="hidden md:block">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleReopen}
+                loading={reopening}
+                className="bg-amber-500/10 text-amber-300 border-amber-500/40 hover:bg-amber-500/20 text-xs font-semibold h-7 px-2.5 shadow-xs shrink-0"
+                title="Unlock report for edits"
+              >
+                <Unlock className="w-3 h-3 mr-1 text-amber-400" />
+                Unlock
+              </Button>
+            </div>
           )}
         </div>
       </div>

@@ -28,13 +28,57 @@ class UserRepository:
         return result.scalar_one_or_none()
 
     async def get_by_username_or_email(self, login: str) -> Optional[User]:
-        """Look up by username OR email — used for login."""
+        """Look up by username, email, or employee ID — used for login."""
+        clean = login.strip()
+        if not clean:
+            return None
+
+        # 1. First priority: Exact match on username or email
         result = await self.db.execute(
             select(User).where(
-                (User.username == login) | (User.email == login)
+                (User.username == clean) | (User.email == clean.lower())
             )
         )
-        return result.scalar_one_or_none()
+        user = result.scalar_one_or_none()
+        if user:
+            return user
+
+        # 2. Case-insensitive match on username or email
+        result = await self.db.execute(
+            select(User).where(
+                (User.username.ilike(clean)) | (User.email.ilike(clean))
+            )
+        )
+        user = result.scalar_one_or_none()
+        if user:
+            return user
+
+        # 3. Employee ID match (numeric e.g. "20260001", or formatted "EMP-20260001", "#20260001")
+        import re
+        from sqlalchemy import or_
+
+        num_id: Optional[int] = None
+        if clean.isdigit():
+            num_id = int(clean)
+        elif re.match(r"^(emp[-_ ]|#)\d+$", clean, flags=re.IGNORECASE):
+            extracted = re.sub(r"^(emp[-_ ]|#)", "", clean, flags=re.IGNORECASE).strip()
+            if extracted.isdigit():
+                num_id = int(extracted)
+
+        if num_id is not None:
+            id_conditions = [User.id == num_id]
+            # If 8-digit year format (e.g. 20260001), also allow matching legacy row where id == 1
+            if 20000000 <= num_id < 30000000:
+                legacy_seq = num_id % 10000
+                if legacy_seq > 0:
+                    id_conditions.append(User.id == legacy_seq)
+
+            result = await self.db.execute(
+                select(User).where(or_(*id_conditions)).order_by(User.id.desc())
+            )
+            return result.scalars().first()
+
+        return None
 
     async def list_all(
         self,

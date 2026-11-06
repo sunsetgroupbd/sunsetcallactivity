@@ -79,7 +79,7 @@ async def login(
     if not user or not verify_password(password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
+            detail="Incorrect username, employee ID, or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
     if not user.is_active:

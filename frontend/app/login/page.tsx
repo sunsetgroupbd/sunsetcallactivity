@@ -25,7 +25,7 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username.trim() || !password) {
-      setError("Please enter both username and password.");
+      setError("Please enter your username or Employee ID, and password.");
       return;
     }
 
@@ -39,7 +39,7 @@ export default function LoginPage() {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Invalid username or password. Please try again.");
+        setError("Invalid username, Employee ID, or password. Please try again.");
       }
     } finally {
       setIsSubmitting(false);
@@ -70,7 +70,7 @@ export default function LoginPage() {
           Sign in to your account
         </h2>
         <p className="mt-1 text-center text-xs text-slate-500">
-          Access daily call activity, meetings, and sales reporting
+          Sign in with your username or 8-digit Employee ID
         </p>
       </div>
 
@@ -89,7 +89,7 @@ export default function LoginPage() {
                 htmlFor="username"
                 className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1"
               >
-                Username
+                Username or Employee ID
               </label>
               <div className="relative rounded-md shadow-xs">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
@@ -103,7 +103,7 @@ export default function LoginPage() {
                   required
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="e.g. admin or emp1"
+                  placeholder="Username or Employee ID (e.g. 20260001)"
                   className="block w-full pl-9 pr-3 py-2 text-sm font-semibold text-slate-800 border border-slate-300 rounded-md placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600 bg-white"
                 />
               </div>

@@ -26,6 +26,14 @@ import {
   Info,
   Layers,
   Save,
+  Users,
+  ChevronRight,
+  ChevronDown,
+  UserPlus,
+  ArrowRight,
+  Sparkles,
+  CornerDownRight,
+  RefreshCw,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import {
@@ -85,6 +93,95 @@ function renderRoleBadge(userRole: UserRole) {
   }
 }
 
+interface HierarchyInfo {
+  glTeamName: string | null;
+  glDirectorName: string | null;
+  coUser: User | null;
+  coName: string | null;
+  tlUser: User | null;
+  tlName: string | null;
+}
+
+function resolveHierarchy(emp: User, allEmployees: User[], teams: Team[]): HierarchyInfo {
+  const team = teams.find((t) => t.id === emp.team_id);
+  const glTeamName = emp.team_name || team?.name || null;
+  const glDirectorName =
+    team?.director_name ||
+    (glTeamName?.toLowerCase().includes("gazi")
+      ? "Gazi Sir"
+      : glTeamName?.toLowerCase().includes("hasib")
+      ? "Hasib Sir"
+      : null);
+
+  if (emp.role === "admin" || emp.role === "sub_admin") {
+    return {
+      glTeamName,
+      glDirectorName,
+      coUser: null,
+      coName: null,
+      tlUser: null,
+      tlName: null,
+    };
+  }
+
+  if (emp.role === "co") {
+    return {
+      glTeamName,
+      glDirectorName,
+      coUser: emp,
+      coName: emp.full_name,
+      tlUser: null,
+      tlName: null,
+    };
+  }
+
+  const directManager = emp.reporting_manager_id
+    ? allEmployees.find((u) => u.id === emp.reporting_manager_id) || null
+    : null;
+
+  if (emp.role === "tl") {
+    const coUser =
+      directManager && directManager.role === "co"
+        ? directManager
+        : directManager;
+    return {
+      glTeamName,
+      glDirectorName,
+      coUser,
+      coName: coUser ? coUser.full_name : emp.reporting_manager_name || null,
+      tlUser: emp,
+      tlName: emp.full_name,
+    };
+  }
+
+  // Role: employee / executive
+  let tlUser: User | null = null;
+  let coUser: User | null = null;
+
+  if (directManager) {
+    if (directManager.role === "tl") {
+      tlUser = directManager;
+      if (directManager.reporting_manager_id) {
+        coUser =
+          allEmployees.find((u) => u.id === directManager.reporting_manager_id) || null;
+      }
+    } else if (directManager.role === "co") {
+      coUser = directManager;
+    } else {
+      tlUser = directManager;
+    }
+  }
+
+  return {
+    glTeamName,
+    glDirectorName,
+    coUser,
+    coName: coUser ? coUser.full_name : tlUser ? (tlUser.reporting_manager_name ?? null) : null,
+    tlUser,
+    tlName: tlUser ? tlUser.full_name : (emp.reporting_manager_name ?? null),
+  };
+}
+
 export default function EmployeesPage() {
   const { user: currentUser } = useAuth();
 
@@ -93,6 +190,7 @@ export default function EmployeesPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [teamFilter, setTeamFilter] = useState<string>("all");
   const [loading, setLoading] = useState(true);
 
   // Debounce search input for backend query
@@ -129,6 +227,7 @@ export default function EmployeesPage() {
   // Teams & Hierarchy states
   const [teams, setTeams] = useState<Team[]>([]);
   const [isManageTeamsOpen, setIsManageTeamsOpen] = useState(false);
+  const [manageTeamsTab, setManageTeamsTab] = useState<"tree" | "quick_assign" | "settings">("tree");
   const [newTeamName, setNewTeamName] = useState("");
   const [newTeamDirector, setNewTeamDirector] = useState("");
   const [newTeamOrder, setNewTeamOrder] = useState(0);
@@ -139,6 +238,14 @@ export default function EmployeesPage() {
   const [editTeamActive, setEditTeamActive] = useState(true);
   const [teamFormSubmitting, setTeamFormSubmitting] = useState(false);
   const [teamFormError, setTeamFormError] = useState<string | null>(null);
+
+  // Quick Assign Staff states
+  const [quickAssignUserId, setQuickAssignUserId] = useState<number | "">("");
+  const [quickAssignTeamId, setQuickAssignTeamId] = useState<number | "">("");
+  const [quickAssignManagerId, setQuickAssignManagerId] = useState<number | "">("");
+  const [quickAssignLoading, setQuickAssignLoading] = useState(false);
+  const [quickAssignSuccess, setQuickAssignSuccess] = useState<string | null>(null);
+  const [quickAssignError, setQuickAssignError] = useState<string | null>(null);
 
   // Bulk CSV Upload states
   const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
@@ -210,18 +317,31 @@ export default function EmployeesPage() {
     loadTeams();
   }, [loadEmployees, loadTeams]);
 
-  // Instant client-side filter fallback so typing has 0ms perceived latency
+  // Client-side filter combining search, team filter, role and status
   const displayedEmployees = useMemo(() => {
-    if (!search.trim()) return employees;
+    let list = employees;
+
+    // Filter by Team
+    if (teamFilter === "unassigned") {
+      list = list.filter((emp) => !emp.team_id);
+    } else if (teamFilter !== "all") {
+      const tid = Number(teamFilter);
+      list = list.filter((emp) => emp.team_id === tid);
+    }
+
+    if (!search.trim()) return list;
     const q = search.trim().toLowerCase();
-    return employees.filter(
+    return list.filter(
       (emp) =>
         emp.full_name?.toLowerCase().includes(q) ||
         emp.username?.toLowerCase().includes(q) ||
         emp.email?.toLowerCase().includes(q) ||
-        emp.phone?.toLowerCase().includes(q)
+        emp.phone?.toLowerCase().includes(q) ||
+        emp.designation?.toLowerCase().includes(q) ||
+        emp.team_name?.toLowerCase().includes(q) ||
+        emp.reporting_manager_name?.toLowerCase().includes(q)
     );
-  }, [employees, search]);
+  }, [employees, search, teamFilter]);
 
   // Check if entered custom Employee ID conflicts with any other existing employee
   const duplicateEmployee = useMemo(() => {
@@ -248,24 +368,73 @@ export default function EmployeesPage() {
     });
   }, [employeeIdInput, employees, editingEmployee]);
 
-  const openCreateModal = () => {
+  // Available supervisors grouped by role
+  const availableCoordinators = useMemo(() => {
+    return employees.filter(
+      (e) => e.role === "co" && e.is_active && (!editingEmployee || e.id !== editingEmployee.id)
+    );
+  }, [employees, editingEmployee]);
+
+  const availableTeamLeaders = useMemo(() => {
+    return employees.filter(
+      (e) => e.role === "tl" && e.is_active && (!editingEmployee || e.id !== editingEmployee.id)
+    );
+  }, [employees, editingEmployee]);
+
+  interface CreatePreset {
+    role?: UserRole;
+    teamId?: number | "";
+    reportingManagerId?: number | "";
+    designation?: string;
+  }
+
+  const openCreateModal = (preset?: CreatePreset) => {
     setEditingEmployee(null);
     setEmployeeIdInput("");
     setFullName("");
     setEmail("");
     setPhone("");
-    setDesignation("");
+    setDesignation(preset?.designation || "");
     setUsername("");
     setPassword("");
     setShowPassword(false);
-    setRole("employee");
+    setRole(preset?.role || "employee");
     setIsActive(true);
-    setTeamId("");
-    setReportingManagerId("");
+    setTeamId(preset?.teamId !== undefined ? preset.teamId : "");
+    setReportingManagerId(preset?.reportingManagerId !== undefined ? preset.reportingManagerId : "");
     setClientCount(0);
     setClientShareCount(0);
     setFormError(null);
     setIsCreateOpen(true);
+  };
+
+  const handleQuickAssign = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickAssignUserId) return;
+    setQuickAssignLoading(true);
+    setQuickAssignError(null);
+    setQuickAssignSuccess(null);
+    try {
+      const updated = await api.employees.update(Number(quickAssignUserId), {
+        team_id: quickAssignTeamId ? Number(quickAssignTeamId) : null,
+        reporting_manager_id: quickAssignManagerId ? Number(quickAssignManagerId) : null,
+      });
+      setEmployees((prev) =>
+        prev.map((item) => (item.id === updated.id ? updated : item))
+      );
+      await loadEmployees();
+      await loadTeams();
+      setQuickAssignSuccess(`Hierarchy assigned successfully for "${updated.full_name}"!`);
+      setTimeout(() => setQuickAssignSuccess(null), 3500);
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
+        setQuickAssignError(err.message);
+      } else {
+        setQuickAssignError("Failed to update team hierarchy assignment.");
+      }
+    } finally {
+      setQuickAssignLoading(false);
+    }
   };
 
   const openEditModal = (emp: User) => {
@@ -654,8 +823,26 @@ export default function EmployeesPage() {
                     className="border border-slate-300 rounded px-2 py-1 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white"
                   >
                     <option value="all">All Status</option>
-                    <option value="active">Active Only</option>
-                    <option value="inactive">Inactive Only</option>
+                    <option value="active">Available (Active Only)</option>
+                    <option value="inactive">Unavailable (Inactive Only)</option>
+                  </select>
+                </div>
+
+                {/* GL Team filter */}
+                <div className="flex items-center gap-1.5 text-xs text-slate-700">
+                  <span className="font-semibold text-slate-700">Team:</span>
+                  <select
+                    value={teamFilter}
+                    onChange={(e) => setTeamFilter(e.target.value)}
+                    className="border border-slate-300 rounded px-2 py-1 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white"
+                  >
+                    <option value="all">All GL Teams</option>
+                    {teams.map((t) => (
+                      <option key={t.id} value={String(t.id)}>
+                        {t.name} {t.director_name ? `(${t.director_name})` : ""}
+                      </option>
+                    ))}
+                    <option value="unassigned">⚠️ Unassigned to Team</option>
                   </select>
                 </div>
               </div>
@@ -690,7 +877,7 @@ export default function EmployeesPage() {
                   <Upload className="w-4 h-4 mr-1.5" />
                   Import CSV
                 </Button>
-                <Button variant="primary" size="sm" onClick={openCreateModal}>
+                <Button variant="primary" size="sm" onClick={() => openCreateModal()}>
                   <Plus className="w-4 h-4 mr-1.5" />
                   Add Employee
                 </Button>
@@ -712,13 +899,27 @@ export default function EmployeesPage() {
         {/* ── Employee List Table ──────────────────────────────────────────── */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <UserCheck className="w-4 h-4 text-green-700" />
-              Staff Accounts Directory
-            </CardTitle>
-            <span className="text-xs text-slate-500">
-              {displayedEmployees.length} {displayedEmployees.length === 1 ? "account" : "accounts"}
-            </span>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <CardTitle className="flex items-center gap-2">
+                <UserCheck className="w-4 h-4 text-green-700" />
+                Staff Accounts Directory
+              </CardTitle>
+              <div className="flex items-center gap-2 flex-wrap text-xs">
+                <span className="text-slate-500 font-medium">
+                  {displayedEmployees.length} {displayedEmployees.length === 1 ? "account" : "accounts"}
+                </span>
+                <span className="text-slate-300">•</span>
+                <span className="text-emerald-700 font-semibold inline-flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  {displayedEmployees.filter((e) => e.is_active).length} Available
+                </span>
+                <span className="text-slate-300">•</span>
+                <span className="text-slate-600 font-medium inline-flex items-center gap-1">
+                  <Phone className="w-3.5 h-3.5 text-emerald-600" />
+                  {displayedEmployees.filter((e) => !!e.phone).length} with Phone
+                </span>
+              </div>
+            </div>
           </CardHeader>
 
           {/* ── Mobile App Cards View (< md) ─────────────────────────────────── */}
@@ -784,59 +985,104 @@ export default function EmployeesPage() {
                     {emp.designation && (
                       <p className="text-xs font-medium text-emerald-700 mt-0.5">{emp.designation}</p>
                     )}
-                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                       <span className="text-xs text-slate-500 font-mono">@{emp.username}</span>
-                      {emp.team_name && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-200">
-                          {emp.team_name}
-                        </span>
-                      )}
-                      {emp.reporting_manager_name && (
-                        <span className="text-[10px] font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-                          C.O: {emp.reporting_manager_name}
-                        </span>
-                      )}
+                      {(() => {
+                        const h = resolveHierarchy(emp, employees, teams);
+                        return (
+                          <>
+                            {h.glTeamName ? (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-900 border border-blue-200 inline-flex items-center gap-1">
+                                <Crown className="w-2.5 h-2.5 text-blue-700" />
+                                {h.glTeamName}
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setQuickAssignUserId(emp.id);
+                                  setManageTeamsTab("quick_assign");
+                                  setIsManageTeamsOpen(true);
+                                }}
+                                className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 inline-flex items-center gap-1 hover:bg-rose-100"
+                              >
+                                <AlertTriangle className="w-2.5 h-2.5 text-rose-500" />
+                                Assign Team
+                              </button>
+                            )}
+
+                            {emp.role === "employee" && h.tlName && (
+                              <span className="text-[10px] font-semibold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 inline-flex items-center gap-1">
+                                <Star className="w-2.5 h-2.5 text-amber-600" />
+                                TL: {h.tlName}
+                              </span>
+                            )}
+
+                            {h.coName && (
+                              <span className="text-[10px] font-semibold text-sky-800 bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200 inline-flex items-center gap-1">
+                                <Target className="w-2.5 h-2.5 text-sky-600" />
+                                CO: {h.coName}
+                              </span>
+                            )}
+
+                            {emp.role === "co" && (
+                              <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
+                                👑 Direct to GL
+                              </span>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
 
-                  {/* Contact Info (Email & Phone) */}
+                  {/* Contact Info (Phone & Email) */}
                   <div className="grid grid-cols-1 gap-2 text-xs pt-2.5 border-t border-slate-100">
-                    <div className="flex items-center gap-2 text-slate-600 truncate">
-                      <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span className="truncate">{emp.email}</span>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-slate-500 text-[11px] font-semibold flex items-center gap-1">
+                        <Phone className="w-3.5 h-3.5 text-slate-400" /> Phone:
+                      </span>
+                      {emp.phone ? (
+                        <a
+                          href={`tel:${emp.phone}`}
+                          className="inline-flex items-center gap-1.5 font-mono text-xs font-bold text-emerald-800 hover:text-emerald-950 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 shadow-2xs"
+                        >
+                          <Phone className="w-3 h-3 text-emerald-600" />
+                          <span>{emp.phone}</span>
+                        </a>
+                      ) : (
+                        <span className="text-slate-400 italic text-[11px]">
+                          Not Available
+                        </span>
+                      )}
                     </div>
 
-                    {emp.phone ? (
-                      <a
-                        href={`tel:${emp.phone}`}
-                        className="inline-flex items-center gap-1.5 font-mono text-xs font-semibold text-emerald-800 hover:text-emerald-900 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 w-fit"
-                      >
-                        <Phone className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>{emp.phone}</span>
-                      </a>
-                    ) : (
-                      <span className="text-slate-400 italic flex items-center gap-1 text-[11px]">
-                        <Phone className="w-3.5 h-3.5 text-slate-300" /> No phone recorded
+                    <div className="flex items-center justify-between gap-2 text-slate-600">
+                      <span className="text-slate-500 text-[11px] font-semibold flex items-center gap-1">
+                        <Mail className="w-3.5 h-3.5 text-slate-400" /> Email:
                       </span>
-                    )}
+                      <span className="truncate font-medium text-slate-700">{emp.email}</span>
+                    </div>
                   </div>
 
-                  {/* Bottom: Status & Member Since */}
+                  {/* Bottom: Availability & Member Since */}
                   <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px] text-slate-500">
                     <span
-                      className={`inline-flex items-center gap-1 font-semibold ${
-                        emp.is_active ? "text-emerald-700" : "text-rose-600"
+                      className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        emp.is_active
+                          ? "bg-emerald-50 text-emerald-800 border border-emerald-300"
+                          : "bg-rose-50 text-rose-700 border border-rose-200"
                       }`}
                     >
                       {emp.is_active ? (
                         <>
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                          Active
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          Available
                         </>
                       ) : (
                         <>
-                          <XCircle className="w-3.5 h-3.5 text-rose-500" />
-                          Inactive
+                          <XCircle className="w-3 h-3 text-rose-500" />
+                          Unavailable
                         </>
                       )}
                     </span>
@@ -854,12 +1100,13 @@ export default function EmployeesPage() {
                 <tr className="bg-slate-100/70 border-b border-slate-200 text-slate-700 text-[11px] font-semibold">
                   <th className="py-2.5 px-3 w-28">Employee ID</th>
                   <th className="py-2.5 px-4">Full Name</th>
-                  <th className="py-2.5 px-3">Team & C.O.</th>
+                  <th className="py-2.5 px-3">Phone Number</th>
+                  <th className="py-2.5 px-3">Email Address</th>
+                  <th className="py-2.5 px-3">Team & Hierarchy</th>
                   <th className="py-2.5 px-3 text-center">Clients / Share</th>
                   <th className="py-2.5 px-3">Username</th>
-                  <th className="py-2.5 px-3">Contact</th>
                   <th className="py-2.5 px-3 text-center">Role</th>
-                  <th className="py-2.5 px-3 text-center">Status</th>
+                  <th className="py-2.5 px-3 text-center">Availability</th>
                   <th className="py-2.5 px-3">Member Since</th>
                   <th className="py-2.5 px-3 text-right">Actions</th>
                 </tr>
@@ -870,18 +1117,20 @@ export default function EmployeesPage() {
                     <tr key={i}>
                       <td className="py-3 px-3"><Skeleton className="h-4 w-16" /></td>
                       <td className="py-3 px-4"><Skeleton className="h-4 w-32" /></td>
-                      <td className="py-3 px-3"><Skeleton className="h-4 w-20" /></td>
-                      <td className="py-3 px-3"><Skeleton className="h-4 w-36" /></td>
                       <td className="py-3 px-3"><Skeleton className="h-4 w-24" /></td>
+                      <td className="py-3 px-3"><Skeleton className="h-4 w-32" /></td>
+                      <td className="py-3 px-3"><Skeleton className="h-4 w-20" /></td>
+                      <td className="py-3 px-3 text-center"><Skeleton className="h-4 w-16 mx-auto" /></td>
+                      <td className="py-3 px-3"><Skeleton className="h-4 w-20" /></td>
                       <td className="py-3 px-3 text-center"><Skeleton className="h-4 w-16 mx-auto" /></td>
                       <td className="py-3 px-3 text-center"><Skeleton className="h-4 w-14 mx-auto" /></td>
-                      <td className="py-3 px-3"><Skeleton className="h-4 w-24" /></td>
+                      <td className="py-3 px-3"><Skeleton className="h-4 w-20" /></td>
                       <td className="py-3 px-3 text-right"><Skeleton className="h-4 w-12 ml-auto" /></td>
                     </tr>
                   ))
                 ) : displayedEmployees.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-12 text-center text-slate-400">
+                    <td colSpan={11} className="py-12 text-center text-slate-400">
                       No employees match your search criteria.
                     </td>
                   </tr>
@@ -909,18 +1158,88 @@ export default function EmployeesPage() {
                         )}
                       </td>
                       <td className="py-3 px-3">
-                        {emp.team_name ? (
-                          <div className="font-semibold text-blue-900 text-[11px]">
-                            {emp.team_name}
-                          </div>
+                        {emp.phone ? (
+                          <a
+                            href={`tel:${emp.phone}`}
+                            className="inline-flex items-center gap-1.5 font-mono text-xs font-bold text-emerald-800 hover:text-emerald-950 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200 transition-colors shadow-2xs whitespace-nowrap"
+                            title={`Call ${emp.phone}`}
+                          >
+                            <Phone className="w-3 h-3 text-emerald-600 shrink-0" />
+                            <span>{emp.phone}</span>
+                          </a>
                         ) : (
-                          <span className="text-slate-400 text-[11px] italic">Unassigned</span>
+                          <span className="text-slate-400 italic text-[11px] inline-flex items-center gap-1">
+                            <Phone className="w-3 h-3 text-slate-300 shrink-0" />
+                            <span>Not Available</span>
+                          </span>
                         )}
-                        {emp.reporting_manager_name && (
-                          <div className="text-[10px] text-slate-500 font-medium">
-                            C.O: {emp.reporting_manager_name}
-                          </div>
-                        )}
+                      </td>
+                      <td className="py-3 px-3">
+                        <span className="text-slate-700 text-[11px] font-medium">{emp.email}</span>
+                      </td>
+                      <td className="py-3 px-3">
+                        {(() => {
+                          const h = resolveHierarchy(emp, employees, teams);
+                          return (
+                            <div className="space-y-1">
+                              {h.glTeamName ? (
+                                <div className="inline-flex items-center gap-1 font-bold text-[11px] text-blue-900 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 shadow-2xs">
+                                  <Crown className="w-3 h-3 text-blue-700 shrink-0" />
+                                  <span>{h.glTeamName}</span>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setQuickAssignUserId(emp.id);
+                                    setManageTeamsTab("quick_assign");
+                                    setIsManageTeamsOpen(true);
+                                  }}
+                                  className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2 py-0.5 rounded-full transition"
+                                  title="Click to assign team and supervisor"
+                                >
+                                  <AlertTriangle className="w-3 h-3 text-rose-500 shrink-0" />
+                                  <span>Assign Team</span>
+                                </button>
+                              )}
+
+                              {emp.role === "co" && (
+                                <div className="text-[10px] text-sky-800 font-semibold flex items-center gap-1">
+                                  <Target className="w-3 h-3 text-sky-600 shrink-0" />
+                                  <span>Direct to GL ({h.glDirectorName || "Director"})</span>
+                                </div>
+                              )}
+
+                              {emp.role === "tl" && (
+                                <div className="text-[10px] text-slate-600 font-medium flex items-center gap-1">
+                                  <Target className="w-3 h-3 text-sky-600 shrink-0" />
+                                  <span>C.O: {h.coName || <span className="text-amber-700 italic">Unassigned</span>}</span>
+                                </div>
+                              )}
+
+                              {emp.role === "employee" && (
+                                <div className="space-y-0.5">
+                                  <div className="text-[10px] text-slate-800 font-semibold flex items-center gap-1">
+                                    <Star className="w-3 h-3 text-amber-600 shrink-0" />
+                                    <span>T.L: {h.tlName || <span className="text-amber-700 italic">None</span>}</span>
+                                  </div>
+                                  {h.coName && (
+                                    <div className="text-[9.5px] text-slate-500 font-medium flex items-center gap-1">
+                                      <Target className="w-2.5 h-2.5 text-sky-600 shrink-0" />
+                                      <span>C.O: {h.coName}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {(emp.role === "admin" || emp.role === "sub_admin") && (
+                                <div className="text-[10px] text-purple-700 font-medium">
+                                  HQ Management
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="py-3 px-3 text-center">
                         <span className="inline-flex items-center gap-1.5 font-mono text-[11px] bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
@@ -932,32 +1251,26 @@ export default function EmployeesPage() {
                       <td className="py-3 px-3 text-slate-600 font-mono text-[11px]">
                         @{emp.username}
                       </td>
-                      <td className="py-3 px-3">
-                        <div className="text-slate-700 text-[11px]">{emp.email}</div>
-                        {emp.phone && (
-                          <div className="text-emerald-700 font-mono text-[10px] font-medium">
-                            {emp.phone}
-                          </div>
-                        )}
-                      </td>
                       <td className="py-3 px-3 text-center">
                         {renderRoleBadge(emp.role)}
                       </td>
                       <td className="py-3 px-3 text-center">
                         <span
-                          className={`inline-flex items-center gap-1 text-[11px] font-semibold ${
-                            emp.is_active ? "text-emerald-700" : "text-rose-600"
+                          className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            emp.is_active
+                              ? "bg-emerald-50 text-emerald-800 border border-emerald-300"
+                              : "bg-rose-50 text-rose-700 border border-rose-200"
                           }`}
                         >
                           {emp.is_active ? (
                             <>
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                              Active
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              Available
                             </>
                           ) : (
                             <>
-                              <XCircle className="w-3.5 h-3.5 text-rose-500" />
-                              Inactive
+                              <XCircle className="w-3 h-3 text-rose-500" />
+                              Unavailable
                             </>
                           )}
                         </span>
@@ -1194,64 +1507,323 @@ export default function EmployeesPage() {
             </div>
 
             {/* Team & Hierarchy Assignment */}
-            <div className="pt-3 border-t border-slate-200 space-y-3 bg-slate-50/70 p-3 rounded-lg border">
+            <div className="pt-3 border-t border-slate-200 space-y-3 bg-slate-50/90 p-3.5 rounded-xl border border-slate-200">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
                   <Layers className="w-3.5 h-3.5 text-indigo-600" />
-                  Team & Hierarchy Assignment
+                  Team & Hierarchy Assignment (GL ➔ C.O. ➔ T.L. ➔ Executive)
                 </span>
                 <button
                   type="button"
                   onClick={() => {
                     setIsManageTeamsOpen(true);
                   }}
-                  className="text-[11px] font-semibold text-indigo-700 hover:text-indigo-900 hover:underline"
+                  className="text-[11px] font-semibold text-indigo-700 hover:text-indigo-900 hover:underline flex items-center gap-1"
                 >
-                  + Add / Edit Teams
+                  <Users className="w-3 h-3" />
+                  Manage Teams Modal
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                    Assigned Team
-                  </label>
-                  <select
-                    value={teamId}
-                    onChange={(e) => setTeamId(e.target.value ? Number(e.target.value) : "")}
-                    className="w-full border border-slate-300 rounded px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white"
-                  >
-                    <option value="">None (Unassigned)</option>
-                    {teams.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name} {t.director_name ? `(${t.director_name})` : ""}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              {/* Dynamic Hierarchy Selection by Role */}
+              {role === "employee" && (
+                <div className="space-y-3">
+                  <div className="p-2.5 bg-blue-50/70 border border-blue-200 rounded-lg text-[11px] text-blue-900 flex items-start gap-2">
+                    <Sparkles className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                    <div>
+                      <strong>Easy Team Assignment:</strong> Simply select the <strong>Team Leader (T.L.)</strong> below. We will automatically assign both the <strong>Coordinator (C.O.)</strong> and <strong>GL Team</strong> for you!
+                    </div>
+                  </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                    Reporting Manager (C.O.)
-                  </label>
-                  <select
-                    value={reportingManagerId}
-                    onChange={(e) => setReportingManagerId(e.target.value ? Number(e.target.value) : "")}
-                    className="w-full border border-slate-300 rounded px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white"
-                  >
-                    <option value="">None (Reports to Top / Director)</option>
-                    {employees
-                      .filter((e) => !editingEmployee || e.id !== editingEmployee.id)
-                      .map((e) => (
-                        <option key={e.id} value={e.id}>
-                          {e.full_name} ({e.designation || e.role.toUpperCase()})
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                        1. Select Team Leader (T.L.) *
+                      </label>
+                      <select
+                        value={reportingManagerId}
+                        onChange={(e) => {
+                          const val = e.target.value ? Number(e.target.value) : "";
+                          setReportingManagerId(val);
+                          if (val) {
+                            const chosenTl = employees.find((u) => u.id === val);
+                            if (chosenTl?.team_id) {
+                              setTeamId(chosenTl.team_id);
+                            }
+                          }
+                        }}
+                        className="w-full border border-slate-300 rounded px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white"
+                      >
+                        <option value="">Select Team Leader (Auto-fills Team & C.O.)...</option>
+                        {(teamId
+                          ? availableTeamLeaders.filter((tl) => tl.team_id === Number(teamId))
+                          : availableTeamLeaders
+                        ).map((tl) => {
+                          const tlTeam = teams.find((t) => t.id === tl.team_id);
+                          const tlCo = tl.reporting_manager_id
+                            ? employees.find((u) => u.id === tl.reporting_manager_id)
+                            : null;
+                          return (
+                            <option key={tl.id} value={tl.id}>
+                              ⭐ {tl.full_name} {tlTeam ? `[${tlTeam.name}]` : ""} {tlCo ? `(C.O: ${tlCo.full_name})` : ""}
+                            </option>
+                          );
+                        })}
+                      </select>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        {availableTeamLeaders.length === 0
+                          ? "No Team Leaders created yet. You can create one or select a C.O. directly."
+                          : "Filters to team leaders under Gazi Sir / Hasib Sir."}
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                        2. GL Team (Group Leader Team) *
+                      </label>
+                      <select
+                        value={teamId}
+                        onChange={(e) => {
+                          const val = e.target.value ? Number(e.target.value) : "";
+                          setTeamId(val);
+                          // Clear TL if current TL does not match the newly selected team
+                          if (val && reportingManagerId) {
+                            const curTl = employees.find((u) => u.id === Number(reportingManagerId));
+                            if (curTl && curTl.team_id && curTl.team_id !== val) {
+                              setReportingManagerId("");
+                            }
+                          }
+                        }}
+                        className="w-full border border-slate-300 rounded px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white"
+                      >
+                        <option value="">None (Unassigned GL Team)</option>
+                        {teams.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            👑 {t.name} {t.director_name ? `(${t.director_name})` : ""}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Team Gazi Sir or Team Hasib Sir</p>
+                    </div>
+                  </div>
+
+                  {/* Fallback direct C.O. assignment if no T.L. */}
+                  {availableTeamLeaders.length === 0 && (
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                        Direct Coordinator (C.O.) Assignment (Since no T.L. exists)
+                      </label>
+                      <select
+                        value={reportingManagerId}
+                        onChange={(e) => {
+                          const val = e.target.value ? Number(e.target.value) : "";
+                          setReportingManagerId(val);
+                          if (val) {
+                            const chosenCo = employees.find((u) => u.id === val);
+                            if (chosenCo?.team_id) setTeamId(chosenCo.team_id);
+                          }
+                        }}
+                        className="w-full border border-slate-300 rounded px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white"
+                      >
+                        <option value="">None (Unassigned C.O.)</option>
+                        {availableCoordinators.map((co) => (
+                          <option key={co.id} value={co.id}>
+                            🎯 {co.full_name} ({co.team_name || "Unassigned Team"})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {role === "tl" && (
+                <div className="space-y-3">
+                  <div className="p-2.5 bg-amber-50/70 border border-amber-200 rounded-lg text-[11px] text-amber-900 flex items-start gap-2">
+                    <Star className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <strong>Team Leader Hierarchy:</strong> Team Leaders report directly to a <strong>Coordinator (C.O.)</strong> in their GL Team.
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                        Select Reporting Coordinator (C.O.) *
+                      </label>
+                      <select
+                        value={reportingManagerId}
+                        onChange={(e) => {
+                          const val = e.target.value ? Number(e.target.value) : "";
+                          setReportingManagerId(val);
+                          if (val) {
+                            const chosenCo = employees.find((u) => u.id === val);
+                            if (chosenCo?.team_id) {
+                              setTeamId(chosenCo.team_id);
+                            }
+                          }
+                        }}
+                        className="w-full border border-slate-300 rounded px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white"
+                      >
+                        <option value="">Select Coordinator (Auto-fills GL Team)...</option>
+                        {(teamId
+                          ? availableCoordinators.filter((co) => co.team_id === Number(teamId))
+                          : availableCoordinators
+                        ).map((co) => {
+                          const coTeam = teams.find((t) => t.id === co.team_id);
+                          return (
+                            <option key={co.id} value={co.id}>
+                              🎯 {co.full_name} {coTeam ? `[${coTeam.name}]` : ""}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                        GL Team (Group Leader Team) *
+                      </label>
+                      <select
+                        value={teamId}
+                        onChange={(e) => setTeamId(e.target.value ? Number(e.target.value) : "")}
+                        className="w-full border border-slate-300 rounded px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white"
+                      >
+                        <option value="">None (Unassigned GL Team)</option>
+                        {teams.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            👑 {t.name} {t.director_name ? `(${t.director_name})` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {role === "co" && (
+                <div className="space-y-3">
+                  <div className="p-2.5 bg-sky-50/70 border border-sky-200 rounded-lg text-[11px] text-sky-900 flex items-start gap-2">
+                    <Target className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
+                    <div>
+                      <strong>Coordinator Hierarchy:</strong> Coordinators report directly to the <strong>GL Director (Gazi Sir / Hasib Sir)</strong> of their assigned team.
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      GL Team (Group Leader Team) *
+                    </label>
+                    <select
+                      value={teamId}
+                      onChange={(e) => {
+                        setTeamId(e.target.value ? Number(e.target.value) : "");
+                        setReportingManagerId(""); // CO reports to top GL
+                      }}
+                      className="w-full border border-slate-300 rounded px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white"
+                    >
+                      <option value="">None (Unassigned GL Team)</option>
+                      {teams.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          👑 {t.name} {t.director_name ? `(${t.director_name})` : ""}
                         </option>
                       ))}
-                  </select>
+                    </select>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <div className="grid grid-cols-2 gap-3">
+              {(role === "admin" || role === "sub_admin") && (
+                <div className="p-2.5 bg-purple-50/70 border border-purple-200 rounded-lg text-[11px] text-purple-900">
+                  <div className="font-semibold flex items-center gap-1">
+                    <Shield className="w-3.5 h-3.5 text-purple-600" />
+                    Corporate Administration Account
+                  </div>
+                  <p className="text-[10px] text-purple-700 mt-0.5">
+                    Admins have organization-wide supervisory access across all teams. Team assignment is optional.
+                  </p>
+                </div>
+              )}
+
+              {/* Dynamic Live Breadcrumb Preview */}
+              {(() => {
+                const selectedTeam = teams.find((t) => t.id === Number(teamId));
+                const mgr = reportingManagerId
+                  ? employees.find((u) => u.id === Number(reportingManagerId))
+                  : null;
+                const tl = role === "employee" && mgr?.role === "tl" ? mgr : null;
+                const co =
+                  role === "co"
+                    ? null
+                    : role === "tl"
+                    ? mgr
+                    : tl?.reporting_manager_id
+                    ? employees.find((u) => u.id === tl.reporting_manager_id)
+                    : mgr?.role === "co"
+                    ? mgr
+                    : null;
+
+                return (
+                  <div className="p-2.5 bg-white rounded-lg border border-slate-200 space-y-1">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                      Live Hierarchy Path Preview:
+                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap text-xs">
+                      {/* Level 1: GL Team */}
+                      <span className="inline-flex items-center gap-1 font-bold text-[11px] px-2 py-0.5 rounded bg-blue-50 text-blue-900 border border-blue-200">
+                        <Crown className="w-3 h-3 text-blue-700" />
+                        {selectedTeam ? selectedTeam.name : "No GL Team Selected"}
+                      </span>
+
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+
+                      {/* Level 2: C.O. */}
+                      {role === "co" ? (
+                        <span className="inline-flex items-center gap-1 font-bold text-[11px] px-2 py-0.5 rounded bg-sky-50 text-sky-900 border border-sky-300">
+                          <Target className="w-3 h-3 text-sky-700" />
+                          {fullName.trim() || "New Coordinator"} (C.O.)
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 font-semibold text-[11px] px-2 py-0.5 rounded bg-sky-50 text-sky-900 border border-sky-200">
+                          <Target className="w-3 h-3 text-sky-700" />
+                          {co ? `C.O: ${co.full_name}` : "C.O. Pending"}
+                        </span>
+                      )}
+
+                      {/* Level 3: T.L. */}
+                      {role !== "co" && (
+                        <>
+                          <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          {role === "tl" ? (
+                            <span className="inline-flex items-center gap-1 font-bold text-[11px] px-2 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-300">
+                              <Star className="w-3 h-3 text-amber-700" />
+                              {fullName.trim() || "New Team Leader"} (T.L.)
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 font-semibold text-[11px] px-2 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-200">
+                              <Star className="w-3 h-3 text-amber-700" />
+                              {tl ? `T.L: ${tl.full_name}` : "T.L. Pending"}
+                            </span>
+                          )}
+                        </>
+                      )}
+
+                      {/* Level 4: Executive */}
+                      {role === "employee" && (
+                        <>
+                          <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span className="inline-flex items-center gap-1 font-bold text-[11px] px-2 py-0.5 rounded bg-emerald-50 text-emerald-900 border border-emerald-300">
+                            <UserIcon className="w-3 h-3 text-emerald-700" />
+                            {fullName.trim() || "New Executive"}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="grid grid-cols-2 gap-3 pt-1 border-t border-slate-200/60">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                     Client Count
@@ -1567,9 +2139,12 @@ export default function EmployeesPage() {
           onClose={() => {
             setIsManageTeamsOpen(false);
             setEditingTeamId(null);
+            setQuickAssignSuccess(null);
+            setQuickAssignError(null);
           }}
-          title="Manage Dynamic Teams & Hierarchy"
-          description="Create, rename, reorder, or remove team groupings. Renaming a team automatically updates all assigned members."
+          title="Manage Dynamic Teams & Hierarchy (GL ➔ C.O. ➔ T.L. ➔ Executive)"
+          description="View organizational structure, 1-click add members under leaders, quick assign staff, or configure teams."
+          maxWidth="max-w-4xl"
         >
           <div className="space-y-4">
             {teamFormError && (
@@ -1578,205 +2153,803 @@ export default function EmployeesPage() {
               </div>
             )}
 
-            {/* Existing Teams List */}
-            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider block mb-2">
-                Current Teams ({teams.length})
-              </span>
+            {/* Modal Tabs Navigation */}
+            <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+              <button
+                type="button"
+                onClick={() => setManageTeamsTab("tree")}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 ${
+                  manageTeamsTab === "tree"
+                    ? "bg-indigo-600 text-white shadow-2xs"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                Hierarchy Tree & Staff
+              </button>
 
-              {teams.length === 0 ? (
-                <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-500 text-center">
-                  No teams created yet. Add your first team below.
-                </div>
-              ) : (
-                teams.map((t) => (
-                  <div
-                    key={t.id}
-                    className="p-3 bg-white border border-slate-200 rounded-lg shadow-2xs flex flex-col gap-2 transition hover:border-slate-300"
-                  >
-                    {editingTeamId === t.id ? (
-                      <form onSubmit={handleUpdateTeam} className="space-y-2">
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">
-                              Team Name *
-                            </label>
-                            <input
-                              type="text"
-                              required
-                              value={editTeamName}
-                              onChange={(e) => setEditTeamName(e.target.value)}
-                              className="w-full border border-slate-300 rounded px-2.5 py-1 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-600 bg-white"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">
-                              Director / Head Name
-                            </label>
-                            <input
-                              type="text"
-                              value={editTeamDirector}
-                              onChange={(e) => setEditTeamDirector(e.target.value)}
-                              placeholder="e.g. Gazi Sir"
-                              className="w-full border border-slate-300 rounded px-2.5 py-1 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-600 bg-white"
-                            />
-                          </div>
-                        </div>
+              <button
+                type="button"
+                onClick={() => setManageTeamsTab("quick_assign")}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 ${
+                  manageTeamsTab === "quick_assign"
+                    ? "bg-indigo-600 text-white shadow-2xs"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                Quick Assign Staff
+                {employees.filter((e) => !e.team_id && e.role !== "admin" && e.role !== "sub_admin").length > 0 && (
+                  <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-amber-400 text-slate-900 font-extrabold">
+                    {employees.filter((e) => !e.team_id && e.role !== "admin" && e.role !== "sub_admin").length}
+                  </span>
+                )}
+              </button>
 
-                        <div className="flex items-center justify-between pt-1">
-                          <div className="flex items-center gap-3">
-                            <div className="flex items-center gap-1.5 text-xs">
-                              <span className="text-[11px] text-slate-600 font-medium">Order:</span>
-                              <input
-                                type="number"
-                                value={editTeamOrder}
-                                onChange={(e) => setEditTeamOrder(Number(e.target.value) || 0)}
-                                className="w-14 border border-slate-300 rounded px-1.5 py-0.5 text-xs text-center"
-                              />
-                            </div>
-                            <label className="flex items-center gap-1 text-xs text-slate-700 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={editTeamActive}
-                                onChange={(e) => setEditTeamActive(e.target.checked)}
-                                className="rounded text-indigo-600"
-                              />
-                              <span>Active</span>
-                            </label>
-                          </div>
-
-                          <div className="flex items-center gap-1.5">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setEditingTeamId(null)}
-                              disabled={teamFormSubmitting}
-                            >
-                              Cancel
-                            </Button>
-                            <Button
-                              type="submit"
-                              variant="primary"
-                              size="sm"
-                              loading={teamFormSubmitting}
-                              className="bg-indigo-600 hover:bg-indigo-700"
-                            >
-                              <Save className="w-3.5 h-3.5 mr-1" />
-                              Save Changes
-                            </Button>
-                          </div>
-                        </div>
-                      </form>
-                    ) : (
-                      <div className="flex items-center justify-between gap-2">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-slate-900 text-xs">{t.name}</span>
-                            {t.director_name && (
-                              <span className="text-[11px] text-indigo-700 font-medium bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-200">
-                                {t.director_name}
-                              </span>
-                            )}
-                            <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded font-mono">
-                              Seq #{t.display_order}
-                            </span>
-                          </div>
-                          <span className="text-[11px] text-slate-500 mt-0.5 block">
-                            {t.member_count} active {t.member_count === 1 ? "member" : "members"} assigned
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingTeamId(t.id);
-                              setEditTeamName(t.name);
-                              setEditTeamDirector(t.director_name || "");
-                              setEditTeamOrder(t.display_order);
-                              setEditTeamActive(t.is_active);
-                            }}
-                            className="p-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition"
-                            title="Edit Team"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteTeam(t.id, t.name)}
-                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition"
-                            title="Delete Team"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
+              <button
+                type="button"
+                onClick={() => setManageTeamsTab("settings")}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 ${
+                  manageTeamsTab === "settings"
+                    ? "bg-indigo-600 text-white shadow-2xs"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                }`}
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+                Team Configuration ({teams.length})
+              </button>
             </div>
 
-            {/* Add New Team Box */}
-            <div className="pt-3 border-t border-slate-200">
-              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider block mb-2">
-                + Create New Team
-              </span>
-              <form onSubmit={handleCreateTeam} className="space-y-2 bg-slate-50 p-3 rounded-lg border border-slate-200">
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">
-                      Team Name *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Gazi Sir Team"
-                      value={newTeamName}
-                      onChange={(e) => setNewTeamName(e.target.value)}
-                      className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-600 bg-white"
-                    />
+            {/* ── TAB 1: Hierarchy Tree & Staff ───────────────────────────────── */}
+            {manageTeamsTab === "tree" && (
+              <div className="space-y-4 max-h-[62vh] overflow-y-auto pr-1">
+                {/* Global stats bar */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                  <div className="p-2.5 bg-blue-50/80 rounded-xl border border-blue-200">
+                    <span className="text-[10px] text-blue-700 font-bold uppercase block">GL Teams</span>
+                    <span className="text-base font-bold text-blue-900">{teams.length}</span>
                   </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">
-                      Director Name
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Gazi Sir"
-                      value={newTeamDirector}
-                      onChange={(e) => setNewTeamDirector(e.target.value)}
-                      className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-600 bg-white"
-                    />
+                  <div className="p-2.5 bg-sky-50/80 rounded-xl border border-sky-200">
+                    <span className="text-[10px] text-sky-700 font-bold uppercase block">Coordinators (C.O.)</span>
+                    <span className="text-base font-bold text-sky-900">
+                      {employees.filter((e) => e.role === "co" && e.is_active).length}
+                    </span>
+                  </div>
+                  <div className="p-2.5 bg-amber-50/80 rounded-xl border border-amber-200">
+                    <span className="text-[10px] text-amber-700 font-bold uppercase block">Team Leaders (T.L.)</span>
+                    <span className="text-base font-bold text-amber-900">
+                      {employees.filter((e) => e.role === "tl" && e.is_active).length}
+                    </span>
+                  </div>
+                  <div className="p-2.5 bg-emerald-50/80 rounded-xl border border-emerald-200">
+                    <span className="text-[10px] text-emerald-700 font-bold uppercase block">Executives</span>
+                    <span className="text-base font-bold text-emerald-900">
+                      {employees.filter((e) => e.role === "employee" && e.is_active).length}
+                    </span>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between pt-1">
-                  <div className="flex items-center gap-1.5 text-xs">
-                    <span className="text-[11px] text-slate-600 font-medium">Display Sequence:</span>
-                    <input
-                      type="number"
-                      value={newTeamOrder}
-                      onChange={(e) => setNewTeamOrder(Number(e.target.value) || 0)}
-                      className="w-16 border border-slate-300 rounded px-1.5 py-0.5 text-xs text-center bg-white"
-                    />
+                {/* Unassigned Warning Alert if any */}
+                {employees.filter((e) => !e.team_id && e.role !== "admin" && e.role !== "sub_admin").length > 0 && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between gap-2 text-xs text-amber-900">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>
+                        <strong>{employees.filter((e) => !e.team_id && e.role !== "admin" && e.role !== "sub_admin").length} staff accounts</strong> are currently unassigned to any team.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setManageTeamsTab("quick_assign")}
+                      className="text-[11px] font-bold text-amber-900 underline hover:text-amber-950 whitespace-nowrap"
+                    >
+                      Quick Assign Now ➔
+                    </button>
                   </div>
+                )}
 
+                {/* Team Trees */}
+                {teams.length === 0 ? (
+                  <div className="p-8 text-center text-slate-400 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                    No teams configured yet. Go to Team Configuration to add Gazi Sir Team and Hasib Sir Team.
+                  </div>
+                ) : (
+                  teams.map((t) => {
+                    const membersInTeam = employees.filter((e) => e.team_id === t.id);
+                    const cos = membersInTeam.filter((e) => e.role === "co");
+                    const tls = membersInTeam.filter((e) => e.role === "tl");
+                    const execs = membersInTeam.filter((e) => e.role === "employee");
+                    const unmanagedInTeam = membersInTeam.filter(
+                      (e) => !e.reporting_manager_id && e.role === "employee"
+                    );
+
+                    return (
+                      <div
+                        key={t.id}
+                        className="bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden transition-all hover:border-slate-300"
+                      >
+                        {/* GL Team Header */}
+                        <div className="p-3.5 bg-gradient-to-r from-slate-50 to-blue-50/50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                                <Crown className="w-4 h-4 text-blue-700" />
+                                {t.name}
+                              </span>
+                              {t.director_name && (
+                                <span className="text-[11px] font-bold text-indigo-800 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200">
+                                  Director: {t.director_name}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-500 flex-wrap">
+                              <span>{membersInTeam.length} Members</span>
+                              <span>•</span>
+                              <span className="text-sky-700 font-semibold">{cos.length} C.O.</span>
+                              <span>•</span>
+                              <span className="text-amber-700 font-semibold">{tls.length} T.L.</span>
+                              <span>•</span>
+                              <span className="text-emerald-700 font-semibold">{execs.length} Executives</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsManageTeamsOpen(false);
+                                openCreateModal({ role: "co", teamId: t.id });
+                              }}
+                              className="px-2.5 py-1 text-xs font-semibold bg-sky-50 text-sky-800 hover:bg-sky-100 border border-sky-300 rounded-lg inline-flex items-center gap-1 shadow-2xs transition"
+                            >
+                              <Plus className="w-3 h-3 text-sky-700" />
+                              + Add C.O.
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsManageTeamsOpen(false);
+                                openCreateModal({ role: "employee", teamId: t.id });
+                              }}
+                              className="px-2.5 py-1 text-xs font-semibold bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 rounded-lg inline-flex items-center gap-1 shadow-2xs transition"
+                            >
+                              <Plus className="w-3 h-3 text-emerald-700" />
+                              + Add Member
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* GL Team Hierarchy Body */}
+                        <div className="p-3.5 space-y-3">
+                          {cos.length === 0 ? (
+                            <div className="p-4 bg-slate-50/70 border border-dashed border-slate-200 rounded-lg text-center text-xs text-slate-500 space-y-1.5">
+                              <p>No Coordinators (C.O.) assigned to {t.name} yet.</p>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsManageTeamsOpen(false);
+                                  openCreateModal({ role: "co", teamId: t.id });
+                                }}
+                                className="text-xs font-bold text-sky-700 hover:underline inline-flex items-center gap-1"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                Add First Coordinator for this team
+                              </button>
+                            </div>
+                          ) : (
+                            cos.map((co) => {
+                              const tlsUnderCo = tls.filter((tl) => tl.reporting_manager_id === co.id);
+                              const directExecsUnderCo = execs.filter(
+                                (ex) => ex.reporting_manager_id === co.id
+                              );
+
+                              return (
+                                <div
+                                  key={co.id}
+                                  className="border border-sky-100 rounded-xl bg-sky-50/20 p-3 space-y-2.5"
+                                >
+                                  {/* C.O. Card Header */}
+                                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-7 h-7 rounded-lg bg-sky-100 text-sky-800 flex items-center justify-center font-bold text-xs shrink-0">
+                                        <Target className="w-4 h-4 text-sky-700" />
+                                      </div>
+                                      <div>
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="font-bold text-slate-900 text-xs">
+                                            {co.full_name}
+                                          </span>
+                                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-sky-100 text-sky-900">
+                                            C.O.
+                                          </span>
+                                          <span className="text-[10px] text-slate-500 font-mono">
+                                            @{co.username}
+                                          </span>
+                                        </div>
+                                        <div className="text-[11px] text-slate-500 flex items-center gap-2">
+                                          {co.phone ? (
+                                            <a
+                                              href={`tel:${co.phone}`}
+                                              className="text-emerald-700 font-medium hover:underline inline-flex items-center gap-0.5"
+                                            >
+                                              <Phone className="w-2.5 h-2.5" /> {co.phone}
+                                            </a>
+                                          ) : (
+                                            <span className="italic text-slate-400">No phone</span>
+                                          )}
+                                          <span>•</span>
+                                          <span>{co.designation || "Coordinator"}</span>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setIsManageTeamsOpen(false);
+                                          openCreateModal({
+                                            role: "tl",
+                                            teamId: t.id,
+                                            reportingManagerId: co.id,
+                                          });
+                                        }}
+                                        className="px-2 py-1 text-[11px] font-semibold bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300 rounded-md inline-flex items-center gap-1 shadow-2xs transition"
+                                      >
+                                        <Plus className="w-3 h-3 text-amber-700" />
+                                        + Add T.L.
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setIsManageTeamsOpen(false);
+                                          openEditModal(co);
+                                        }}
+                                        className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded"
+                                        title="Edit C.O."
+                                      >
+                                        <Edit2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {/* Team Leaders under this C.O. */}
+                                  <div className="pl-4 sm:pl-6 border-l-2 border-sky-200/70 space-y-2.5 pt-1">
+                                    {tlsUnderCo.length === 0 ? (
+                                      <div className="text-[11px] text-slate-400 italic py-1">
+                                        No Team Leaders under {co.full_name} yet. Click &quot;+ Add T.L.&quot; to add one.
+                                      </div>
+                                    ) : (
+                                      tlsUnderCo.map((tl) => {
+                                        const execsUnderTl = execs.filter(
+                                          (ex) => ex.reporting_manager_id === tl.id
+                                        );
+
+                                        return (
+                                          <div
+                                            key={tl.id}
+                                            className="bg-white border border-slate-200 rounded-lg p-2.5 space-y-2 shadow-2xs"
+                                          >
+                                            {/* T.L. Header */}
+                                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                                              <div className="flex items-center gap-2">
+                                                <div className="w-6 h-6 rounded-md bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-xs shrink-0">
+                                                  <Star className="w-3.5 h-3.5 text-amber-700" />
+                                                </div>
+                                                <div>
+                                                  <div className="flex items-center gap-1.5">
+                                                    <span className="font-bold text-slate-900 text-xs">
+                                                      {tl.full_name}
+                                                    </span>
+                                                    <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-900">
+                                                      T.L.
+                                                    </span>
+                                                    <span className="text-[10px] text-slate-500 font-mono">
+                                                      @{tl.username}
+                                                    </span>
+                                                  </div>
+                                                  <div className="text-[10px] text-slate-500 flex items-center gap-1.5">
+                                                    {tl.phone ? (
+                                                      <span className="text-emerald-700 font-medium">
+                                                        {tl.phone}
+                                                      </span>
+                                                    ) : (
+                                                      <span className="italic text-slate-400">No phone</span>
+                                                    )}
+                                                    <span>•</span>
+                                                    <span>{execsUnderTl.length} Executives Assigned</span>
+                                                  </div>
+                                                </div>
+                                              </div>
+
+                                              <div className="flex items-center gap-1.5">
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    setIsManageTeamsOpen(false);
+                                                    openCreateModal({
+                                                      role: "employee",
+                                                      teamId: t.id,
+                                                      reportingManagerId: tl.id,
+                                                    });
+                                                  }}
+                                                  className="px-2 py-0.5 text-[10px] font-semibold bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 rounded-md inline-flex items-center gap-1 shadow-2xs transition"
+                                                >
+                                                  <Plus className="w-2.5 h-2.5 text-emerald-700" />
+                                                  + Add Executive
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    setIsManageTeamsOpen(false);
+                                                    openEditModal(tl);
+                                                  }}
+                                                  className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded"
+                                                  title="Edit T.L."
+                                                >
+                                                  <Edit2 className="w-3 h-3" />
+                                                </button>
+                                              </div>
+                                            </div>
+
+                                            {/* Executives Grid under this T.L. */}
+                                            <div className="pl-3 sm:pl-5 border-l-2 border-amber-200/60 pt-1">
+                                              {execsUnderTl.length === 0 ? (
+                                                <p className="text-[10px] text-slate-400 italic">
+                                                  No executives assigned under this T.L. Click &quot;+ Add Executive&quot; above.
+                                                </p>
+                                              ) : (
+                                                <div className="flex flex-wrap gap-1.5">
+                                                  {execsUnderTl.map((ex) => (
+                                                    <div
+                                                      key={ex.id}
+                                                      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 border border-slate-200 text-[11px] font-medium text-slate-800 hover:bg-slate-100 transition"
+                                                    >
+                                                      <UserIcon className="w-3 h-3 text-emerald-600 shrink-0" />
+                                                      <span>{ex.full_name}</span>
+                                                      <span className="text-[10px] text-slate-400 font-mono">
+                                                        (@{ex.username})
+                                                      </span>
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                          setIsManageTeamsOpen(false);
+                                                          openEditModal(ex);
+                                                        }}
+                                                        className="text-slate-400 hover:text-slate-700 p-0.5 ml-0.5"
+                                                        title="Edit Executive"
+                                                      >
+                                                        <Edit2 className="w-2.5 h-2.5" />
+                                                      </button>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        );
+                                      })
+                                    )}
+
+                                    {/* Direct Executives under C.O. (if any) */}
+                                    {directExecsUnderCo.length > 0 && (
+                                      <div className="bg-white border border-slate-200 rounded-lg p-2.5 space-y-1.5">
+                                        <span className="text-[10px] font-bold text-slate-600 uppercase block">
+                                          Direct Executives under C.O. ({directExecsUnderCo.length})
+                                        </span>
+                                        <div className="flex flex-wrap gap-1.5">
+                                          {directExecsUnderCo.map((ex) => (
+                                            <div
+                                              key={ex.id}
+                                              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-slate-50 border border-slate-200 text-[11px] text-slate-800"
+                                            >
+                                              <UserIcon className="w-3 h-3 text-emerald-600 shrink-0" />
+                                              <span>{ex.full_name}</span>
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setIsManageTeamsOpen(false);
+                                                  openEditModal(ex);
+                                                }}
+                                                className="text-slate-400 hover:text-slate-700"
+                                              >
+                                                <Edit2 className="w-2.5 h-2.5" />
+                                              </button>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+
+                          {/* Members in team without manager */}
+                          {unmanagedInTeam.length > 0 && (
+                            <div className="p-2.5 bg-amber-50/70 border border-amber-200 rounded-lg text-xs space-y-1">
+                              <span className="font-bold text-amber-900 block text-[11px]">
+                                ⚠️ {unmanagedInTeam.length} members assigned to this team without a reporting supervisor:
+                              </span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {unmanagedInTeam.map((u) => (
+                                  <button
+                                    key={u.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setQuickAssignUserId(u.id);
+                                      setQuickAssignTeamId(t.id);
+                                      setManageTeamsTab("quick_assign");
+                                    }}
+                                    className="px-2 py-0.5 rounded bg-white border border-amber-300 text-[10px] font-semibold text-amber-900 hover:bg-amber-100 transition inline-flex items-center gap-1"
+                                  >
+                                    <span>{u.full_name}</span>
+                                    <span className="text-amber-700 underline">Assign Leader</span>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+
+            {/* ── TAB 2: Quick Assign Staff ───────────────────────────────────── */}
+            {manageTeamsTab === "quick_assign" && (
+              <form onSubmit={handleQuickAssign} className="space-y-4 bg-slate-50/80 p-4 rounded-xl border border-slate-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-amber-500" />
+                    Quick 1-Click Hierarchy Assignment
+                  </span>
+                  <span className="text-[10px] text-slate-400">
+                    Fast assignment for existing or unassigned staff
+                  </span>
+                </div>
+
+                {quickAssignSuccess && (
+                  <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-semibold text-emerald-800 flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>{quickAssignSuccess}</span>
+                  </div>
+                )}
+
+                {quickAssignError && (
+                  <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-xs font-semibold text-rose-800">
+                    {quickAssignError}
+                  </div>
+                )}
+
+                {/* Step 1: Select Employee */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    Step 1: Select Staff Account *
+                  </label>
+                  <select
+                    value={quickAssignUserId}
+                    required
+                    onChange={(e) => {
+                      const idVal = e.target.value ? Number(e.target.value) : "";
+                      setQuickAssignUserId(idVal);
+                      if (idVal) {
+                        const sel = employees.find((u) => u.id === idVal);
+                        setQuickAssignTeamId(sel?.team_id || "");
+                        setQuickAssignManagerId(sel?.reporting_manager_id || "");
+                      }
+                    }}
+                    className="w-full border border-slate-300 rounded px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-indigo-600 focus:outline-none bg-white"
+                  >
+                    <option value="">-- Choose Employee to Assign / Reassign --</option>
+                    <optgroup label="⚠️ Unassigned Staff (Needs Team & Leader)">
+                      {employees
+                        .filter((u) => !u.team_id && u.role !== "admin" && u.role !== "sub_admin")
+                        .map((u) => (
+                          <option key={u.id} value={u.id}>
+                            ⚠️ {u.full_name} (@{u.username}) — Role: {u.role.toUpperCase()}
+                          </option>
+                        ))}
+                    </optgroup>
+                    <optgroup label="Currently Assigned Staff">
+                      {employees
+                        .filter((u) => !!u.team_id && u.role !== "admin" && u.role !== "sub_admin")
+                        .map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.full_name} (@{u.username}) — Current: {u.team_name || "Assigned"} ({u.role.toUpperCase()})
+                          </option>
+                        ))}
+                    </optgroup>
+                  </select>
+                </div>
+
+                {/* Step 2: Select GL Team & Supervisor */}
+                {quickAssignUserId && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                        Step 2: Assign GL Team *
+                      </label>
+                      <select
+                        value={quickAssignTeamId}
+                        required
+                        onChange={(e) => {
+                          const val = e.target.value ? Number(e.target.value) : "";
+                          setQuickAssignTeamId(val);
+                        }}
+                        className="w-full border border-slate-300 rounded px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-indigo-600 focus:outline-none bg-white"
+                      >
+                        <option value="">-- Select GL Team --</option>
+                        {teams.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            👑 {t.name} {t.director_name ? `(${t.director_name})` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                        Step 3: Assign Supervisor (T.L. or C.O.)
+                      </label>
+                      <select
+                        value={quickAssignManagerId}
+                        onChange={(e) => setQuickAssignManagerId(e.target.value ? Number(e.target.value) : "")}
+                        className="w-full border border-slate-300 rounded px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-indigo-600 focus:outline-none bg-white"
+                      >
+                        <option value="">None (Reports directly to Top / GL)</option>
+                        <optgroup label="Team Leaders (T.L.) — For Executives">
+                          {(quickAssignTeamId
+                            ? availableTeamLeaders.filter((tl) => tl.team_id === Number(quickAssignTeamId))
+                            : availableTeamLeaders
+                          )
+                            .filter((tl) => tl.id !== quickAssignUserId)
+                            .map((tl) => (
+                              <option key={tl.id} value={tl.id}>
+                                ⭐ TL: {tl.full_name} ({tl.team_name || "Team"})
+                              </option>
+                            ))}
+                        </optgroup>
+                        <optgroup label="Coordinators (C.O.) — For T.L.s or Direct">
+                          {(quickAssignTeamId
+                            ? availableCoordinators.filter((co) => co.team_id === Number(quickAssignTeamId))
+                            : availableCoordinators
+                          )
+                            .filter((co) => co.id !== quickAssignUserId)
+                            .map((co) => (
+                              <option key={co.id} value={co.id}>
+                                🎯 CO: {co.full_name} ({co.team_name || "Team"})
+                              </option>
+                            ))}
+                        </optgroup>
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
                   <Button
                     type="submit"
                     variant="primary"
                     size="sm"
-                    loading={teamFormSubmitting}
-                    disabled={teamFormSubmitting || !newTeamName.trim()}
+                    loading={quickAssignLoading}
+                    disabled={quickAssignLoading || !quickAssignUserId}
                     className="bg-indigo-600 hover:bg-indigo-700"
                   >
-                    <Plus className="w-3.5 h-3.5 mr-1" />
-                    Add Team
+                    <Save className="w-3.5 h-3.5 mr-1" />
+                    Save Hierarchy Assignment
                   </Button>
                 </div>
               </form>
-            </div>
+            )}
+
+            {/* ── TAB 3: Team Configuration ──────────────────────────────────── */}
+            {manageTeamsTab === "settings" && (
+              <div className="space-y-4 max-h-[62vh] overflow-y-auto pr-1">
+                {/* Existing Teams List */}
+                <div className="space-y-2">
+                  <span className="text-xs font-bold text-slate-800 uppercase tracking-wider block mb-2">
+                    Configured Teams ({teams.length})
+                  </span>
+
+                  {teams.length === 0 ? (
+                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-500 text-center">
+                      No teams created yet. Add your first team below.
+                    </div>
+                  ) : (
+                    teams.map((t) => (
+                      <div
+                        key={t.id}
+                        className="p-3 bg-white border border-slate-200 rounded-lg shadow-2xs flex flex-col gap-2 transition hover:border-slate-300"
+                      >
+                        {editingTeamId === t.id ? (
+                          <form onSubmit={handleUpdateTeam} className="space-y-2">
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">
+                                  Team Name *
+                                </label>
+                                <input
+                                  type="text"
+                                  required
+                                  value={editTeamName}
+                                  onChange={(e) => setEditTeamName(e.target.value)}
+                                  className="w-full border border-slate-300 rounded px-2.5 py-1 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-600 bg-white"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">
+                                  Director / Head Name
+                                </label>
+                                <input
+                                  type="text"
+                                  value={editTeamDirector}
+                                  onChange={(e) => setEditTeamDirector(e.target.value)}
+                                  placeholder="e.g. Gazi Sir"
+                                  className="w-full border border-slate-300 rounded px-2.5 py-1 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-600 bg-white"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between pt-1">
+                              <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-1.5 text-xs">
+                                  <span className="text-[11px] text-slate-600 font-medium">Order:</span>
+                                  <input
+                                    type="number"
+                                    value={editTeamOrder}
+                                    onChange={(e) => setEditTeamOrder(Number(e.target.value) || 0)}
+                                    className="w-14 border border-slate-300 rounded px-1.5 py-0.5 text-xs text-center"
+                                  />
+                                </div>
+                                <label className="flex items-center gap-1 text-xs text-slate-700 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={editTeamActive}
+                                    onChange={(e) => setEditTeamActive(e.target.checked)}
+                                    className="rounded text-indigo-600"
+                                  />
+                                  <span>Active</span>
+                                </label>
+                              </div>
+
+                              <div className="flex items-center gap-1.5">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setEditingTeamId(null)}
+                                  disabled={teamFormSubmitting}
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  type="submit"
+                                  variant="primary"
+                                  size="sm"
+                                  loading={teamFormSubmitting}
+                                  className="bg-indigo-600 hover:bg-indigo-700"
+                                >
+                                  <Save className="w-3.5 h-3.5 mr-1" />
+                                  Save Changes
+                                </Button>
+                              </div>
+                            </div>
+                          </form>
+                        ) : (
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-slate-900 text-xs">{t.name}</span>
+                                {t.director_name && (
+                                  <span className="text-[11px] text-indigo-700 font-medium bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-200">
+                                    {t.director_name}
+                                  </span>
+                                )}
+                                <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded font-mono">
+                                  Seq #{t.display_order}
+                                </span>
+                              </div>
+                              <span className="text-[11px] text-slate-500 mt-0.5 block">
+                                {t.member_count} active {t.member_count === 1 ? "member" : "members"} assigned
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingTeamId(t.id);
+                                  setEditTeamName(t.name);
+                                  setEditTeamDirector(t.director_name || "");
+                                  setEditTeamOrder(t.display_order);
+                                  setEditTeamActive(t.is_active);
+                                }}
+                                className="p-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition"
+                                title="Edit Team"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteTeam(t.id, t.name)}
+                                className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition"
+                                title="Delete Team"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Add New Team Box */}
+                <div className="pt-3 border-t border-slate-200">
+                  <span className="text-xs font-bold text-slate-800 uppercase tracking-wider block mb-2">
+                    + Create New Team
+                  </span>
+                  <form onSubmit={handleCreateTeam} className="space-y-2 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">
+                          Team Name *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Gazi Sir Team"
+                          value={newTeamName}
+                          onChange={(e) => setNewTeamName(e.target.value)}
+                          className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-600 bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">
+                          Director Name
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Gazi Sir"
+                          value={newTeamDirector}
+                          onChange={(e) => setNewTeamDirector(e.target.value)}
+                          className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-600 bg-white"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1">
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <span className="text-[11px] text-slate-600 font-medium">Display Sequence:</span>
+                        <input
+                          type="number"
+                          value={newTeamOrder}
+                          onChange={(e) => setNewTeamOrder(Number(e.target.value) || 0)}
+                          className="w-16 border border-slate-300 rounded px-1.5 py-0.5 text-xs text-center bg-white"
+                        />
+                      </div>
+
+                      <Button
+                        type="submit"
+                        variant="primary"
+                        size="sm"
+                        loading={teamFormSubmitting}
+                        disabled={teamFormSubmitting || !newTeamName.trim()}
+                        className="bg-indigo-600 hover:bg-indigo-700"
+                      >
+                        <Plus className="w-3.5 h-3.5 mr-1" />
+                        Add Team
+                      </Button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
           </div>
         </Modal>
       </div>

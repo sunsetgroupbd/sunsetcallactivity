@@ -474,7 +474,7 @@ function DashboardContent() {
         </div>
 
         {/* ── Dialing Red Flag Monitor (< 150 Calls/Day) ───────────────────── */}
-        {summary?.red_flagged_reports && summary.red_flagged_reports.length > 0 ? (
+        {summary?.red_flagged_reports && summary.red_flagged_reports.length > 0 && (
           <Card className="border-rose-200 bg-rose-50/20 overflow-hidden shadow-xs">
             <CardHeader className="bg-gradient-to-r from-rose-100/80 to-rose-50 border-b border-rose-200 p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -579,20 +579,6 @@ function DashboardContent() {
               </div>
             </CardContent>
           </Card>
-        ) : (
-          !loading && summary && summary.total_reports > 0 && (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex items-center justify-between text-xs text-emerald-900 shadow-2xs">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span className="font-semibold">
-                  Zero Dialing Red Flags: All staff reports in this period achieved or exceeded the 150 daily dialed calls quota.
-                </span>
-              </div>
-              <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-full">
-                100% Dialing Compliance
-              </span>
-            </div>
-          )
         )}
 
         {/* ── Visual Analytics: Monthly Pace & Financial Trend (Admin/Sub-Admin Only) ─── */}

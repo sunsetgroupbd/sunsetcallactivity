@@ -11,6 +11,7 @@ import {
   Calendar,
   FileText,
   Banknote,
+  Flag,
   X,
   ExternalLink,
   ChevronRight,
@@ -305,7 +306,13 @@ export function NotificationBell() {
                       {/* Icon */}
                       <div
                         className={`p-1.5 rounded-lg shrink-0 mt-0.5 ${
-                          r.type.startsWith("follow_up")
+                          r.type === "dialing_red_flag"
+                            ? "bg-rose-100 text-rose-700 ring-2 ring-rose-500"
+                            : r.type === "lead_pipeline_risk"
+                            ? isUrgent
+                              ? "bg-rose-100 text-rose-700 ring-2 ring-rose-400"
+                              : "bg-amber-100 text-amber-700 ring-2 ring-amber-400"
+                            : r.type.startsWith("follow_up")
                             ? isUrgent
                               ? "bg-rose-100 text-rose-700"
                               : "bg-amber-100 text-amber-700"
@@ -318,7 +325,11 @@ export function NotificationBell() {
                             : "bg-emerald-100 text-emerald-700"
                         }`}
                       >
-                        {r.type.startsWith("follow_up") ? (
+                        {r.type === "dialing_red_flag" ? (
+                          <Flag className="w-3.5 h-3.5 fill-rose-600 text-rose-600" />
+                        ) : r.type === "lead_pipeline_risk" ? (
+                          <AlertTriangle className="w-3.5 h-3.5" />
+                        ) : r.type.startsWith("follow_up") ? (
                           <Phone className="w-3.5 h-3.5" />
                         ) : r.type === "report_submission" ? (
                           <FileText className="w-3.5 h-3.5" />
@@ -333,6 +344,16 @@ export function NotificationBell() {
                           <h4 className="text-xs font-bold text-slate-900 truncate">
                             {r.title}
                           </h4>
+                          {r.type === "dialing_red_flag" && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-100 text-rose-800 border border-rose-300 whitespace-nowrap">
+                              🚩 Red Flag (&lt;150)
+                            </span>
+                          )}
+                          {r.type === "lead_pipeline_risk" && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-100 text-rose-800 border border-rose-300">
+                              On Risk
+                            </span>
+                          )}
                           {r.category && (
                             <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
                               {r.category}

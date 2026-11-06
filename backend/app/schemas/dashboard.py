@@ -62,6 +62,20 @@ class LeadCategoryBreakdown(BaseModel):
     lead_status_ni: Optional[int] = None
 
 
+class RedFlagEmployeeItem(BaseModel):
+    employee_id: int
+    employee_name: str
+    username: str
+    report_date: date
+    report_id: int
+    total_dialed: int
+    threshold: int = 150
+    deficit: int
+    outdoor_visits: int = 0
+    indoor_cx: int = 0
+    status: str = "draft"
+
+
 class TargetAchievement(BaseModel):
     """Pairs an actual value with its target. achievement_pct is None if no target."""
     actual: Optional[Decimal] = None
@@ -85,6 +99,10 @@ class ReportSummary(BaseModel):
     total_connected: int = 0
     connection_rate_pct: Optional[Decimal] = None
     total_call_duration_minutes: int = 0
+
+    # Red flag indicator (total_dialed < 150 per day)
+    is_red_flag: bool = False
+    red_flag_reason: Optional[str] = None
 
     # Slot totals (across all categories)
     call_slots: SlotBreakdown = SlotBreakdown()
@@ -182,6 +200,10 @@ class DashboardSummary(BaseModel):
     by_category: dict[str, dict[str, int]] = {}
     lead_category_breakdown: list[LeadCategoryBreakdown] = []
 
+    # Red flag monitor for dialed calls < 150
+    red_flagged_count: int = 0
+    red_flagged_reports: list[RedFlagEmployeeItem] = []
+
 
 class EmployeeLeaderboardItem(BaseModel):
     rank: int
@@ -211,6 +233,8 @@ class EmployeeLeaderboardItem(BaseModel):
     carry_forward_deficit: Optional[float] = None
     monthly_collection_target: Optional[float] = None
     month_to_date_collected: Optional[float] = None
+    is_red_flagged: bool = False
+    red_flag_days_count: int = 0
 
 
 class KPIChampion(BaseModel):

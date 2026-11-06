@@ -19,6 +19,8 @@ import {
   Phone,
   ChevronRight,
   Printer,
+  Flag,
+  CheckCircle2,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { KPILeaderboard } from "@/components/dashboard/kpi-leaderboard";
@@ -398,6 +400,14 @@ function DashboardContent() {
                 value={summary?.total_calls_dialed ?? 0}
                 subtitle={`${summary?.total_reports ?? 0} reports in period`}
                 icon={<PhoneCall className="w-4 h-4" />}
+                badge={
+                  summary?.red_flagged_count && summary.red_flagged_count > 0 ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-300 animate-pulse">
+                      <Flag className="w-2.5 h-2.5 fill-rose-600 text-rose-600" />
+                      {summary.red_flagged_count} Red Flag{summary.red_flagged_count > 1 ? "s" : ""} (&lt;150)
+                    </span>
+                  ) : undefined
+                }
               />
               <StatCard
                 title="Connected Calls"
@@ -462,6 +472,128 @@ function DashboardContent() {
             </>
           )}
         </div>
+
+        {/* ── Dialing Red Flag Monitor (< 150 Calls/Day) ───────────────────── */}
+        {summary?.red_flagged_reports && summary.red_flagged_reports.length > 0 ? (
+          <Card className="border-rose-200 bg-rose-50/20 overflow-hidden shadow-xs">
+            <CardHeader className="bg-gradient-to-r from-rose-100/80 to-rose-50 border-b border-rose-200 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 rounded-lg bg-rose-600 text-white shrink-0 shadow-xs">
+                    <Flag className="w-4 h-4 fill-white" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <CardTitle className="text-sm sm:text-base font-extrabold text-rose-950 uppercase tracking-wide">
+                        Dialing Red Flag Monitor — Less Than 150 Calls/Day
+                      </CardTitle>
+                      <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-rose-600 text-white animate-pulse">
+                        {summary.red_flagged_count ?? 0} Report{(summary.red_flagged_count ?? 0) > 1 ? "s" : ""}
+                      </span>
+                    </div>
+                    <p className="text-xs text-rose-700 mt-0.5">
+                      Daily call activity falling short of the mandatory 150 dialed calls benchmark.
+                    </p>
+                  </div>
+                </div>
+
+                <Link
+                  href="/reports"
+                  className="text-xs font-bold text-rose-800 hover:text-rose-950 bg-white/90 hover:bg-white border border-rose-300 px-3 py-1.5 rounded-lg transition-all inline-flex items-center gap-1 shadow-2xs"
+                >
+                  <span>Open in Reports</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            </CardHeader>
+
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-rose-100/40 border-b border-rose-200 text-rose-900 text-[11px] font-bold uppercase tracking-wider">
+                      <th className="py-2.5 px-4">Employee</th>
+                      <th className="py-2.5 px-3">Report Date</th>
+                      <th className="py-2.5 px-3 text-center">Dialed / Benchmark</th>
+                      <th className="py-2.5 px-3 text-center">Deficit</th>
+                      <th className="py-2.5 px-3 text-center">Meetings Context</th>
+                      <th className="py-2.5 px-3 text-center">Status</th>
+                      <th className="py-2.5 px-4 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-rose-100 bg-white">
+                    {summary.red_flagged_reports.map((item, idx) => (
+                      <tr key={`${item.report_id}-${idx}`} className="hover:bg-rose-50/50 transition-colors">
+                        <td className="py-3 px-4 font-semibold text-slate-900">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-900">{item.employee_name}</span>
+                            <span className="font-mono text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 px-1.5 py-0.5 rounded">
+                              {formatEmployeeId(item.employee_id)}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 text-slate-700 font-medium whitespace-nowrap">
+                          {formatReadableDate(item.report_date)}
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <div className="inline-flex items-center gap-1 font-bold text-rose-700 bg-rose-100 px-2.5 py-1 rounded-full border border-rose-300">
+                            <Flag className="w-3 h-3 fill-rose-600 text-rose-600 shrink-0" />
+                            <span>{item.total_dialed}</span>
+                            <span className="text-rose-500 font-normal">/ {item.threshold}</span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <span className="font-mono text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded">
+                            -{item.deficit} calls
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-center text-slate-600">
+                          {item.outdoor_visits > 0 || item.indoor_cx > 0 ? (
+                            <span className="text-[11px] text-slate-700 font-medium">
+                              {item.outdoor_visits > 0 && `${item.outdoor_visits} outdoor`}
+                              {item.outdoor_visits > 0 && item.indoor_cx > 0 && ", "}
+                              {item.indoor_cx > 0 && `${item.indoor_cx} indoor`}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-[11px]">No meetings</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <Badge variant={item.status === "submitted" ? "success" : "warning"} className="text-[10px] capitalize">
+                            {item.status}
+                          </Badge>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <Link
+                            href={`/calls?date=${item.report_date}&employee_id=${item.employee_id}`}
+                            className="inline-flex items-center gap-1 text-xs font-bold text-rose-700 hover:text-rose-900 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1 rounded-md transition-colors"
+                          >
+                            <span>Inspect</span>
+                            <ArrowRight className="w-3 h-3" />
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          !loading && summary && summary.total_reports > 0 && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex items-center justify-between text-xs text-emerald-900 shadow-2xs">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span className="font-semibold">
+                  Zero Dialing Red Flags: All staff reports in this period achieved or exceeded the 150 daily dialed calls quota.
+                </span>
+              </div>
+              <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-full">
+                100% Dialing Compliance
+              </span>
+            </div>
+          )
+        )}
 
         {/* ── Visual Analytics: Monthly Pace & Financial Trend (Admin/Sub-Admin Only) ─── */}
         {isAdmin && (

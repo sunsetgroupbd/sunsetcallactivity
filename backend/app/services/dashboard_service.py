@@ -33,6 +33,7 @@ from app.repositories.targets_repo import TargetsRepository
 from app.schemas.dashboard import (
     DashboardSummary,
     LeadCategoryBreakdown,
+    RedFlagEmployeeItem,
     ReportSummary,
     SlotBreakdown,
     TargetAchievement,
@@ -351,6 +352,13 @@ class DashboardService:
             ),
         )
 
+        is_red_flag = total_dialed < 150
+        red_flag_reason = (
+            f"Dialed only {total_dialed} calls (minimum required: 150, deficit: {150 - total_dialed})"
+            if is_red_flag
+            else None
+        )
+
         return ReportSummary(
             report_id=report.id,
             report_date=report.report_date,
@@ -360,6 +368,8 @@ class DashboardService:
             total_connected=total_connected,
             connection_rate_pct=connection_rate,
             total_call_duration_minutes=total_call_dur,
+            is_red_flag=is_red_flag,
+            red_flag_reason=red_flag_reason,
             call_slots=SlotBreakdown(
                 slot_10am_1pm=call_slot_10,
                 slot_2pm_5pm=call_slot_2,
@@ -398,6 +408,7 @@ class DashboardService:
         stmt = (
             select(DailyActivityReport)
             .options(
+                selectinload(DailyActivityReport.employee),
                 selectinload(DailyActivityReport.call_entries),
                 selectinload(DailyActivityReport.meeting_entries),
                 selectinload(DailyActivityReport.sales_collection_entries),
@@ -422,6 +433,8 @@ class DashboardService:
         submitted_reports = 0
         days_with_outdoor: set[date] = set()
         days_with_indoor: set[date] = set()
+
+        red_flagged_reports: list[RedFlagEmployeeItem] = []
 
         slot_breakdown: dict[str, dict[str, int]] = {
             "10_to_1": {"dialed": 0},
@@ -511,6 +524,52 @@ class DashboardService:
             agg_fin["total_emi_collection"] += fin["total_emi_collection"]
             agg_fin["total_emi_commitments"] += fin.get("total_emi_commitments", Decimal("0"))
 
+            # Calculate report-specific dialed calls to evaluate red flag threshold (< 150)
+            rep_dialed = 0
+            for ce in report.call_entries:
+                slot1 = ce.slot_10am_1pm or 0
+                slot2 = ce.slot_2pm_5pm or 0
+                slot3 = ce.slot_5pm_6pm or 0
+                ce_hp = ce.lead_status_hp or 0
+                ce_p = ce.lead_status_p or 0
+                ce_fub = ce.lead_status_fub or 0
+                ce_ni = ce.lead_status_ni or 0
+                outcomes_conn = ce_hp + ce_p + ce_fub + ce_ni
+                ce_connected = ce.total_connected if (ce.total_connected is not None and ce.total_connected >= outcomes_conn) else outcomes_conn
+                ce_dialed = max(ce.total_dialed if ce.total_dialed is not None else (slot1 + slot2 + slot3), ce_connected)
+                rep_dialed += ce_dialed
+
+            rep_outdoor = 0
+            rep_indoor = 0
+            for me in report.meeting_entries:
+                s_sum = (me.slot_10am_1pm or 0) + (me.slot_2pm_5pm or 0) + (me.slot_5pm_6pm or 0)
+                val = me.total_count if me.total_count is not None else s_sum
+                act_lower = (me.activity_type or "").lower()
+                if "outdoor_visit" in act_lower or "outdoor visit" in act_lower or "visit" in act_lower:
+                    rep_outdoor += val
+                elif "indoor_cx" in act_lower or "indoor cx" in act_lower or "cx" in act_lower:
+                    rep_indoor += val
+
+            if rep_dialed < 150:
+                emp_name = report.employee.full_name if report.employee else f"Employee #{report.employee_id}"
+                emp_username = report.employee.username if report.employee else str(report.employee_id)
+                status_str = report.status.value if hasattr(report.status, "value") else str(report.status)
+                red_flagged_reports.append(
+                    RedFlagEmployeeItem(
+                        employee_id=report.employee_id,
+                        employee_name=emp_name,
+                        username=emp_username,
+                        report_date=report.report_date,
+                        report_id=report.id,
+                        total_dialed=rep_dialed,
+                        threshold=150,
+                        deficit=150 - rep_dialed,
+                        outdoor_visits=rep_outdoor,
+                        indoor_cx=rep_indoor,
+                        status=status_str,
+                    )
+                )
+
         tot_commitments = (
             agg_fin["total_sales_commitments"]
             + agg_fin["total_tb_commitments"]
@@ -555,6 +614,8 @@ class DashboardService:
             by_slot=slot_breakdown,
             by_category=by_category_dict,
             lead_category_breakdown=list(category_map.values()),
+            red_flagged_count=len(red_flagged_reports),
+            red_flagged_reports=red_flagged_reports,
         )
 
     async def get_performance_leaderboard(
@@ -699,6 +760,8 @@ class DashboardService:
                     carry_forward_deficit=cf_deficit,
                     monthly_collection_target=monthly_coll_tgt,
                     month_to_date_collected=colls,
+                    is_red_flagged=(dialed < 150) if (date_from == date_to) else (summary.red_flagged_count > 0),
+                    red_flag_days_count=1 if (date_from == date_to and dialed < 150) else summary.red_flagged_count,
                 )
             )
 

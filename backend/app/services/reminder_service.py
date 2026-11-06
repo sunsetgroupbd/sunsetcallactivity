@@ -7,8 +7,10 @@ from typing import List, Optional
 from urllib.parse import quote_plus
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.call_activity import CallActivityEntry
 from app.models.report import DailyActivityReport, ReportStatus
 from app.models.sales_collection import SalesCollectionEntry
 from app.models.user import User, UserRole
@@ -23,6 +25,25 @@ def get_dhaka_now() -> datetime:
 class ReminderService:
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    @staticmethod
+    def _normalize_category(cat: str) -> str:
+        s = cat.lower().strip()
+        if "high" in s:
+            return "high_potential"
+        if "potential" in s:
+            return "potential"
+        if "facebook" in s:
+            return "facebook"
+        if "fair" in s:
+            return "fair_leads"
+        if "follow" in s or "fub" in s:
+            return "follow_up"
+        if "other" in s or "not" in s or "reached" in s:
+            return "other_not_reached"
+        if "cold" in s or "new" in s:
+            return "new_cold_leads"
+        return s.replace(" ", "_").replace("&", "_")
 
     async def _get_admin_executive_reminders(
         self,
@@ -207,7 +228,105 @@ class ReminderService:
                 )
             )
 
-        # 6. Call Slot Mid-Day Nudge
+        # 6. Check Active Staff Lead Pipelines On Risk (HP < 50, P < 150, FUB < 500)
+        if active_emp_ids:
+            risk_entries_q = await self.db.execute(
+                select(CallActivityEntry, DailyActivityReport, User)
+                .join(DailyActivityReport, CallActivityEntry.report_id == DailyActivityReport.id)
+                .join(User, DailyActivityReport.employee_id == User.id)
+                .where(
+                    DailyActivityReport.employee_id.in_(active_emp_ids),
+                    DailyActivityReport.report_date >= (today - timedelta(days=2)),
+                )
+            )
+            risk_user_map: dict[str, list[str]] = {}
+            for centry, crep, cuser in risk_entries_q.all():
+                cat_n = self._normalize_category(centry.lead_category)
+                st = centry.till_today_status if centry.till_today_status is not None else 0
+                r_tag = None
+                if cat_n == "high_potential" and st < 50:
+                    r_tag = f"HP: {st} (<50)"
+                elif cat_n == "potential" and st < 150:
+                    r_tag = f"P: {st} (<150)"
+                elif cat_n == "follow_up" and st < 500:
+                    r_tag = f"FUB: {st} (<500)"
+
+                if r_tag:
+                    uname = cuser.full_name or cuser.username
+                    if uname not in risk_user_map:
+                        risk_user_map[uname] = []
+                    if r_tag not in risk_user_map[uname]:
+                        risk_user_map[uname].append(r_tag)
+
+            if risk_user_map:
+                names_summary = "; ".join(
+                    f"{uname} ({', '.join(tags)})" for uname, tags in list(risk_user_map.items())[:3]
+                )
+                extra = len(risk_user_map) - 3
+                if extra > 0:
+                    names_summary += f" +{extra} more"
+                reminders.append(
+                    ReminderItem(
+                        id=f"admin-lead-risk-{today_str}",
+                        type="lead_pipeline_risk",
+                        severity="warning",
+                        title=f"{len(risk_user_map)} Staff Lead Pipelines On Risk",
+                        message=f"Starting leads below threshold: {names_summary}.",
+                        date=today_str,
+                        link="/reports",
+                        action_label="Review Reports",
+                    )
+                )
+
+        # 6b. Check Staff Dialing Red Flags (< 150 calls today)
+        if active_emp_ids:
+            today_reps_q = await self.db.execute(
+                select(DailyActivityReport)
+                .options(
+                    selectinload(DailyActivityReport.call_entries),
+                    selectinload(DailyActivityReport.employee),
+                )
+                .where(
+                    DailyActivityReport.employee_id.in_(active_emp_ids),
+                    DailyActivityReport.report_date == today,
+                )
+            )
+            red_flagged_staff: list[str] = []
+            for rep in today_reps_q.scalars().all():
+                r_dialed = 0
+                for ce in rep.call_entries:
+                    slot1 = ce.slot_10am_1pm or 0
+                    slot2 = ce.slot_2pm_5pm or 0
+                    slot3 = ce.slot_5pm_6pm or 0
+                    ce_hp = ce.lead_status_hp or 0
+                    ce_p = ce.lead_status_p or 0
+                    ce_fub = ce.lead_status_fub or 0
+                    ce_ni = ce.lead_status_ni or 0
+                    outcomes_conn = ce_hp + ce_p + ce_fub + ce_ni
+                    ce_conn = ce.total_connected if (ce.total_connected is not None and ce.total_connected >= outcomes_conn) else outcomes_conn
+                    r_dialed += max(ce.total_dialed if ce.total_dialed is not None else (slot1 + slot2 + slot3), ce_conn)
+                if r_dialed < 150 and rep.call_entries:
+                    uname = rep.employee.full_name or rep.employee.username if rep.employee else str(rep.employee_id)
+                    red_flagged_staff.append(f"{uname} ({r_dialed})")
+
+            if red_flagged_staff:
+                summary_names = ", ".join(red_flagged_staff[:3])
+                if len(red_flagged_staff) > 3:
+                    summary_names += f" +{len(red_flagged_staff) - 3} more"
+                reminders.append(
+                    ReminderItem(
+                        id=f"admin-red-flag-dial-{today_str}",
+                        type="dialing_red_flag",
+                        severity="urgent" if hour >= 16 else "warning",
+                        title=f"🚩 {len(red_flagged_staff)} Staff Dialing Red Flags (< 150 Calls)",
+                        message=f"Staff with less than 150 dials today: {summary_names}.",
+                        date=today_str,
+                        link="/reports",
+                        action_label="Review Reports",
+                    )
+                )
+
+        # 7. Call Slot Mid-Day Nudge
         slot_nudge_text = None
         if 10 <= hour < 13:
             slot_nudge_text = "Slot 1 (10 AM – 1 PM)"
@@ -278,6 +397,101 @@ class ReminderService:
                     action_label="Submit",
                 )
             )
+
+        # ── 1b. Check Starting Leads On Risk (HP < 50, P < 150, FUB < 500) ────
+        target_rep = today_report
+        if not target_rep:
+            latest_rep_q = await self.db.execute(
+                select(DailyActivityReport)
+                .where(
+                    DailyActivityReport.employee_id == emp_id,
+                    DailyActivityReport.report_date <= today,
+                )
+                .order_by(DailyActivityReport.report_date.desc())
+                .limit(1)
+            )
+            target_rep = latest_rep_q.scalar_one_or_none()
+
+        if target_rep:
+            call_entries_q = await self.db.execute(
+                select(CallActivityEntry).where(CallActivityEntry.report_id == target_rep.id)
+            )
+            call_entries = list(call_entries_q.scalars().all())
+            for ce in call_entries:
+                norm_cat = self._normalize_category(ce.lead_category)
+                start_leads = ce.till_today_status if ce.till_today_status is not None else 0
+
+                if norm_cat == "high_potential" and start_leads < 50:
+                    reminders.append(
+                        ReminderItem(
+                            id=f"risk-lead-hp-{target_rep.id}",
+                            type="lead_pipeline_risk",
+                            severity="urgent",
+                            title=f"High Potential Leads On Risk ({start_leads} < 50)",
+                            message=f"Your High Potential starting leads ({start_leads}) is below the required 50. Replenish your high potential pipeline.",
+                            category="High Potential",
+                            date=today_str,
+                            link=f"/calls?date={target_rep.report_date}&employee_id={emp_id}",
+                            action_label="Update Calls",
+                        )
+                    )
+                elif norm_cat == "potential" and start_leads < 150:
+                    reminders.append(
+                        ReminderItem(
+                            id=f"risk-lead-p-{target_rep.id}",
+                            type="lead_pipeline_risk",
+                            severity="warning",
+                            title=f"Potential Leads On Risk ({start_leads} < 150)",
+                            message=f"Your Potential starting leads ({start_leads}) is below the required 150. Replenish your potential pipeline.",
+                            category="Potential",
+                            date=today_str,
+                            link=f"/calls?date={target_rep.report_date}&employee_id={emp_id}",
+                            action_label="Update Calls",
+                        )
+                    )
+                elif norm_cat == "follow_up" and start_leads < 500:
+                    reminders.append(
+                        ReminderItem(
+                            id=f"risk-lead-fub-{target_rep.id}",
+                            type="lead_pipeline_risk",
+                            severity="warning",
+                            title=f"Follow Up Leads On Risk ({start_leads} < 500)",
+                            message=f"Your Follow Up starting leads ({start_leads}) is below the required 500. Replenish your follow-up pipeline.",
+                            category="Follow Up",
+                            date=today_str,
+                            link=f"/calls?date={target_rep.report_date}&employee_id={emp_id}",
+                            action_label="Update Calls",
+                        )
+                    )
+
+            # Check Dialing Red Flag (< 150 calls per day)
+            tot_rep_dialed = 0
+            for ce in call_entries:
+                slot1 = ce.slot_10am_1pm or 0
+                slot2 = ce.slot_2pm_5pm or 0
+                slot3 = ce.slot_5pm_6pm or 0
+                ce_hp = ce.lead_status_hp or 0
+                ce_p = ce.lead_status_p or 0
+                ce_fub = ce.lead_status_fub or 0
+                ce_ni = ce.lead_status_ni or 0
+                outcomes_conn = ce_hp + ce_p + ce_fub + ce_ni
+                ce_conn = ce.total_connected if (ce.total_connected is not None and ce.total_connected >= outcomes_conn) else outcomes_conn
+                tot_rep_dialed += max(ce.total_dialed if ce.total_dialed is not None else (slot1 + slot2 + slot3), ce_conn)
+
+            if call_entries and tot_rep_dialed < 150:
+                is_urgent_dial = hour >= 16 or target_rep.status == ReportStatus.SUBMITTED
+                reminders.append(
+                    ReminderItem(
+                        id=f"red-flag-dial-{target_rep.id}",
+                        type="dialing_red_flag",
+                        severity="urgent" if is_urgent_dial else "warning",
+                        title=f"🚩 Dialing Red Flag: {tot_rep_dialed} Calls (< 150)",
+                        message=f"You have dialed {tot_rep_dialed} calls for {target_rep.report_date}. Daily required minimum is 150 calls (deficit: {150 - tot_rep_dialed}).",
+                        date=str(target_rep.report_date),
+                        link=f"/calls?date={target_rep.report_date}&employee_id={emp_id}",
+                        action_label="Make Calls / Update",
+                    )
+                )
 
         # ── 2. Check Client Follow-Ups in Recent Reports (Last 30 Days) ──────
         thirty_days_ago = today - timedelta(days=30)

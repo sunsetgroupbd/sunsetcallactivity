@@ -16,6 +16,7 @@ import {
   Flame,
   ArrowUpDown,
   ExternalLink,
+  Flag,
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent, Badge, Skeleton, Button } from "@/components/ui";
 import { PerformanceLeaderboardResponse, EmployeeLeaderboardItem } from "@/types";
@@ -294,6 +295,12 @@ export function KPILeaderboard({
                     ? "Target reached! 🎉"
                     : `${personal.dialed_target - personal.dialed_calls} calls remaining`}
                 </p>
+              )}
+              {personal.dialed_calls < 150 && (
+                <div className="pt-1 flex items-center gap-1 text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded">
+                  <Flag className="w-3 h-3 fill-rose-600 text-rose-600 shrink-0" />
+                  <span>🚩 Dialing Red Flag: &lt;150 calls ({150 - personal.dialed_calls} deficit)</span>
+                </div>
               )}
             </div>
 
@@ -686,6 +693,17 @@ export function KPILeaderboard({
                           </span>
                         </div>
                       ) : null}
+                      {(emp.is_red_flagged || emp.dialed_calls < 150) && (
+                        <div className="mt-1 flex items-center justify-start">
+                          <span
+                            className="inline-flex items-center gap-0.5 text-[9px] font-bold text-rose-700 bg-rose-50 px-1.5 py-0.2 rounded border border-rose-300 whitespace-nowrap animate-pulse"
+                            title="Dialing Red Flag: Less than 150 calls dialed"
+                          >
+                            <Flag className="w-2.5 h-2.5 fill-rose-600 text-rose-600 shrink-0" />
+                            <span>Red Flag (&lt;150)</span>
+                          </span>
+                        </div>
+                      )}
                     </td>
 
                     {/* Connected Target vs Actual */}
@@ -855,6 +873,17 @@ export function KPILeaderboard({
                           </span>
                         </div>
                       ) : null}
+                      {(emp.is_red_flagged || emp.dialed_calls < 150) && (
+                        <div className="mt-1 flex items-center justify-start">
+                          <span
+                            className="inline-flex items-center gap-0.5 text-[9px] font-bold text-rose-700 bg-rose-100 px-1.5 py-0.2 rounded border border-rose-300"
+                            title="Dialing Red Flag: Less than 150 calls"
+                          >
+                            <Flag className="w-2.5 h-2.5 fill-rose-600 text-rose-600 shrink-0" />
+                            <span>Red Flag (&lt;150)</span>
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
 

@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 class ReminderItem(BaseModel):
     id: str
-    type: str  # "follow_up_today" | "follow_up_overdue" | "report_submission" | "commitment_due" | "slot_nudge"
+    type: str  # "follow_up_today" | "follow_up_overdue" | "report_submission" | "commitment_due" | "slot_nudge" | "lead_pipeline_risk" | "dialing_red_flag"
     severity: str  # "urgent" | "warning" | "info"
     title: str
     message: str

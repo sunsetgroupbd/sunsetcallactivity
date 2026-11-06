@@ -361,6 +361,20 @@ export interface SalesCollectionResponse {
   totals: FinancialTotals;
 }
 
+export interface RedFlagEmployeeItem {
+  employee_id: number;
+  employee_name: string;
+  username: string;
+  report_date: string;
+  report_id: number;
+  total_dialed: number;
+  threshold: number;
+  deficit: number;
+  outdoor_visits: number;
+  indoor_cx: number;
+  status: string;
+}
+
 export interface DashboardSummary {
   period_start: string;
   period_end: string;
@@ -383,6 +397,8 @@ export interface DashboardSummary {
   total_new_sales?: number;
   by_category: Record<string, { dialed: number; connected: number; duration_min: number }>;
   by_slot: Record<string, { dialed: number }>;
+  red_flagged_count?: number;
+  red_flagged_reports?: RedFlagEmployeeItem[];
 }
 
 export interface DailyTarget {
@@ -423,7 +439,7 @@ export interface SystemSetting {
 
 export interface ReminderItem {
   id: string;
-  type: "follow_up_today" | "follow_up_overdue" | "report_submission" | "commitment_due" | "slot_nudge" | string;
+  type: "follow_up_today" | "follow_up_overdue" | "report_submission" | "commitment_due" | "slot_nudge" | "lead_pipeline_risk" | "dialing_red_flag" | string;
   severity: "urgent" | "warning" | "info";
   title: string;
   message: string;
@@ -476,6 +492,8 @@ export interface EmployeeLeaderboardItem {
   carry_forward_deficit?: number;
   monthly_collection_target?: number;
   month_to_date_collected?: number;
+  is_red_flagged?: boolean;
+  red_flag_days_count?: number;
 }
 
 export interface KPIChampion {

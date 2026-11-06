@@ -14,6 +14,7 @@ import {
   Printer,
   Search,
   X,
+  Flag,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import {
@@ -121,8 +122,8 @@ function ReportsContent() {
     if (paramEndDate) return paramEndDate;
     return getDatePresetRange("30days").end;
   });
-  const [statusFilter, setStatusFilter] = useState<"all" | "submitted" | "draft">(() => {
-    if (paramStatus === "submitted" || paramStatus === "draft") return paramStatus;
+  const [statusFilter, setStatusFilter] = useState<"all" | "submitted" | "draft" | "red_flag">(() => {
+    if (paramStatus === "submitted" || paramStatus === "draft" || paramStatus === "red_flag") return paramStatus;
     return "all";
   });
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | "all">(() => {
@@ -156,7 +157,7 @@ function ReportsContent() {
         setDatePreset("custom");
       }
     }
-    if (urlStatus === "submitted" || urlStatus === "draft" || urlStatus === "all") {
+    if (urlStatus === "submitted" || urlStatus === "draft" || urlStatus === "red_flag" || urlStatus === "all") {
       setStatusFilter(urlStatus);
     }
   }, [searchParams]);
@@ -243,7 +244,7 @@ function ReportsContent() {
     setError(null);
     try {
       const isSub =
-        statusFilter === "all" ? undefined : statusFilter === "submitted";
+        statusFilter === "submitted" ? true : statusFilter === "draft" ? false : undefined;
       const empId =
         selectedEmployeeId !== "all" ? Number(selectedEmployeeId) : undefined;
 
@@ -285,12 +286,21 @@ function ReportsContent() {
   }, [loadReports]);
 
   // Filter reports by search query (Employee Name, Employee Code EMP-XXX, Report ID REP-XXXXX, Date)
+  // and handle red flag filtering (< 150 dialed calls)
   const filteredReports = useMemo(() => {
-    if (!searchQuery.trim()) return reports;
+    let list = reports;
+    if (statusFilter === "red_flag") {
+      list = list.filter((r) => {
+        const dialed = r.summary?.total_calls_dialed ?? r.summary?.total_dialed ?? 0;
+        return dialed < 150;
+      });
+    }
+
+    if (!searchQuery.trim()) return list;
     const q = searchQuery.toLowerCase().trim();
     const cleanQ = q.replace(/^#/, "");
 
-    return reports.filter((r) => {
+    return list.filter((r) => {
       const rawId = String(r.id);
       const repPadded = `rep-${rawId.padStart(5, "0")}`.toLowerCase();
       const repShort = `rep-${rawId}`.toLowerCase();
@@ -374,6 +384,7 @@ function ReportsContent() {
       "Employee ID",
       "Staff Officer",
       "Status",
+      "Red Flag Status",
       "Total Dialed",
       "Total Connected",
       "Call Duration (min)",
@@ -389,22 +400,27 @@ function ReportsContent() {
       return `"${String(str).replace(/"/g, '""')}"`;
     };
 
-    const rows = filteredReports.map((r) => [
-      `REP-${String(r.id).padStart(5, "0")}`,
-      r.report_date,
-      formatEmployeeId(r.employee_id),
-      r.employee_name || "N/A",
-      r.is_submitted ? "Submitted" : "Draft",
-      r.summary?.total_calls_dialed ?? r.summary?.total_dialed ?? 0,
-      r.summary?.total_calls_connected ?? r.summary?.total_connected ?? 0,
-      r.summary?.total_call_duration_minutes ?? 0,
-      r.summary?.total_meeting_time_minutes ?? r.summary?.total_meeting_duration_minutes ?? 0,
-      r.summary?.total_outdoor_visits ?? 0,
-      r.summary?.actual_collection_bdt ?? r.summary?.total_actual_collection ?? 0,
-      r.summary?.commitments_bdt ??
-        (Number(r.summary?.total_sales_commitments || 0) + Number(r.summary?.total_tb_commitments || 0)),
-      r.submitted_at || "Pending",
-    ]);
+    const rows = filteredReports.map((r) => {
+      const dialed = r.summary?.total_calls_dialed ?? r.summary?.total_dialed ?? 0;
+      const isRedFlag = dialed < 150;
+      return [
+        `REP-${String(r.id).padStart(5, "0")}`,
+        r.report_date,
+        formatEmployeeId(r.employee_id),
+        r.employee_name || "N/A",
+        r.is_submitted ? "Submitted" : "Draft",
+        isRedFlag ? `RED FLAG (${dialed}/150 calls)` : "Normal (>=150)",
+        dialed,
+        r.summary?.total_calls_connected ?? r.summary?.total_connected ?? 0,
+        r.summary?.total_call_duration_minutes ?? 0,
+        r.summary?.total_meeting_time_minutes ?? r.summary?.total_meeting_duration_minutes ?? 0,
+        r.summary?.total_outdoor_visits ?? 0,
+        r.summary?.actual_collection_bdt ?? r.summary?.total_actual_collection ?? 0,
+        r.summary?.commitments_bdt ??
+          (Number(r.summary?.total_sales_commitments || 0) + Number(r.summary?.total_tb_commitments || 0)),
+        r.submitted_at || "Pending",
+      ];
+    });
 
     const csvContent =
       "\uFEFF" +
@@ -624,13 +640,14 @@ function ReportsContent() {
                     <select
                       value={statusFilter}
                       onChange={(e) =>
-                        setStatusFilter(e.target.value as "all" | "submitted" | "draft")
+                        setStatusFilter(e.target.value as "all" | "submitted" | "draft" | "red_flag")
                       }
                       className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-green-600/30 focus:border-green-600 focus:outline-none bg-white"
                     >
                       <option value="all">All Statuses</option>
                       <option value="submitted">Submitted Only</option>
                       <option value="draft">Drafts Only</option>
+                      <option value="red_flag">🚩 Red Flagged (&lt; 150 Calls)</option>
                     </select>
                   </div>
 
@@ -804,9 +821,20 @@ function ReportsContent() {
                             REP-{String(report.id).padStart(5, "0")}
                           </span>
                         </div>
-                        <Badge variant={report.is_submitted ? "success" : "warning"} className="text-[10px] py-0.5">
-                          {report.is_submitted ? "Submitted" : "Draft"}
-                        </Badge>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {dialed < 150 && (
+                            <span
+                              className="inline-flex items-center gap-0.5 text-[9px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded shadow-2xs"
+                              title="Red Flag: Less than 150 calls dialed"
+                            >
+                              <Flag className="w-2.5 h-2.5 fill-rose-600 text-rose-600 shrink-0" />
+                              <span>&lt;150 Red Flag</span>
+                            </span>
+                          )}
+                          <Badge variant={report.is_submitted ? "success" : "warning"} className="text-[10px] py-0.5">
+                            {report.is_submitted ? "Submitted" : "Draft"}
+                          </Badge>
+                        </div>
                       </div>
 
                       {/* Employee Info if Admin */}
@@ -825,7 +853,7 @@ function ReportsContent() {
                       <div className="grid grid-cols-3 gap-1.5 text-center bg-slate-50 p-2 rounded-lg border border-slate-200/60">
                         <div>
                           <p className="text-[10px] font-medium text-slate-500 uppercase tracking-tight">Calls</p>
-                          <p className="text-xs font-bold text-slate-900 mt-0.5">
+                          <p className={`text-xs font-bold mt-0.5 ${dialed < 150 ? "text-rose-700 font-extrabold" : "text-slate-900"}`}>
                             {dialed} <span className="text-emerald-700 font-semibold text-[11px]">({connected})</span>
                           </p>
                         </div>
@@ -918,7 +946,7 @@ function ReportsContent() {
                   <th className="py-2.5 px-4">Report & Date</th>
                   {isAdmin && <th className="py-2.5 px-3">Employee</th>}
                   <th className="py-2.5 px-3 text-center">Status</th>
-                  <th className="py-2.5 px-3 text-right" title="Total calls dialed across all time blocks">Dialed</th>
+                  <th className="py-2.5 px-3 text-right" title="Total calls dialed across all time blocks (🚩 Red Flag if < 150 calls)">Dialed</th>
                   <th className="py-2.5 px-3 text-right" title="Connected Calls = HP + Potential + Follow-up Booked">Connected</th>
                   <th className="py-2.5 px-3 text-right" title="Total call conversation duration">Call Time</th>
                   <th className="py-2.5 px-3 text-right" title="Total indoor & team meeting duration">Meeting Time</th>
@@ -988,8 +1016,25 @@ function ReportsContent() {
                           {report.is_submitted ? "Submitted" : "Draft"}
                         </Badge>
                       </td>
-                      <td className="py-3 px-3 text-right font-medium text-slate-900">
-                        {report.summary?.total_calls_dialed ?? report.summary?.total_dialed ?? 0}
+                      <td className="py-3 px-3 text-right font-medium">
+                        {(() => {
+                          const dialed = report.summary?.total_calls_dialed ?? report.summary?.total_dialed ?? 0;
+                          if (dialed < 150) {
+                            return (
+                              <div className="flex items-center justify-end gap-1.5">
+                                <span className="font-extrabold text-rose-700">{dialed}</span>
+                                <span
+                                  className="inline-flex items-center gap-0.5 text-[9px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded shadow-2xs"
+                                  title={`Red Flag: ${dialed} calls dialed (< 150 daily benchmark)`}
+                                >
+                                  <Flag className="w-2.5 h-2.5 fill-rose-600 text-rose-600 shrink-0" />
+                                  <span>&lt;150</span>
+                                </span>
+                              </div>
+                            );
+                          }
+                          return <span className="text-slate-900 font-semibold">{dialed}</span>;
+                        })()}
                       </td>
                       <td className="py-3 px-3 text-right font-medium text-emerald-700">
                         {report.summary?.total_calls_connected ?? report.summary?.total_connected ?? 0}

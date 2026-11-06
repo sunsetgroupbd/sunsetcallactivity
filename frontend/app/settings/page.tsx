@@ -72,7 +72,7 @@ function SettingsContent() {
     try {
       const [targetsData, employeesData, kpiRules] = await Promise.all([
         api.settings.getTargets(),
-        api.employees.list({ is_active: true }),
+        api.employees.list({ is_active: true, limit: 500 }),
         api.settings.getSystemSettings("kpi_rules").catch(() => []),
       ]);
       setTargets(Array.isArray(targetsData) ? targetsData : []);

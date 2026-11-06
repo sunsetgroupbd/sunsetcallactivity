@@ -42,7 +42,7 @@ class UserRepository:
         is_active: Optional[bool] = None,
         search: Optional[str] = None,
         skip: int = 0,
-        limit: int = 50,
+        limit: int = 500,
     ) -> Sequence[User]:
         stmt = select(User)
         if role is not None:

@@ -76,7 +76,7 @@ function DashboardContent() {
   useEffect(() => {
     if (!authLoading && user && isAdmin) {
       api.employees
-        .list({ is_active: true })
+        .list({ is_active: true, limit: 500 })
         .then((data) => setEmployees(data))
         .catch(() => {});
     }

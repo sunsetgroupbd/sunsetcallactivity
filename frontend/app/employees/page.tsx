@@ -179,6 +179,7 @@ export default function EmployeesPage() {
         search: debouncedSearch.trim() || undefined,
         role: roleParam,
         is_active: activeParam,
+        limit: 500,
       });
       setEmployees(data);
     } catch (err: unknown) {

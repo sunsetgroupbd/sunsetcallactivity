@@ -232,7 +232,7 @@ function ReportsContent() {
   useEffect(() => {
     if (isAdmin) {
       api.employees
-        .list()
+        .list({ limit: 500 })
         .then((data) => setEmployees(data))
         .catch(() => {});
     }

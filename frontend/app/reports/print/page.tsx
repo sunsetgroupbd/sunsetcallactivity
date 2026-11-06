@@ -79,7 +79,7 @@ function PrintablePeriodSummaryContent() {
           employee_id: employeeId,
           limit: 100,
         }),
-        api.employees.list({ limit: 100 }),
+        api.employees.list({ limit: 500 }),
       ]);
 
       if (sumRes.status === "fulfilled") setSummary(sumRes.value);

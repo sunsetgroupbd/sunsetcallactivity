@@ -25,7 +25,7 @@ async def list_employees(
     is_active: Optional[bool] = Query(None),
     search: Optional[str] = Query(None),
     skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(500, ge=1, le=2000),
     _: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):

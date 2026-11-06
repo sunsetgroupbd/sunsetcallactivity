@@ -1144,11 +1144,6 @@ function DailyCallActivityContent() {
                 }`}
               >
                 All Categories ({LEAD_CATEGORIES.length})
-                {riskCategories.length > 0 && (
-                  <span className="ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-rose-500 text-white">
-                    {riskCategories.length} on risk
-                  </span>
-                )}
               </button>
               {LEAD_CATEGORIES.map((cat) => {
                 const e = entries[cat.key];
@@ -1157,7 +1152,6 @@ function DailyCallActivityContent() {
                     ? e.total_connected
                     : (e.hp_count || 0) + (e.p_count || 0) + (e.fub_count || 0) + (e.ni_count || 0);
                 const isActive = activeCategoryFilter === cat.key;
-                const risk = getLeadRiskInfo(cat.key, e.till_today_status);
                 return (
                   <button
                     key={cat.key}
@@ -1166,17 +1160,10 @@ function DailyCallActivityContent() {
                     className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 shadow-2xs ${
                       isActive
                         ? "bg-emerald-700 text-white shadow-xs"
-                        : risk?.isRisk
-                        ? "bg-rose-50 text-rose-800 border border-rose-300 hover:bg-rose-100/70"
                         : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50"
                     }`}
                   >
                     <span>{cat.label}</span>
-                    {risk?.isRisk && (
-                      <span className="text-[10px] px-1.5 py-0.2 rounded-full font-bold bg-rose-200 text-rose-900 border border-rose-300">
-                        Risk {risk.label}
-                      </span>
-                    )}
                     {rowConnected > 0 && (
                       <span
                         className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
@@ -1234,68 +1221,36 @@ function DailyCallActivityContent() {
                     </div>
 
                     {/* Starting Leads & Updated Leads Pill */}
-                    {(() => {
-                      const risk = getLeadRiskInfo(cat.key, e.till_today_status);
-                      return (
-                        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-slate-50 border-b border-slate-100 text-xs">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-slate-600 font-semibold">Start Leads:</span>
-                            <div className="w-24">
-                              <MobileNumberInput
-                                value={e.till_today_status}
-                                disabled={isLocked || loading}
-                                onChange={(val) =>
-                                  handleCellChange(cat.key, "till_today_status", val)
-                                }
-                                onStep={(delta) =>
-                                  handleStep(cat.key, "till_today_status", delta)
-                                }
-                                placeholder="0"
-                                borderColor={
-                                  risk?.isRisk
-                                    ? "border-rose-400 bg-rose-50/30 text-rose-900 ring-1 ring-rose-300"
-                                    : "border-slate-300"
-                                }
-                                arrowColor={
-                                  risk?.isRisk
-                                    ? "text-rose-600 hover:text-rose-800"
-                                    : "text-slate-600 hover:text-emerald-700"
-                                }
-                                textSize="text-xs"
-                              />
-                            </div>
-                            {risk && (
-                              risk.isRisk ? (
-                                <span
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300 animate-pulse"
-                                  title={`Current starting leads (${e.till_today_status ?? 0}) is below the required minimum of ${risk.min}.`}
-                                >
-                                  <AlertCircle className="w-3 h-3 text-rose-600 shrink-0" />
-                                  <span>On Risk ({risk.label})</span>
-                                </span>
-                              ) : (
-                                <span
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-800 border border-emerald-200"
-                                  title={`Starting leads meets quota (>= ${risk.min}).`}
-                                >
-                                  <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
-                                  <span>Safe ({e.till_today_status})</span>
-                                </span>
-                              )
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-slate-500 font-medium">Updated:</span>
-                            <span
-                              className="px-2.5 py-1 rounded bg-emerald-100 text-emerald-950 font-bold text-xs"
-                              title={`Start: ${categoryCalculations[cat.key]?.start ?? 0} | Out: -${categoryCalculations[cat.key]?.movedOut ?? 0} | In: +${categoryCalculations[cat.key]?.movedIn ?? 0}`}
-                            >
-                              {categoryCalculations[cat.key]?.finalTotal ?? 0}
-                            </span>
-                          </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-slate-50 border-b border-slate-100 text-xs">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-slate-600 font-semibold">Start Leads:</span>
+                        <div className="w-24">
+                          <MobileNumberInput
+                            value={e.till_today_status}
+                            disabled={isLocked || loading}
+                            onChange={(val) =>
+                              handleCellChange(cat.key, "till_today_status", val)
+                            }
+                            onStep={(delta) =>
+                              handleStep(cat.key, "till_today_status", delta)
+                            }
+                            placeholder="0"
+                            borderColor="border-slate-300"
+                            arrowColor="text-slate-600 hover:text-emerald-700"
+                            textSize="text-xs"
+                          />
                         </div>
-                      );
-                    })()}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-500 font-medium">Updated:</span>
+                        <span
+                          className="px-2.5 py-1 rounded bg-emerald-100 text-emerald-950 font-bold text-xs"
+                          title={`Start: ${categoryCalculations[cat.key]?.start ?? 0} | Out: -${categoryCalculations[cat.key]?.movedOut ?? 0} | In: +${categoryCalculations[cat.key]?.movedIn ?? 0}`}
+                        >
+                          {categoryCalculations[cat.key]?.finalTotal ?? 0}
+                        </span>
+                      </div>
+                    </div>
 
                     <div className="p-4 space-y-4">
                       {/* Section 1: Time Slots */}
@@ -1599,45 +1554,19 @@ function DailyCallActivityContent() {
                         </td>
 
                         {/* Starting Leads */}
-                        {(() => {
-                          const risk = getLeadRiskInfo(cat.key, e.till_today_status);
-                          return (
-                            <td className={`p-1 text-center align-middle ${risk?.isRisk ? "bg-rose-50/40" : ""}`}>
-                              <div className="flex flex-col items-center gap-1">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  disabled={isLocked || loading}
-                                  value={e.till_today_status ?? ""}
-                                  onChange={(ev) =>
-                                    handleCellChange(cat.key, "till_today_status", ev.target.value)
-                                  }
-                                  placeholder="—"
-                                  className={`w-full text-center py-1 border rounded text-xs font-semibold focus:outline-none disabled:bg-slate-50 disabled:text-slate-500 ${
-                                    risk?.isRisk
-                                      ? "border-rose-400 bg-rose-50/60 text-rose-950 focus:ring-1 focus:ring-rose-500 font-bold"
-                                      : "border-slate-300 text-slate-800 placeholder:text-slate-400 focus:ring-1 focus:ring-green-600"
-                                  }`}
-                                />
-                                {risk && (
-                                  risk.isRisk ? (
-                                    <span
-                                      className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-rose-100 text-rose-800 border border-rose-300 whitespace-nowrap animate-pulse"
-                                      title={`Current: ${e.till_today_status ?? 0} | Minimum required: ${risk.min}`}
-                                    >
-                                      <AlertCircle className="w-2.5 h-2.5 text-rose-600 shrink-0" />
-                                      <span>On Risk ({risk.label})</span>
-                                    </span>
-                                  ) : (
-                                    <span className="text-[9px] font-medium text-emerald-700 whitespace-nowrap">
-                                      Safe (≥{risk.min})
-                                    </span>
-                                  )
-                                )}
-                              </div>
-                            </td>
-                          );
-                        })()}
+                        <td className="p-1 text-center align-middle">
+                          <input
+                            type="number"
+                            min="0"
+                            disabled={isLocked || loading}
+                            value={e.till_today_status ?? ""}
+                            onChange={(ev) =>
+                              handleCellChange(cat.key, "till_today_status", ev.target.value)
+                            }
+                            placeholder="—"
+                            className="w-full text-center py-1 border border-slate-300 rounded text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:ring-1 focus:ring-green-600 focus:outline-none disabled:bg-slate-50 disabled:text-slate-500"
+                          />
+                        </td>
 
                         {/* 10 AM to 1 PM */}
                         <td className="p-1 text-center bg-green-50/20 align-middle">

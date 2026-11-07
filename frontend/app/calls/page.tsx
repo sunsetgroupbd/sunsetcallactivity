@@ -1102,29 +1102,27 @@ function DailyCallActivityContent() {
 
         {/* ── Lead Pipeline On-Risk Alert Banner ──────────────────────────── */}
         {riskCategories.length > 0 && (
-          <div className="bg-rose-50/90 border border-rose-200 rounded-xl p-3.5 flex items-start gap-3 shadow-2xs">
-            <div className="p-1.5 rounded-lg bg-rose-100 text-rose-700 shrink-0 mt-0.5">
+          <div className="bg-rose-50 border border-rose-200 rounded-xl p-2.5 sm:p-3 flex items-center gap-2.5 text-xs text-rose-900 shadow-2xs">
+            <div className="p-1 rounded-md bg-rose-100 text-rose-700 shrink-0">
               <AlertCircle className="w-4 h-4" />
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h4 className="text-xs font-bold text-rose-950 uppercase tracking-wider">
-                  Lead Pipeline Starting Quota On Risk
-                </h4>
-                <span className="px-2 py-0.2 rounded-full text-[10px] bg-rose-200 text-rose-900 font-bold border border-rose-300">
-                  {riskCategories.length} {riskCategories.length > 1 ? "Categories" : "Category"} On Risk
-                </span>
-              </div>
-              <p className="text-xs text-rose-800 mt-1 leading-relaxed">
-                Starting leads fall below the minimum pipeline requirements:{" "}
-                {riskCategories.map((r, idx) => (
-                  <span key={r.key} className="inline-block mr-2">
-                    {idx > 0 && "• "}
-                    <strong className="font-semibold underline">{r.label}</strong>: {r.current} leads (minimum required: {r.min})
+            <div className="flex-1 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+              <span className="font-bold text-rose-950 whitespace-nowrap">
+                Quota Risk:
+              </span>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {riskCategories.map((r) => (
+                  <span
+                    key={r.key}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-rose-200 text-xs text-rose-950 font-medium"
+                  >
+                    <span>{r.label}:</span>
+                    <strong className="text-rose-700 font-bold">{r.current}</strong>
+                    <span className="text-slate-400 font-normal">/</span>
+                    <span className="text-slate-600 font-normal">{r.min} min</span>
                   </span>
                 ))}
-                . Please add leads to these categories to stay out of risk.
-              </p>
+              </div>
             </div>
           </div>
         )}

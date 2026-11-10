@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import enum
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 if TYPE_CHECKING:
     from app.models.report import DailyActivityReport
@@ -23,6 +23,86 @@ class UserRole(str, enum.Enum):
     CO = "co"
     EMPLOYEE = "employee"
 
+    @classmethod
+    def _missing_(cls, value: object):
+        if isinstance(value, str):
+            clean = value.strip().lower()
+            for member in cls:
+                if member.value == clean or member.name.lower() == clean:
+                    return member
+        return None
+
+
+class RobustUserRoleEnum(Enum):
+    """
+    Custom SQLAlchemy Enum that seamlessly handles ANY case variation
+    ('ADMIN', 'admin', 'EMPLOYEE', 'employee', 'CO', 'co', 'TL', 'tl', 'SUB_ADMIN', 'sub_admin')
+    from the database without throwing LookupError.
+    """
+    def __init__(self, *enums, **kw):
+        super().__init__(*enums, **kw)
+
+    def _setup_for_values(self, values, objects, kw):
+        super()._setup_for_values(values, objects, kw)
+        # Populate both uppercase names and lowercase values in lookup dictionaries
+        for obj in objects:
+            if hasattr(obj, "name"):
+                self._object_lookup[obj.name] = obj
+                self._valid_lookup[obj.name] = self._valid_lookup.get(obj, obj.name)
+            if hasattr(obj, "value"):
+                self._object_lookup[obj.value] = obj
+                self._valid_lookup[obj.value] = self._valid_lookup.get(obj, obj.value)
+        # Ensure enums list contains both uppercase and lowercase for dialect reflection
+        seen = set(self.enums)
+        for obj in objects:
+            if hasattr(obj, "name") and obj.name not in seen:
+                self.enums.append(obj.name)
+                seen.add(obj.name)
+            if hasattr(obj, "value") and obj.value not in seen:
+                self.enums.append(obj.value)
+                seen.add(obj.value)
+
+    def _object_value_for_elem(self, elem: Any) -> Any:
+        if elem is None:
+            return None
+        # 1. Exact match in _object_lookup
+        if elem in self._object_lookup:
+            return self._object_lookup[elem]
+
+        # 2. Case-insensitive lookup against _object_lookup
+        if isinstance(elem, str):
+            clean = elem.strip().lower()
+            for k, v in self._object_lookup.items():
+                if str(k).lower() == clean:
+                    return v
+
+            # 3. Match against UserRole enum members
+            for member in UserRole:
+                if member.value == clean or member.name.lower() == clean:
+                    return member
+
+        # 4. Fallback through UserRole constructor (supported by _missing_)
+        try:
+            return UserRole(elem)
+        except Exception:
+            return UserRole.EMPLOYEE
+
+    def _db_value_for_elem(self, elem: Any) -> Any:
+        if elem is None:
+            return None
+        if elem in self._valid_lookup:
+            return self._valid_lookup[elem]
+        if isinstance(elem, str):
+            clean = elem.strip().lower()
+            for k, v in self._valid_lookup.items():
+                if str(k).lower() == clean:
+                    return v
+            for member in UserRole:
+                if member.value == clean or member.name.lower() == clean:
+                    if member in self._valid_lookup:
+                        return self._valid_lookup[member]
+        return elem
+
 
 class User(Base):
     __tablename__ = "users"
@@ -35,7 +115,7 @@ class User(Base):
     designation: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
     password_hash: Mapped[str] = mapped_column(String(200), nullable=False)
     role: Mapped[UserRole] = mapped_column(
-        Enum(UserRole, name="userrole", values_callable=lambda obj: [e.value for e in obj]),
+        RobustUserRoleEnum(UserRole, name="userrole"),
         default=UserRole.EMPLOYEE,
         nullable=False,
     )

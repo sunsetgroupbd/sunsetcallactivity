@@ -242,6 +242,14 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
             BEGIN
                 ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'tl';
                 ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'co';
+                ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'TL';
+                ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'CO';
+                ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'admin';
+                ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'ADMIN';
+                ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'sub_admin';
+                ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'SUB_ADMIN';
+                ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'employee';
+                ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'EMPLOYEE';
             EXCEPTION
                 WHEN undefined_object THEN NULL;
             END $$;

@@ -357,11 +357,20 @@ export default function TeamHierarchyPage() {
           setCoSubmitting(false);
           return;
         }
-        await api.employees.update(Number(selectedExistingCoId), {
-          team_id: addCoModal.team.id,
-          role: "co",
-          reporting_manager_id: null,
-        });
+        try {
+          await api.teams.bulkAssign(
+            addCoModal.team.id,
+            [Number(selectedExistingCoId)],
+            "co",
+            0
+          );
+        } catch {
+          await api.employees.update(Number(selectedExistingCoId), {
+            team_id: addCoModal.team.id,
+            role: "co",
+            reporting_manager_id: null,
+          });
+        }
         showToast(`Staff assigned as Coordinator for ${addCoModal.team.name}`);
       } else {
         if (!newCoName.trim() || !newCoUsername.trim()) {
@@ -407,11 +416,20 @@ export default function TeamHierarchyPage() {
           setTlSubmitting(false);
           return;
         }
-        await api.employees.update(Number(selectedExistingTlId), {
-          team_id: addTlModal.team.id,
-          role: "tl",
-          reporting_manager_id: addTlModal.co.id,
-        });
+        try {
+          await api.teams.bulkAssign(
+            addTlModal.team.id,
+            [Number(selectedExistingTlId)],
+            "tl",
+            addTlModal.co.id
+          );
+        } catch {
+          await api.employees.update(Number(selectedExistingTlId), {
+            team_id: addTlModal.team.id,
+            role: "tl",
+            reporting_manager_id: addTlModal.co.id,
+          });
+        }
         showToast(`Staff assigned as Team Leader under C.O. ${addTlModal.co.full_name}`);
       } else {
         if (!newTlName.trim() || !newTlUsername.trim()) {
@@ -490,7 +508,20 @@ export default function TeamHierarchyPage() {
         team_id: targetTeamId === "" ? null : Number(targetTeamId),
         reporting_manager_id: targetManagerId === "" ? null : Number(targetManagerId),
       };
-      await api.employees.update(moveModal.employee.id, payload);
+      if (targetTeamId !== "") {
+        try {
+          await api.teams.bulkAssign(
+            Number(targetTeamId),
+            [moveModal.employee.id],
+            targetRole,
+            targetManagerId === "" ? 0 : Number(targetManagerId)
+          );
+        } catch {
+          await api.employees.update(moveModal.employee.id, payload);
+        }
+      } else {
+        await api.employees.update(moveModal.employee.id, payload);
+      }
       showToast(`Updated hierarchy assignment for ${moveModal.employee.full_name}`);
       setMoveModal({ isOpen: false, employee: null });
       await loadData();

@@ -178,11 +178,17 @@ class User(Base):
 
     @property
     def team_name(self) -> Optional[str]:
-        return self.team.name if self.team else None
+        try:
+            return self.team.name if self.team else None
+        except Exception:
+            return None
 
     @property
     def reporting_manager_name(self) -> Optional[str]:
-        return self.reporting_manager.full_name if self.reporting_manager else None
+        try:
+            return self.reporting_manager.full_name if self.reporting_manager else None
+        except Exception:
+            return None
 
     def __repr__(self) -> str:
         return f"<User id={self.id} username={self.username!r} role={self.role}>"

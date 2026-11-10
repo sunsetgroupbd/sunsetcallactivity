@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Optional, Sequence
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User, UserRole
@@ -14,7 +15,11 @@ class UserRepository:
         self.db = db
 
     async def get_by_id(self, user_id: int) -> Optional[User]:
-        result = await self.db.execute(select(User).where(User.id == user_id))
+        result = await self.db.execute(
+            select(User)
+            .options(selectinload(User.team), selectinload(User.reporting_manager))
+            .where(User.id == user_id)
+        )
         return result.scalar_one_or_none()
 
     async def get_by_username(self, username: str) -> Optional[User]:
@@ -199,8 +204,12 @@ class UserRepository:
     async def update(self, user: User) -> User:
         self.db.add(user)
         await self.db.flush()
-        await self.db.refresh(user)
-        return user
+        res = await self.db.execute(
+            select(User)
+            .options(selectinload(User.team), selectinload(User.reporting_manager))
+            .where(User.id == user.id)
+        )
+        return res.scalar_one()
 
     async def change_employee_id(self, old_id: int, new_id: int) -> User:
         """

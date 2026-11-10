@@ -52,8 +52,42 @@ import { api, ApiError } from "@/lib/api";
 import { User, UserRole, BulkUploadEmployeesResponse, Team } from "@/types";
 import { formatReadableDate, formatEmployeeId } from "@/lib/utils";
 
-function renderRoleBadge(userRole: UserRole) {
-  switch (userRole) {
+export function normalizeRole(role?: string | null, designation?: string | null): UserRole {
+  if (role) {
+    const r = role.toString().trim().toLowerCase();
+    if (r === "co" || r === "coordinator" || r.includes("coord")) return "co";
+    if (
+      r === "tl" ||
+      r === "team_leader" ||
+      r === "team leader" ||
+      r === "teamlead" ||
+      r === "team lead" ||
+      r === "lead" ||
+      r.includes("leader")
+    )
+      return "tl";
+    if (r === "admin" || r === "administrator") return "admin";
+    if (r === "sub_admin" || r === "subadmin" || r === "sub admin") return "sub_admin";
+    if (r === "employee" || r === "executive") {
+      if (designation) {
+        const d = designation.trim().toLowerCase();
+        if (d.includes("coordinator") || d === "co" || d.startsWith("co ")) return "co";
+        if (d.includes("team leader") || d.includes("team lead") || d === "tl" || d.startsWith("tl ")) return "tl";
+      }
+      return "employee";
+    }
+  }
+  if (designation) {
+    const d = designation.trim().toLowerCase();
+    if (d.includes("coordinator") || d === "co" || d.startsWith("co ")) return "co";
+    if (d.includes("team leader") || d.includes("team lead") || d === "tl" || d.startsWith("tl ")) return "tl";
+  }
+  return "employee";
+}
+
+function renderRoleBadge(userRole: string) {
+  const norm = normalizeRole(userRole);
+  switch (norm) {
     case "admin":
       return (
         <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-900 border border-purple-200">
@@ -113,7 +147,9 @@ function resolveHierarchy(emp: User, allEmployees: User[], teams: Team[]): Hiera
       ? "Hasib Sir"
       : null);
 
-  if (emp.role === "admin" || emp.role === "sub_admin") {
+  const empRole = normalizeRole(emp.role, emp.designation);
+
+  if (empRole === "admin" || empRole === "sub_admin") {
     return {
       glTeamName,
       glDirectorName,
@@ -124,7 +160,7 @@ function resolveHierarchy(emp: User, allEmployees: User[], teams: Team[]): Hiera
     };
   }
 
-  if (emp.role === "co") {
+  if (empRole === "co") {
     return {
       glTeamName,
       glDirectorName,
@@ -138,12 +174,12 @@ function resolveHierarchy(emp: User, allEmployees: User[], teams: Team[]): Hiera
   const directManager = emp.reporting_manager_id
     ? allEmployees.find((u) => u.id === emp.reporting_manager_id) || null
     : null;
+  const mgrRole = directManager
+    ? normalizeRole(directManager.role, directManager.designation)
+    : null;
 
-  if (emp.role === "tl") {
-    const coUser =
-      directManager && directManager.role === "co"
-        ? directManager
-        : directManager;
+  if (empRole === "tl") {
+    const coUser = mgrRole === "co" ? directManager : directManager;
     return {
       glTeamName,
       glDirectorName,
@@ -159,13 +195,13 @@ function resolveHierarchy(emp: User, allEmployees: User[], teams: Team[]): Hiera
   let coUser: User | null = null;
 
   if (directManager) {
-    if (directManager.role === "tl") {
+    if (mgrRole === "tl") {
       tlUser = directManager;
       if (directManager.reporting_manager_id) {
         coUser =
           allEmployees.find((u) => u.id === directManager.reporting_manager_id) || null;
       }
-    } else if (directManager.role === "co") {
+    } else if (mgrRole === "co") {
       coUser = directManager;
     } else {
       tlUser = directManager;
@@ -297,7 +333,11 @@ export default function EmployeesPage() {
         is_active: activeParam,
         limit: 500,
       });
-      setEmployees(data);
+      const normalized = data.map((u: User) => ({
+        ...u,
+        role: normalizeRole(u.role, u.designation),
+      }));
+      setEmployees(normalized);
     } catch (err: unknown) {
       if (err instanceof ApiError) {
         setStatusMessage({ type: "error", text: err.message });
@@ -380,14 +420,34 @@ export default function EmployeesPage() {
   // Available supervisors grouped by role
   const availableCoordinators = useMemo(() => {
     return employees.filter(
-      (e) => e.role === "co" && e.is_active && (!editingEmployee || e.id !== editingEmployee.id)
+      (e) =>
+        normalizeRole(e.role, e.designation) === "co" &&
+        e.is_active &&
+        (!editingEmployee || e.id !== editingEmployee.id)
     );
   }, [employees, editingEmployee]);
 
   const availableTeamLeaders = useMemo(() => {
     return employees.filter(
-      (e) => e.role === "tl" && e.is_active && (!editingEmployee || e.id !== editingEmployee.id)
+      (e) =>
+        normalizeRole(e.role, e.designation) === "tl" &&
+        e.is_active &&
+        (!editingEmployee || e.id !== editingEmployee.id)
     );
+  }, [employees, editingEmployee]);
+
+  const availableOtherStaff = useMemo(() => {
+    return employees.filter((e) => {
+      const nr = normalizeRole(e.role, e.designation);
+      return (
+        nr !== "admin" &&
+        nr !== "sub_admin" &&
+        nr !== "co" &&
+        nr !== "tl" &&
+        e.is_active &&
+        (!editingEmployee || e.id !== editingEmployee.id)
+      );
+    });
   }, [employees, editingEmployee]);
 
   interface CreatePreset {
@@ -407,7 +467,7 @@ export default function EmployeesPage() {
     setUsername("");
     setPassword("");
     setShowPassword(false);
-    setRole(preset?.role || "employee");
+    setRole(preset?.role ? normalizeRole(preset.role) : "employee");
     setIsActive(true);
     setTeamId(preset?.teamId !== undefined ? preset.teamId : "");
     setReportingManagerId(preset?.reportingManagerId !== undefined ? preset.reportingManagerId : "");
@@ -429,8 +489,9 @@ export default function EmployeesPage() {
         team_id: quickAssignTeamId ? Number(quickAssignTeamId) : null,
         reporting_manager_id: quickAssignManagerId ? Number(quickAssignManagerId) : null,
       });
+      const normUpdated = { ...updated, role: normalizeRole(updated.role, updated.designation) };
       setEmployees((prev) =>
-        prev.map((item) => (item.id === updated.id ? updated : item))
+        prev.map((item) => (item.id === normUpdated.id ? normUpdated : item))
       );
       await loadEmployees();
       await loadTeams();
@@ -448,9 +509,10 @@ export default function EmployeesPage() {
   };
 
   const unassignedStaff = useMemo(() => {
-    return employees.filter(
-      (e) => !e.team_id && e.role !== "admin" && e.role !== "sub_admin"
-    );
+    return employees.filter((e) => {
+      const r = normalizeRole(e.role, e.designation);
+      return !e.team_id && r !== "admin" && r !== "sub_admin";
+    });
   }, [employees]);
 
   const handleBatchAssign = async () => {
@@ -529,7 +591,7 @@ export default function EmployeesPage() {
     setUsername(emp.username);
     setPassword("");
     setShowPassword(false);
-    setRole(emp.role);
+    setRole(normalizeRole(emp.role, emp.designation));
     setIsActive(emp.is_active);
     setTeamId(emp.team_id ?? "");
     setReportingManagerId(emp.reporting_manager_id ?? "");
@@ -746,7 +808,7 @@ export default function EmployeesPage() {
           email: email.trim(),
           phone: phone.trim() || null,
           designation: designation.trim() || null,
-          role,
+          role: normalizeRole(role),
           is_active: isActive,
           team_id: teamId ? Number(teamId) : null,
           reporting_manager_id: reportingManagerId ? Number(reportingManagerId) : null,
@@ -805,13 +867,14 @@ export default function EmployeesPage() {
           password: password.trim(),
           phone: phone.trim() || null,
           designation: designation.trim() || null,
-          role,
+          role: normalizeRole(role),
           team_id: teamId ? Number(teamId) : null,
           reporting_manager_id: reportingManagerId ? Number(reportingManagerId) : null,
           client_count: Number(clientCount) || 0,
           client_share_count: Number(clientShareCount) || 0,
         });
-        setEmployees((prev) => [created, ...prev]);
+        const normCreated = { ...created, role: normalizeRole(created.role, created.designation) };
+        setEmployees((prev) => [normCreated, ...prev]);
         await loadEmployees();
         setStatusMessage({
           type: "success",
@@ -1011,37 +1074,40 @@ export default function EmployeesPage() {
           </CardHeader>
 
           {/* ── Mobile App Cards View (< md) ─────────────────────────────────── */}
-          <div className="md:hidden space-y-3 p-3 sm:p-4">
+          <div className="md:hidden space-y-2.5 p-3 sm:p-4">
             {loading && employees.length === 0 ? (
               Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="p-4 bg-slate-50/80 rounded-xl border border-slate-200 space-y-3">
+                <div key={i} className="p-3 bg-slate-50/80 rounded-xl border border-slate-200 space-y-2">
                   <div className="flex items-center justify-between">
-                    <Skeleton className="h-5 w-24" />
-                    <Skeleton className="h-5 w-16" />
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-4 w-14" />
                   </div>
-                  <Skeleton className="h-4 w-40" />
-                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-3.5 w-36" />
+                  <Skeleton className="h-3 w-28" />
                 </div>
               ))
             ) : displayedEmployees.length === 0 ? (
-              <div className="p-8 text-center text-slate-400 bg-slate-50/50 rounded-xl border border-slate-200 text-xs">
+              <div className="p-6 text-center text-slate-400 bg-slate-50/50 rounded-xl border border-slate-200 text-xs">
                 No employees match your search criteria.
               </div>
             ) : (
-              displayedEmployees.map((emp) => (
+              displayedEmployees.map((emp, idx) => (
                 <div
                   key={emp.id}
-                  className="p-4 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-3 transition-all hover:border-slate-300"
+                  className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-2 transition-all hover:border-slate-300"
                 >
-                  {/* Top Bar: ID + Role + Actions */}
-                  <div className="flex items-center justify-between gap-2">
+                  {/* Top Bar: Serial + ID + Role + Actions */}
+                  <div className="flex items-center justify-between gap-1.5">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="font-mono font-bold text-xs bg-slate-100 text-slate-800 border border-slate-200 px-2 py-0.5 rounded-md inline-flex items-center gap-1">
+                      <span className="font-mono font-bold text-[10px] bg-slate-100 text-slate-600 border border-slate-200 px-1.5 py-0.5 rounded">
+                        #{idx + 1}
+                      </span>
+                      <span className="font-mono font-bold text-[10px] bg-slate-50 text-slate-800 border border-slate-200 px-1.5 py-0.5 rounded inline-flex items-center gap-1 shadow-2xs">
                         {formatEmployeeId(emp.id, emp.created_at)}
                       </span>
                       {renderRoleBadge(emp.role)}
                       {currentUser?.id === emp.id && (
-                        <span className="text-[10px] text-green-800 bg-green-50 px-1.5 py-0.5 rounded border border-green-200 font-semibold">
+                        <span className="text-[9.5px] text-green-800 bg-green-50 px-1.5 py-0.2 rounded border border-green-200 font-semibold">
                           You
                         </span>
                       )}
@@ -1050,18 +1116,18 @@ export default function EmployeesPage() {
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => openEditModal(emp)}
-                        className="p-1.5 text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors"
+                        className="p-1 text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 rounded-md border border-slate-200 transition-colors"
                         title="Edit Employee"
                       >
-                        <Edit2 className="w-3.5 h-3.5" />
+                        <Edit2 className="w-3 h-3" />
                       </button>
                       {currentUser?.id !== emp.id && (
                         <button
                           onClick={() => setDeleteConfirmId(emp.id)}
-                          className="p-1.5 text-rose-500 hover:text-rose-700 bg-rose-50/70 hover:bg-rose-100 rounded-lg border border-rose-200 transition-colors"
+                          className="p-1 text-rose-500 hover:text-rose-700 bg-rose-50/70 hover:bg-rose-100 rounded-md border border-rose-200 transition-colors"
                           title="Delete Employee"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-3 h-3" />
                         </button>
                       )}
                     </div>
@@ -1069,18 +1135,18 @@ export default function EmployeesPage() {
 
                   {/* Name, Designation & Username */}
                   <div>
-                    <h3 className="font-bold text-slate-900 text-sm leading-snug">{emp.full_name}</h3>
+                    <h3 className="font-bold text-slate-900 text-xs leading-snug">{emp.full_name}</h3>
                     {emp.designation && (
-                      <p className="text-xs font-medium text-emerald-700 mt-0.5">{emp.designation}</p>
+                      <p className="text-[10px] font-medium text-emerald-700 mt-0.5">{emp.designation}</p>
                     )}
                     <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                      <span className="text-xs text-slate-500 font-mono">@{emp.username}</span>
+                      <span className="text-[10px] text-slate-500 font-mono">@{emp.username}</span>
                       {(() => {
                         const h = resolveHierarchy(emp, employees, teams);
                         return (
                           <>
                             {h.glTeamName ? (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-900 border border-blue-200 inline-flex items-center gap-1">
+                              <span className="text-[9.5px] font-bold px-1.5 py-0.2 rounded-full bg-blue-50 text-blue-900 border border-blue-200 inline-flex items-center gap-1">
                                 <Crown className="w-2.5 h-2.5 text-blue-700" />
                                 {h.glTeamName}
                               </span>
@@ -1093,29 +1159,29 @@ export default function EmployeesPage() {
                                   setManageTeamsTab("quick_assign");
                                   setIsManageTeamsOpen(true);
                                 }}
-                                className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 inline-flex items-center gap-1 hover:bg-rose-100"
+                                className="text-[9.5px] font-bold px-1.5 py-0.2 rounded-full bg-rose-50 text-rose-700 border border-rose-200 inline-flex items-center gap-1 hover:bg-rose-100"
                               >
-                                <AlertTriangle className="w-2.5 h-2.5 text-rose-500" />
+                                <AlertTriangle className="w-2 h-2 text-rose-500" />
                                 Assign Team
                               </button>
                             )}
 
-                            {emp.role === "employee" && h.tlName && (
-                              <span className="text-[10px] font-semibold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 inline-flex items-center gap-1">
-                                <Star className="w-2.5 h-2.5 text-amber-600" />
+                            {normalizeRole(emp.role, emp.designation) === "employee" && h.tlName && (
+                              <span className="text-[9.5px] font-semibold text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200 inline-flex items-center gap-1">
+                                <Star className="w-2 h-2 text-amber-600" />
                                 TL: {h.tlName}
                               </span>
                             )}
 
                             {h.coName && (
-                              <span className="text-[10px] font-semibold text-sky-800 bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200 inline-flex items-center gap-1">
-                                <Target className="w-2.5 h-2.5 text-sky-600" />
+                              <span className="text-[9.5px] font-semibold text-sky-800 bg-sky-50 px-1.5 py-0.2 rounded border border-sky-200 inline-flex items-center gap-1">
+                                <Target className="w-2 h-2 text-sky-600" />
                                 CO: {h.coName}
                               </span>
                             )}
 
-                            {emp.role === "co" && (
-                              <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
+                            {normalizeRole(emp.role, emp.designation) === "co" && (
+                              <span className="text-[9.5px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-200">
                                 Direct to GL
                               </span>
                             )}
@@ -1126,38 +1192,38 @@ export default function EmployeesPage() {
                   </div>
 
                   {/* Contact Info (Phone & Email) */}
-                  <div className="grid grid-cols-1 gap-2 text-xs pt-2.5 border-t border-slate-100">
+                  <div className="grid grid-cols-1 gap-1.5 text-[10.5px] pt-2 border-t border-slate-100">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-slate-500 text-[11px] font-semibold flex items-center gap-1">
-                        <Phone className="w-3.5 h-3.5 text-slate-400" /> Phone:
+                      <span className="text-slate-500 text-[10px] font-semibold flex items-center gap-1">
+                        <Phone className="w-3 h-3 text-slate-400" /> Phone:
                       </span>
                       {emp.phone ? (
                         <a
                           href={`tel:${emp.phone}`}
-                          className="inline-flex items-center gap-1.5 font-mono text-xs font-bold text-emerald-800 hover:text-emerald-950 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 shadow-2xs"
+                          className="inline-flex items-center gap-1 font-mono text-[10.5px] font-bold text-emerald-800 hover:text-emerald-950 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 shadow-2xs"
                         >
-                          <Phone className="w-3 h-3 text-emerald-600" />
+                          <Phone className="w-2.5 h-2.5 text-emerald-600" />
                           <span>{emp.phone}</span>
                         </a>
                       ) : (
-                        <span className="text-slate-400 italic text-[11px]">
+                        <span className="text-slate-400 italic text-[10px]">
                           Not Available
                         </span>
                       )}
                     </div>
 
                     <div className="flex items-center justify-between gap-2 text-slate-600">
-                      <span className="text-slate-500 text-[11px] font-semibold flex items-center gap-1">
-                        <Mail className="w-3.5 h-3.5 text-slate-400" /> Email:
+                      <span className="text-slate-500 text-[10px] font-semibold flex items-center gap-1">
+                        <Mail className="w-3 h-3 text-slate-400" /> Email:
                       </span>
-                      <span className="truncate font-medium text-slate-700">{emp.email}</span>
+                      <span className="truncate font-medium text-[10.5px] text-slate-700">{emp.email}</span>
                     </div>
                   </div>
 
                   {/* Bottom: Availability & Member Since */}
-                  <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px] text-slate-500">
+                  <div className="flex items-center justify-between pt-1.5 border-t border-slate-100 text-[10px] text-slate-500">
                     <span
-                      className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      className={`inline-flex items-center gap-1 text-[9.5px] font-bold px-1.5 py-0.2 rounded-full ${
                         emp.is_active
                           ? "bg-emerald-50 text-emerald-800 border border-emerald-300"
                           : "bg-rose-50 text-rose-700 border border-rose-200"
@@ -1165,12 +1231,12 @@ export default function EmployeesPage() {
                     >
                       {emp.is_active ? (
                         <>
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
                           Available
                         </>
                       ) : (
                         <>
-                          <XCircle className="w-3 h-3 text-rose-500" />
+                          <XCircle className="w-2.5 h-2.5 text-rose-500" />
                           Unavailable
                         </>
                       )}
@@ -1184,96 +1250,101 @@ export default function EmployeesPage() {
 
           {/* ── Desktop Table View (>= md) ───────────────────────────────────── */}
           <div className="hidden md:block overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
+            <table className="w-full text-left border-collapse text-[11px]">
               <thead>
-                <tr className="bg-slate-100/70 border-b border-slate-200 text-slate-700 text-[11px] font-semibold">
-                  <th className="py-2.5 px-3 w-28">Employee ID</th>
-                  <th className="py-2.5 px-4">Full Name</th>
-                  <th className="py-2.5 px-3">Phone Number</th>
-                  <th className="py-2.5 px-3">Email Address</th>
-                  <th className="py-2.5 px-3">Team & Hierarchy</th>
-                  <th className="py-2.5 px-3 text-center">Clients / Share</th>
-                  <th className="py-2.5 px-3">Username</th>
-                  <th className="py-2.5 px-3 text-center">Role</th>
-                  <th className="py-2.5 px-3 text-center">Availability</th>
-                  <th className="py-2.5 px-3">Member Since</th>
-                  <th className="py-2.5 px-3 text-right">Actions</th>
+                <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-700 text-[10.5px] font-semibold uppercase tracking-wider">
+                  <th className="py-2 px-2.5 w-10 text-center">#</th>
+                  <th className="py-2 px-2.5 w-24">Employee ID</th>
+                  <th className="py-2 px-3">Full Name</th>
+                  <th className="py-2 px-2.5">Phone Number</th>
+                  <th className="py-2 px-2.5">Email Address</th>
+                  <th className="py-2 px-2.5">Team & Hierarchy</th>
+                  <th className="py-2 px-2.5 text-center">Clients / Share</th>
+                  <th className="py-2 px-2.5">Username</th>
+                  <th className="py-2 px-2.5 text-center">Role</th>
+                  <th className="py-2 px-2.5 text-center">Availability</th>
+                  <th className="py-2 px-2.5">Member Since</th>
+                  <th className="py-2 px-2.5 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading && employees.length === 0 ? (
                   Array.from({ length: 4 }).map((_, i) => (
                     <tr key={i}>
-                      <td className="py-3 px-3"><Skeleton className="h-4 w-16" /></td>
-                      <td className="py-3 px-4"><Skeleton className="h-4 w-32" /></td>
-                      <td className="py-3 px-3"><Skeleton className="h-4 w-24" /></td>
-                      <td className="py-3 px-3"><Skeleton className="h-4 w-32" /></td>
-                      <td className="py-3 px-3"><Skeleton className="h-4 w-20" /></td>
-                      <td className="py-3 px-3 text-center"><Skeleton className="h-4 w-16 mx-auto" /></td>
-                      <td className="py-3 px-3"><Skeleton className="h-4 w-20" /></td>
-                      <td className="py-3 px-3 text-center"><Skeleton className="h-4 w-16 mx-auto" /></td>
-                      <td className="py-3 px-3 text-center"><Skeleton className="h-4 w-14 mx-auto" /></td>
-                      <td className="py-3 px-3"><Skeleton className="h-4 w-20" /></td>
-                      <td className="py-3 px-3 text-right"><Skeleton className="h-4 w-12 ml-auto" /></td>
+                      <td className="py-2 px-2.5 text-center"><Skeleton className="h-3 w-4 mx-auto" /></td>
+                      <td className="py-2 px-2.5"><Skeleton className="h-3.5 w-14" /></td>
+                      <td className="py-2 px-3"><Skeleton className="h-3.5 w-28" /></td>
+                      <td className="py-2 px-2.5"><Skeleton className="h-3.5 w-20" /></td>
+                      <td className="py-2 px-2.5"><Skeleton className="h-3.5 w-24" /></td>
+                      <td className="py-2 px-2.5"><Skeleton className="h-3.5 w-20" /></td>
+                      <td className="py-2 px-2.5 text-center"><Skeleton className="h-3.5 w-12 mx-auto" /></td>
+                      <td className="py-2 px-2.5"><Skeleton className="h-3.5 w-16" /></td>
+                      <td className="py-2 px-2.5 text-center"><Skeleton className="h-3.5 w-14 mx-auto" /></td>
+                      <td className="py-2 px-2.5 text-center"><Skeleton className="h-3.5 w-12 mx-auto" /></td>
+                      <td className="py-2 px-2.5"><Skeleton className="h-3.5 w-16" /></td>
+                      <td className="py-2 px-2.5 text-right"><Skeleton className="h-3.5 w-10 ml-auto" /></td>
                     </tr>
                   ))
                 ) : displayedEmployees.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="py-12 text-center text-slate-400">
+                    <td colSpan={12} className="py-10 text-center text-slate-400 text-xs">
                       No employees match your search criteria.
                     </td>
                   </tr>
                 ) : (
-                  displayedEmployees.map((emp) => (
+                  displayedEmployees.map((emp, idx) => (
                     <tr key={emp.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="py-3 px-3">
-                        <span className="font-mono font-bold text-xs bg-slate-100 text-slate-800 border border-slate-200 px-2 py-0.5 rounded-md inline-flex items-center gap-1 shadow-2xs">
+                      <td className="py-2 px-2.5 text-center font-mono text-[10px] font-semibold text-slate-400">
+                        {idx + 1}
+                      </td>
+                      <td className="py-2 px-2.5">
+                        <span className="font-mono font-bold text-[10px] bg-slate-100 text-slate-800 border border-slate-200 px-1.5 py-0.5 rounded inline-flex items-center gap-1 shadow-2xs">
                           {formatEmployeeId(emp.id, emp.created_at)}
                         </span>
                       </td>
-                      <td className="py-3 px-4">
-                        <div className="font-semibold text-slate-900">
+                      <td className="py-2 px-3">
+                        <div className="font-semibold text-slate-900 text-xs">
                           {emp.full_name}
                           {currentUser?.id === emp.id && (
-                            <span className="ml-1.5 text-[10px] text-green-800 bg-green-50 px-1.5 py-0.5 rounded font-normal">
+                            <span className="ml-1 text-[9px] text-green-800 bg-green-50 px-1 py-0.2 rounded font-normal">
                               (You)
                             </span>
                           )}
                         </div>
                         {emp.designation && (
-                          <div className="text-[11px] text-emerald-700 font-medium">
+                          <div className="text-[10px] text-emerald-700 font-medium">
                             {emp.designation}
                           </div>
                         )}
                       </td>
-                      <td className="py-3 px-3">
+                      <td className="py-2 px-2.5">
                         {emp.phone ? (
                           <a
                             href={`tel:${emp.phone}`}
-                            className="inline-flex items-center gap-1.5 font-mono text-xs font-bold text-emerald-800 hover:text-emerald-950 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200 transition-colors shadow-2xs whitespace-nowrap"
+                            className="inline-flex items-center gap-1 font-mono text-[10.5px] font-bold text-emerald-800 hover:text-emerald-950 bg-emerald-50 hover:bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-200 transition-colors shadow-2xs whitespace-nowrap"
                             title={`Call ${emp.phone}`}
                           >
-                            <Phone className="w-3 h-3 text-emerald-600 shrink-0" />
+                            <Phone className="w-2.5 h-2.5 text-emerald-600 shrink-0" />
                             <span>{emp.phone}</span>
                           </a>
                         ) : (
-                          <span className="text-slate-400 italic text-[11px] inline-flex items-center gap-1">
-                            <Phone className="w-3 h-3 text-slate-300 shrink-0" />
-                            <span>Not Available</span>
+                          <span className="text-slate-400 italic text-[10px] inline-flex items-center gap-1">
+                            <Phone className="w-2.5 h-2.5 text-slate-300 shrink-0" />
+                            <span>None</span>
                           </span>
                         )}
                       </td>
-                      <td className="py-3 px-3">
-                        <span className="text-slate-700 text-[11px] font-medium">{emp.email}</span>
+                      <td className="py-2 px-2.5">
+                        <span className="text-slate-700 text-[10.5px] font-medium">{emp.email}</span>
                       </td>
-                      <td className="py-3 px-3">
+                      <td className="py-2 px-2.5">
                         {(() => {
                           const h = resolveHierarchy(emp, employees, teams);
                           return (
-                            <div className="space-y-1">
+                            <div className="space-y-0.5">
                               {h.glTeamName ? (
-                                <div className="inline-flex items-center gap-1 font-bold text-[11px] text-blue-900 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 shadow-2xs">
-                                  <Crown className="w-3 h-3 text-blue-700 shrink-0" />
+                                <div className="inline-flex items-center gap-1 font-bold text-[10px] text-blue-900 bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200 shadow-2xs">
+                                  <Crown className="w-2.5 h-2.5 text-blue-700 shrink-0" />
                                   <span>{h.glTeamName}</span>
                                 </div>
                               ) : (
@@ -1285,68 +1356,74 @@ export default function EmployeesPage() {
                                     setManageTeamsTab("quick_assign");
                                     setIsManageTeamsOpen(true);
                                   }}
-                                  className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2 py-0.5 rounded-full transition"
+                                  className="inline-flex items-center gap-1 text-[9.5px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-1.5 py-0.2 rounded-full transition"
                                   title="Click to assign team and supervisor"
                                 >
-                                  <AlertTriangle className="w-3 h-3 text-rose-500 shrink-0" />
+                                  <AlertTriangle className="w-2.5 h-2.5 text-rose-500 shrink-0" />
                                   <span>Assign Team</span>
                                 </button>
                               )}
 
-                              {emp.role === "co" && (
-                                <div className="text-[10px] text-sky-800 font-semibold flex items-center gap-1">
-                                  <Target className="w-3 h-3 text-sky-600 shrink-0" />
-                                  <span>Direct to GL ({h.glDirectorName || "Director"})</span>
-                                </div>
-                              )}
-
-                              {emp.role === "tl" && (
-                                <div className="text-[10px] text-slate-600 font-medium flex items-center gap-1">
-                                  <Target className="w-3 h-3 text-sky-600 shrink-0" />
-                                  <span>C.O: {h.coName || <span className="text-amber-700 italic">Unassigned</span>}</span>
-                                </div>
-                              )}
-
-                              {emp.role === "employee" && (
-                                <div className="space-y-0.5">
-                                  <div className="text-[10px] text-slate-800 font-semibold flex items-center gap-1">
-                                    <Star className="w-3 h-3 text-amber-600 shrink-0" />
-                                    <span>T.L: {h.tlName || <span className="text-amber-700 italic">None</span>}</span>
-                                  </div>
-                                  {h.coName && (
-                                    <div className="text-[9.5px] text-slate-500 font-medium flex items-center gap-1">
+                              {(() => {
+                                const r = normalizeRole(emp.role, emp.designation);
+                                if (r === "co") {
+                                  return (
+                                    <div className="text-[9.5px] text-sky-800 font-semibold flex items-center gap-1">
                                       <Target className="w-2.5 h-2.5 text-sky-600 shrink-0" />
-                                      <span>C.O: {h.coName}</span>
+                                      <span>Direct to GL ({h.glDirectorName || "Director"})</span>
                                     </div>
-                                  )}
-                                </div>
-                              )}
-
-                              {(emp.role === "admin" || emp.role === "sub_admin") && (
-                                <div className="text-[10px] text-purple-700 font-medium">
-                                  HQ Management
-                                </div>
-                              )}
+                                  );
+                                }
+                                if (r === "tl") {
+                                  return (
+                                    <div className="text-[9.5px] text-slate-600 font-medium flex items-center gap-1">
+                                      <Target className="w-2.5 h-2.5 text-sky-600 shrink-0" />
+                                      <span>C.O: {h.coName || <span className="text-amber-700 italic">Unassigned</span>}</span>
+                                    </div>
+                                  );
+                                }
+                                if (r === "employee") {
+                                  return (
+                                    <div className="space-y-0.5">
+                                      <div className="text-[9.5px] text-slate-800 font-semibold flex items-center gap-1">
+                                        <Star className="w-2.5 h-2.5 text-amber-600 shrink-0" />
+                                        <span>T.L: {h.tlName || <span className="text-amber-700 italic">None</span>}</span>
+                                      </div>
+                                      {h.coName && (
+                                        <div className="text-[9px] text-slate-500 font-medium flex items-center gap-1">
+                                          <Target className="w-2 h-2 text-sky-600 shrink-0" />
+                                          <span>C.O: {h.coName}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <div className="text-[9.5px] text-purple-700 font-medium">
+                                    HQ Management
+                                  </div>
+                                );
+                              })()}
                             </div>
                           );
                         })()}
                       </td>
-                      <td className="py-3 px-3 text-center">
-                        <span className="inline-flex items-center gap-1.5 font-mono text-[11px] bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+                      <td className="py-2 px-2.5 text-center">
+                        <span className="inline-flex items-center gap-1 font-mono text-[10px] bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200">
                           <span className="text-slate-700 font-semibold" title="Clients">{emp.client_count || 0} C</span>
                           <span className="text-slate-300">/</span>
                           <span className="text-emerald-700 font-semibold" title="Shares">{emp.client_share_count || 0} S</span>
                         </span>
                       </td>
-                      <td className="py-3 px-3 text-slate-600 font-mono text-[11px]">
+                      <td className="py-2 px-2.5 text-slate-600 font-mono text-[10px]">
                         @{emp.username}
                       </td>
-                      <td className="py-3 px-3 text-center">
+                      <td className="py-2 px-2.5 text-center">
                         {renderRoleBadge(emp.role)}
                       </td>
-                      <td className="py-3 px-3 text-center">
+                      <td className="py-2 px-2.5 text-center">
                         <span
-                          className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          className={`inline-flex items-center gap-1 text-[9.5px] font-bold px-1.5 py-0.2 rounded-full ${
                             emp.is_active
                               ? "bg-emerald-50 text-emerald-800 border border-emerald-300"
                               : "bg-rose-50 text-rose-700 border border-rose-200"
@@ -1354,36 +1431,36 @@ export default function EmployeesPage() {
                         >
                           {emp.is_active ? (
                             <>
-                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
                               Available
                             </>
                           ) : (
                             <>
-                              <XCircle className="w-3 h-3 text-rose-500" />
+                              <XCircle className="w-2.5 h-2.5 text-rose-500" />
                               Unavailable
                             </>
                           )}
                         </span>
                       </td>
-                      <td className="py-3 px-3 text-slate-500">
+                      <td className="py-2 px-2.5 text-slate-500 text-[10px]">
                         {formatReadableDate(emp.created_at.slice(0, 10))}
                       </td>
-                      <td className="py-3 px-3 text-right">
+                      <td className="py-2 px-2.5 text-right">
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => openEditModal(emp)}
-                            className="p-1 text-slate-400 hover:text-slate-700 rounded"
+                            className="p-1 text-slate-400 hover:text-slate-700 rounded transition"
                             title="Edit Employee"
                           >
-                            <Edit2 className="w-3.5 h-3.5" />
+                            <Edit2 className="w-3 h-3" />
                           </button>
                           {currentUser?.id !== emp.id && (
                             <button
                               onClick={() => setDeleteConfirmId(emp.id)}
-                              className="p-1 text-slate-400 hover:text-rose-600 rounded"
+                              className="p-1 text-slate-400 hover:text-rose-600 rounded transition"
                               title="Delete Employee"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <Trash2 className="w-3 h-3" />
                             </button>
                           )}
                         </div>
@@ -1621,68 +1698,20 @@ export default function EmployeesPage() {
                   <div className="p-2.5 bg-blue-50/70 border border-blue-200 rounded-lg text-[11px] text-blue-900 flex items-start gap-2">
                     <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
                     <div>
-                      <strong>Easy Team Assignment:</strong> Selecting a <strong>Team Leader (T.L.)</strong> automatically assigns both the <strong>Coordinator (C.O.)</strong> and <strong>GL Team</strong>.
+                      <strong>Team Hierarchy:</strong> Assign this Executive to a <strong>GL Team</strong> and select their <strong>Reporting Supervisor (T.L. or C.O.)</strong>.
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                        1. Select Team Leader (T.L.) *
-                      </label>
-                      <select
-                        value={reportingManagerId}
-                        onChange={(e) => {
-                          const val = e.target.value ? Number(e.target.value) : "";
-                          setReportingManagerId(val);
-                          if (val) {
-                            const chosenTl = employees.find((u) => u.id === val);
-                            if (chosenTl?.team_id) {
-                              setTeamId(chosenTl.team_id);
-                            }
-                          }
-                        }}
-                        className="w-full border border-slate-300 rounded px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white"
-                      >
-                        <option value="">Select Team Leader (Auto-fills Team & C.O.)...</option>
-                        {(teamId
-                          ? availableTeamLeaders.filter((tl) => tl.team_id === Number(teamId))
-                          : availableTeamLeaders
-                        ).map((tl) => {
-                          const tlTeam = teams.find((t) => t.id === tl.team_id);
-                          const tlCo = tl.reporting_manager_id
-                            ? employees.find((u) => u.id === tl.reporting_manager_id)
-                            : null;
-                          return (
-                            <option key={tl.id} value={tl.id}>
-                              TL: {tl.full_name} {tlTeam ? `[${tlTeam.name}]` : ""} {tlCo ? `(C.O: ${tlCo.full_name})` : ""}
-                            </option>
-                          );
-                        })}
-                      </select>
-                      <p className="text-[10px] text-slate-400 mt-0.5">
-                        {availableTeamLeaders.length === 0
-                          ? "No Team Leaders created yet. You can create one or select a C.O. directly."
-                          : "Filters to team leaders under Gazi Sir / Hasib Sir."}
-                      </p>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                        2. GL Team (Group Leader Team) *
+                        1. GL Team (Group Leader Team) *
                       </label>
                       <select
                         value={teamId}
                         onChange={(e) => {
                           const val = e.target.value ? Number(e.target.value) : "";
                           setTeamId(val);
-                          // Clear TL if current TL does not match the newly selected team
-                          if (val && reportingManagerId) {
-                            const curTl = employees.find((u) => u.id === Number(reportingManagerId));
-                            if (curTl && curTl.team_id && curTl.team_id !== val) {
-                              setReportingManagerId("");
-                            }
-                          }
                         }}
                         className="w-full border border-slate-300 rounded px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white"
                       >
@@ -1695,13 +1724,10 @@ export default function EmployeesPage() {
                       </select>
                       <p className="text-[10px] text-slate-400 mt-0.5">Team Gazi Sir or Team Hasib Sir</p>
                     </div>
-                  </div>
 
-                  {/* Fallback direct C.O. assignment if no T.L. */}
-                  {availableTeamLeaders.length === 0 && (
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                        Direct Coordinator (C.O.) Assignment (Since no T.L. exists)
+                        2. Reporting Supervisor (T.L., C.O., or Member)
                       </label>
                       <select
                         value={reportingManagerId}
@@ -1709,21 +1735,65 @@ export default function EmployeesPage() {
                           const val = e.target.value ? Number(e.target.value) : "";
                           setReportingManagerId(val);
                           if (val) {
-                            const chosenCo = employees.find((u) => u.id === val);
-                            if (chosenCo?.team_id) setTeamId(chosenCo.team_id);
+                            const chosen = employees.find((u) => u.id === val);
+                            if (chosen?.team_id) {
+                              setTeamId(chosen.team_id);
+                            }
                           }
                         }}
                         className="w-full border border-slate-300 rounded px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white"
                       >
-                        <option value="">None (Unassigned C.O.)</option>
-                        {availableCoordinators.map((co) => (
-                          <option key={co.id} value={co.id}>
-                            CO: {co.full_name} ({co.team_name || "Unassigned Team"})
-                          </option>
-                        ))}
+                        <option value="">None (Direct to GL Team / Director)</option>
+
+                        {availableTeamLeaders.length > 0 && (
+                          <optgroup label="Team Leaders (T.L.)">
+                            {availableTeamLeaders.map((tl) => {
+                              const tlTeam = teams.find((t) => t.id === tl.team_id);
+                              const tlCo = tl.reporting_manager_id
+                                ? employees.find((u) => u.id === tl.reporting_manager_id)
+                                : null;
+                              const isMatch = teamId && tl.team_id === Number(teamId);
+                              return (
+                                <option key={tl.id} value={tl.id}>
+                                  TL: {tl.full_name} {tlTeam ? `[${tlTeam.name}]` : "[No Team]"} {tlCo ? `(C.O: ${tlCo.full_name})` : ""} {isMatch ? "✓" : ""}
+                                </option>
+                              );
+                            })}
+                          </optgroup>
+                        )}
+
+                        {availableCoordinators.length > 0 && (
+                          <optgroup label="Coordinators (C.O.)">
+                            {availableCoordinators.map((co) => {
+                              const coTeam = teams.find((t) => t.id === co.team_id);
+                              const isMatch = teamId && co.team_id === Number(teamId);
+                              return (
+                                <option key={co.id} value={co.id}>
+                                  CO: {co.full_name} {coTeam ? `[${coTeam.name}]` : "[No Team]"} {isMatch ? "✓" : ""}
+                                </option>
+                              );
+                            })}
+                          </optgroup>
+                        )}
+
+                        {availableOtherStaff.length > 0 && (
+                          <optgroup label="Other Staff / Team Members">
+                            {availableOtherStaff.map((st) => {
+                              const stTeam = teams.find((t) => t.id === st.team_id);
+                              return (
+                                <option key={st.id} value={st.id}>
+                                  Staff: {st.full_name} (@{st.username}) {stTeam ? `[${stTeam.name}]` : ""}
+                                </option>
+                              );
+                            })}
+                          </optgroup>
+                        )}
                       </select>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        Selecting a supervisor auto-syncs their GL Team.
+                      </p>
                     </div>
-                  )}
+                  </div>
                 </div>
               )}
 
@@ -1732,14 +1802,32 @@ export default function EmployeesPage() {
                   <div className="p-2.5 bg-amber-50/70 border border-amber-200 rounded-lg text-[11px] text-amber-900 flex items-start gap-2">
                     <Star className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                     <div>
-                      <strong>Team Leader Hierarchy:</strong> Team Leaders report directly to a <strong>Coordinator (C.O.)</strong> in their GL Team.
+                      <strong>Team Leader Hierarchy:</strong> Team Leaders report directly to a <strong>Coordinator (C.O.)</strong> in their GL Team or directly to the <strong>GL Director</strong>.
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                        Select Reporting Coordinator (C.O.)
+                        1. GL Team (Group Leader Team) *
+                      </label>
+                      <select
+                        value={teamId}
+                        onChange={(e) => setTeamId(e.target.value ? Number(e.target.value) : "")}
+                        className="w-full border border-slate-300 rounded px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white"
+                      >
+                        <option value="">None (Unassigned GL Team)</option>
+                        {teams.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.name} {t.director_name ? `(${t.director_name})` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                        2. Select Reporting Coordinator (C.O.)
                       </label>
                       <select
                         value={reportingManagerId}
@@ -1756,45 +1844,32 @@ export default function EmployeesPage() {
                         className="w-full border border-slate-300 rounded px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white"
                       >
                         <option value="">Direct to GL Director (No C.O.)</option>
-                        {availableCoordinators.map((co) => {
-                          const coTeam = teams.find((t) => t.id === co.team_id);
-                          return (
-                            <option key={co.id} value={co.id}>
-                              CO: {co.full_name} {coTeam ? `[${coTeam.name}]` : ""}
-                            </option>
-                          );
-                        })}
+                        <optgroup label="Coordinators (C.O.)">
+                          {availableCoordinators.map((co) => {
+                            const coTeam = teams.find((t) => t.id === co.team_id);
+                            const isMatch = teamId && co.team_id === Number(teamId);
+                            return (
+                              <option key={co.id} value={co.id}>
+                                CO: {co.full_name} {coTeam ? `[${coTeam.name}]` : "[No Team]"} {isMatch ? "✓" : ""}
+                              </option>
+                            );
+                          })}
+                        </optgroup>
+                        {availableOtherStaff.length > 0 && (
+                          <optgroup label="Other Staff">
+                            {availableOtherStaff.map((st) => (
+                              <option key={st.id} value={st.id}>
+                                {st.full_name} (@{st.username})
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
                       </select>
                       {availableCoordinators.length === 0 && (
-                        <div className="mt-1.5 p-2 bg-amber-50 border border-amber-200 rounded text-[11px] text-amber-900 flex items-center justify-between gap-2">
-                          <span>No C.O. accounts created yet.</span>
-                          <button
-                            type="button"
-                            onClick={() => setRole("co")}
-                            className="font-bold underline text-amber-950 hover:text-amber-800"
-                          >
-                            Switch to Add C.O. First
-                          </button>
-                        </div>
+                        <p className="text-[10px] text-amber-700 mt-1">
+                          No C.O. accounts created yet. You can assign direct to GL Director or create a C.O.
+                        </p>
                       )}
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                        GL Team (Group Leader Team) *
-                      </label>
-                      <select
-                        value={teamId}
-                        onChange={(e) => setTeamId(e.target.value ? Number(e.target.value) : "")}
-                        className="w-full border border-slate-300 rounded px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white"
-                      >
-                        <option value="">None (Unassigned GL Team)</option>
-                        {teams.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.name} {t.director_name ? `(${t.director_name})` : ""}
-                          </option>
-                        ))}
-                      </select>
                     </div>
                   </div>
                 </div>
@@ -1850,15 +1925,18 @@ export default function EmployeesPage() {
                 const mgr = reportingManagerId
                   ? employees.find((u) => u.id === Number(reportingManagerId))
                   : null;
-                const tl = role === "employee" && mgr?.role === "tl" ? mgr : null;
+                const mgrRole = mgr ? normalizeRole(mgr.role, mgr.designation) : null;
+                const currentRole = normalizeRole(role, designation);
+
+                const tl = currentRole === "employee" && mgrRole === "tl" ? mgr : null;
                 const co =
-                  role === "co"
+                  currentRole === "co"
                     ? null
-                    : role === "tl"
-                    ? mgr
+                    : currentRole === "tl"
+                    ? (mgrRole === "co" ? mgr : null)
                     : tl?.reporting_manager_id
                     ? employees.find((u) => u.id === tl.reporting_manager_id)
-                    : mgr?.role === "co"
+                    : mgrRole === "co"
                     ? mgr
                     : null;
 
@@ -1877,7 +1955,7 @@ export default function EmployeesPage() {
                       <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
 
                       {/* Level 2: C.O. */}
-                      {role === "co" ? (
+                      {currentRole === "co" ? (
                         <span className="inline-flex items-center gap-1 font-bold text-[11px] px-2 py-0.5 rounded bg-sky-50 text-sky-900 border border-sky-300">
                           <Target className="w-3 h-3 text-sky-700" />
                           {fullName.trim() || "New Coordinator"} (C.O.)
@@ -1890,10 +1968,10 @@ export default function EmployeesPage() {
                       )}
 
                       {/* Level 3: T.L. */}
-                      {role !== "co" && (
+                      {currentRole !== "co" && (
                         <>
                           <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          {role === "tl" ? (
+                          {currentRole === "tl" ? (
                             <span className="inline-flex items-center gap-1 font-bold text-[11px] px-2 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-300">
                               <Star className="w-3 h-3 text-amber-700" />
                               {fullName.trim() || "New Team Leader"} (T.L.)
@@ -1908,7 +1986,7 @@ export default function EmployeesPage() {
                       )}
 
                       {/* Level 4: Executive */}
-                      {role === "employee" && (
+                      {currentRole === "employee" && (
                         <>
                           <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                           <span className="inline-flex items-center gap-1 font-bold text-[11px] px-2 py-0.5 rounded bg-emerald-50 text-emerald-900 border border-emerald-300">
@@ -2365,7 +2443,15 @@ export default function EmployeesPage() {
                     <span><strong>{teams.length}</strong> Teams</span>
                     <span>•</span>
                     <span>
-                      <strong>{employees.filter((e) => e.role !== "admin" && e.role !== "sub_admin").length}</strong> Total Staff
+                      <strong>
+                        {
+                          employees.filter((e) => {
+                            const r = normalizeRole(e.role, e.designation);
+                            return r !== "admin" && r !== "sub_admin";
+                          }).length
+                        }
+                      </strong>{" "}
+                      Total Staff
                     </span>
                     <span>•</span>
                     <span className={unassignedStaff.length > 0 ? "text-amber-700 font-bold" : "text-emerald-700 font-semibold"}>
@@ -2394,11 +2480,11 @@ export default function EmployeesPage() {
                 ) : (
                   teams.map((t) => {
                     const membersInTeam = employees.filter((e) => e.team_id === t.id);
-                    const cos = membersInTeam.filter((e) => e.role === "co");
-                    const tls = membersInTeam.filter((e) => e.role === "tl");
-                    const execs = membersInTeam.filter((e) => e.role === "employee");
+                    const cos = membersInTeam.filter((e) => normalizeRole(e.role, e.designation) === "co");
+                    const tls = membersInTeam.filter((e) => normalizeRole(e.role, e.designation) === "tl");
+                    const execs = membersInTeam.filter((e) => normalizeRole(e.role, e.designation) === "employee");
                     const unmanagedInTeam = membersInTeam.filter(
-                      (e) => !e.reporting_manager_id && e.role === "employee"
+                      (e) => !e.reporting_manager_id && normalizeRole(e.role, e.designation) === "employee"
                     );
 
                     return (
@@ -2840,11 +2926,22 @@ export default function EmployeesPage() {
                               className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600"
                             >
                               <option value="">Direct to GL (No C.O.)</option>
-                              {availableCoordinators.map((co) => (
-                                <option key={co.id} value={co.id}>
-                                  CO: {co.full_name} ({co.team_name || "Team"})
-                                </option>
-                              ))}
+                              <optgroup label="Coordinators (C.O.)">
+                                {availableCoordinators.map((co) => (
+                                  <option key={co.id} value={co.id}>
+                                    CO: {co.full_name} ({co.team_name || "Team"})
+                                  </option>
+                                ))}
+                              </optgroup>
+                              {availableOtherStaff.length > 0 && (
+                                <optgroup label="Other Staff">
+                                  {availableOtherStaff.map((st) => (
+                                    <option key={st.id} value={st.id}>
+                                      Staff: {st.full_name} (@{st.username})
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              )}
                             </select>
                           </div>
                         )}
@@ -2861,21 +2958,34 @@ export default function EmployeesPage() {
                               }
                               className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600"
                             >
-                              <option value="">Direct to Team / GL</option>
-                              <optgroup label="Team Leaders (T.L.)">
-                                {availableTeamLeaders.map((tl) => (
-                                  <option key={tl.id} value={tl.id}>
-                                    TL: {tl.full_name} ({tl.team_name || "Team"})
-                                  </option>
-                                ))}
-                              </optgroup>
-                              <optgroup label="Coordinators (C.O.)">
-                                {availableCoordinators.map((co) => (
-                                  <option key={co.id} value={co.id}>
-                                    CO: {co.full_name} ({co.team_name || "Team"})
-                                  </option>
-                                ))}
-                              </optgroup>
+                              <option value="">Direct to Team / GL (No Supervisor)</option>
+                              {availableTeamLeaders.length > 0 && (
+                                <optgroup label="Team Leaders (T.L.)">
+                                  {availableTeamLeaders.map((tl) => (
+                                    <option key={tl.id} value={tl.id}>
+                                      TL: {tl.full_name} ({tl.team_name || "Team"})
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              )}
+                              {availableCoordinators.length > 0 && (
+                                <optgroup label="Coordinators (C.O.)">
+                                  {availableCoordinators.map((co) => (
+                                    <option key={co.id} value={co.id}>
+                                      CO: {co.full_name} ({co.team_name || "Team"})
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              )}
+                              {availableOtherStaff.length > 0 && (
+                                <optgroup label="Other Staff">
+                                  {availableOtherStaff.map((st) => (
+                                    <option key={st.id} value={st.id}>
+                                      Staff: {st.full_name} (@{st.username})
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              )}
                             </select>
                           </div>
                         )}
@@ -2977,9 +3087,16 @@ export default function EmployeesPage() {
                           setQuickAssignUserId(idVal);
                           if (idVal) {
                             const sel = employees.find((u) => u.id === idVal);
-                            setQuickAssignRole(sel?.role || "employee");
-                            setQuickAssignTeamId(sel?.team_id || "");
-                            setQuickAssignManagerId(sel?.reporting_manager_id || "");
+                            const selRole = normalizeRole(sel?.role, sel?.designation);
+                            if (!quickAssignTeamId && sel?.team_id) {
+                              setQuickAssignTeamId(sel.team_id);
+                            }
+                            if (quickAssignRole === "employee" && selRole !== "employee") {
+                              setQuickAssignRole(selRole);
+                            }
+                            if (!quickAssignManagerId && sel?.reporting_manager_id) {
+                              setQuickAssignManagerId(sel.reporting_manager_id);
+                            }
                           }
                         }}
                         className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600"
@@ -2987,19 +3104,25 @@ export default function EmployeesPage() {
                         <option value="">-- Choose Employee --</option>
                         <optgroup label="Unassigned Staff">
                           {employees
-                            .filter((u) => !u.team_id && u.role !== "admin" && u.role !== "sub_admin")
+                            .filter((u) => {
+                              const r = normalizeRole(u.role, u.designation);
+                              return !u.team_id && r !== "admin" && r !== "sub_admin";
+                            })
                             .map((u) => (
                               <option key={u.id} value={u.id}>
-                                {u.full_name} (@{u.username}) — {u.role.toUpperCase()}
+                                {u.full_name} (@{u.username}) — {normalizeRole(u.role, u.designation).toUpperCase()}
                               </option>
                             ))}
                         </optgroup>
                         <optgroup label="Currently Assigned Staff">
                           {employees
-                            .filter((u) => !!u.team_id && u.role !== "admin" && u.role !== "sub_admin")
+                            .filter((u) => {
+                              const r = normalizeRole(u.role, u.designation);
+                              return !!u.team_id && r !== "admin" && r !== "sub_admin";
+                            })
                             .map((u) => (
                               <option key={u.id} value={u.id}>
-                                {u.full_name} (@{u.username}) — {u.team_name || "Assigned"} ({u.role.toUpperCase()})
+                                {u.full_name} (@{u.username}) — {u.team_name || "Assigned"} ({normalizeRole(u.role, u.designation).toUpperCase()})
                               </option>
                             ))}
                         </optgroup>
@@ -3069,13 +3192,29 @@ export default function EmployeesPage() {
                               className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600"
                             >
                               <option value="">Direct to GL Director (No C.O.)</option>
-                              {availableCoordinators
-                                .filter((co) => co.id !== quickAssignUserId)
-                                .map((co) => (
-                                  <option key={co.id} value={co.id}>
-                                    CO: {co.full_name} ({co.team_name || "Team"})
-                                  </option>
-                                ))}
+                              <optgroup label="Coordinators (C.O.)">
+                                {availableCoordinators
+                                  .filter((co) => co.id !== quickAssignUserId)
+                                  .map((co) => {
+                                    const coTeam = teams.find((t) => t.id === co.team_id);
+                                    return (
+                                      <option key={co.id} value={co.id}>
+                                        CO: {co.full_name} {coTeam ? `[${coTeam.name}]` : "[No Team]"}
+                                      </option>
+                                    );
+                                  })}
+                              </optgroup>
+                              {availableOtherStaff.length > 0 && (
+                                <optgroup label="Other Staff">
+                                  {availableOtherStaff
+                                    .filter((st) => st.id !== quickAssignUserId)
+                                    .map((st) => (
+                                      <option key={st.id} value={st.id}>
+                                        {st.full_name} (@{st.username})
+                                      </option>
+                                    ))}
+                                </optgroup>
+                              )}
                             </select>
                             {availableCoordinators.length === 0 && (
                               <p className="text-[10px] text-amber-700 mt-1">
@@ -3088,7 +3227,7 @@ export default function EmployeesPage() {
                         {quickAssignRole === "employee" && (
                           <div>
                             <label className="block text-xs font-semibold text-slate-700 mb-1">
-                              Supervisor (T.L. or C.O.)
+                              Supervisor (T.L., C.O., or Staff)
                             </label>
                             <select
                               value={quickAssignManagerId}
@@ -3103,34 +3242,48 @@ export default function EmployeesPage() {
                               className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600"
                             >
                               <option value="">None (Reports directly to Team / GL)</option>
-                              <optgroup label="Team Leaders (T.L.)">
-                                {(quickAssignTeamId
-                                  ? availableTeamLeaders.filter(
-                                      (tl) => tl.team_id === Number(quickAssignTeamId)
-                                    )
-                                  : availableTeamLeaders
-                                )
-                                  .filter((tl) => tl.id !== quickAssignUserId)
-                                  .map((tl) => (
-                                    <option key={tl.id} value={tl.id}>
-                                      TL: {tl.full_name} ({tl.team_name || "Team"})
-                                    </option>
-                                  ))}
-                              </optgroup>
-                              <optgroup label="Coordinators (C.O.)">
-                                {(quickAssignTeamId
-                                  ? availableCoordinators.filter(
-                                      (co) => co.team_id === Number(quickAssignTeamId)
-                                    )
-                                  : availableCoordinators
-                                )
-                                  .filter((co) => co.id !== quickAssignUserId)
-                                  .map((co) => (
-                                    <option key={co.id} value={co.id}>
-                                      CO: {co.full_name} ({co.team_name || "Team"})
-                                    </option>
-                                  ))}
-                              </optgroup>
+                              {availableTeamLeaders.length > 0 && (
+                                <optgroup label="Team Leaders (T.L.)">
+                                  {availableTeamLeaders
+                                    .filter((tl) => tl.id !== quickAssignUserId)
+                                    .map((tl) => {
+                                      const tlTeam = teams.find((t) => t.id === tl.team_id);
+                                      return (
+                                        <option key={tl.id} value={tl.id}>
+                                          TL: {tl.full_name} {tlTeam ? `[${tlTeam.name}]` : "[No Team]"}
+                                        </option>
+                                      );
+                                    })}
+                                </optgroup>
+                              )}
+                              {availableCoordinators.length > 0 && (
+                                <optgroup label="Coordinators (C.O.)">
+                                  {availableCoordinators
+                                    .filter((co) => co.id !== quickAssignUserId)
+                                    .map((co) => {
+                                      const coTeam = teams.find((t) => t.id === co.team_id);
+                                      return (
+                                        <option key={co.id} value={co.id}>
+                                          CO: {co.full_name} {coTeam ? `[${coTeam.name}]` : "[No Team]"}
+                                        </option>
+                                      );
+                                    })}
+                                </optgroup>
+                              )}
+                              {availableOtherStaff.length > 0 && (
+                                <optgroup label="Other Staff">
+                                  {availableOtherStaff
+                                    .filter((st) => st.id !== quickAssignUserId)
+                                    .map((st) => {
+                                      const stTeam = teams.find((t) => t.id === st.team_id);
+                                      return (
+                                        <option key={st.id} value={st.id}>
+                                          Staff: {st.full_name} (@{st.username}) {stTeam ? `[${stTeam.name}]` : ""}
+                                        </option>
+                                      );
+                                    })}
+                                </optgroup>
+                              )}
                             </select>
                           </div>
                         )}

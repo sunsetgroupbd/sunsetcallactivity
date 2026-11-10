@@ -4,9 +4,24 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.user import UserRole
+
+
+def _parse_role(v: object) -> object:
+    if isinstance(v, str):
+        clean = v.strip().lower()
+        if clean in ("tl", "team_leader", "team leader", "lead", "team lead"):
+            return UserRole.TL
+        if clean in ("co", "coordinator", "coord"):
+            return UserRole.CO
+        if clean in ("admin", "administrator"):
+            return UserRole.ADMIN
+        if clean in ("sub_admin", "subadmin", "sub admin"):
+            return UserRole.SUB_ADMIN
+        return UserRole.EMPLOYEE
+    return v
 
 
 class TeamBase(BaseModel):
@@ -41,4 +56,11 @@ class TeamBulkAssign(BaseModel):
     employee_ids: list[int]
     role: Optional[UserRole] = None
     reporting_manager_id: Optional[int] = None
+
+    @field_validator("role", mode="before")
+    @classmethod
+    def normalize_role(cls, v: object) -> object:
+        if v is None:
+            return None
+        return _parse_role(v)
 

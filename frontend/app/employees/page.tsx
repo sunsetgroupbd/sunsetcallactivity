@@ -34,7 +34,9 @@ import {
   Sparkles,
   CornerDownRight,
   RefreshCw,
+  Network,
 } from "lucide-react";
+import Link from "next/link";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import {
   Card,
@@ -920,7 +922,38 @@ export default function EmployeesPage() {
       subtitle="Manage corporate staff accounts, roles, access permissions, and activity"
       adminOnly
     >
-      <div className="space-y-6">
+      <div className="space-y-4">
+        {/* Top Navigation Tabs: Staff Directory vs Team Hierarchy */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-2.5 sm:p-3 rounded-xl border border-slate-200 shadow-2xs">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-900 text-white shadow-2xs">
+              <UserCheck className="w-3.5 h-3.5 text-white" />
+              <span>Staff Directory</span>
+              <span className="text-[10px] bg-slate-800 text-slate-200 px-1.5 py-0.2 rounded-full">
+                {employees.length}
+              </span>
+            </span>
+
+            <Link
+              href="/teams"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-indigo-700 hover:text-indigo-900 hover:bg-indigo-50 border border-indigo-200 transition"
+            >
+              <Network className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Team & Hierarchy Tree</span>
+              <span className="text-[10px] bg-indigo-100 text-indigo-800 px-1.5 py-0.2 rounded-full font-bold">
+                {teams.length} Teams
+              </span>
+            </Link>
+          </div>
+
+          <Link
+            href="/teams"
+            className="inline-flex items-center gap-1 text-xs font-bold text-indigo-700 hover:text-indigo-900"
+          >
+            <span>Open Dynamic Tree ➔</span>
+          </Link>
+        </div>
+
         {/* ── Action and Search Bar ────────────────────────────────────────── */}
         <Card>
           <CardContent className="p-4">

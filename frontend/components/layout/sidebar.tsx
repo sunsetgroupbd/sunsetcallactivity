@@ -12,6 +12,7 @@ import {
   FileSpreadsheet,
   Target,
   UserCheck,
+  Network,
   Settings,
   X,
   BellRing,
@@ -52,6 +53,7 @@ export function Sidebar({
           { name: "Performance & Collection", href: "/reports/performance-collection", icon: Target },
           { name: "Executive Collection", href: "/reports/executive-collection", icon: FileSpreadsheet },
           { name: "Employees", href: "/employees", icon: UserCheck },
+          { name: "Team Hierarchy", href: "/teams", icon: Network },
           { name: "Settings", href: "/settings", icon: Settings },
         ]
       : []),

@@ -169,18 +169,27 @@ async def bulk_assign_team(
     _: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Bulk assign a list of employees to a team."""
+    """Bulk assign a list of employees to a team, with optional role and supervisor assignment."""
     team = await db.get(Team, team_id)
     if not team:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Team not found")
 
     if payload.employee_ids:
+        update_vals: dict[str, Any] = {"team_id": team_id}
+        if payload.role:
+            update_vals["role"] = payload.role
+        if payload.reporting_manager_id is not None:
+            update_vals["reporting_manager_id"] = (
+                payload.reporting_manager_id if payload.reporting_manager_id > 0 else None
+            )
+
         await db.execute(
             update(User)
             .where(User.id.in_(payload.employee_ids))
-            .values(team_id=team_id)
+            .values(**update_vals)
         )
         await db.commit()
 
-    return {"message": f"Successfully assigned {len(payload.employee_ids)} employees to {team.name}"}
+    role_str = f" as {payload.role.value}" if payload.role else ""
+    return {"message": f"Successfully assigned {len(payload.employee_ids)} staff to {team.name}{role_str}"}
 

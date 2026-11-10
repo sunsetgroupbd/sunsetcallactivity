@@ -7,11 +7,13 @@ import re
 from typing import Optional, Any
 
 from fastapi import APIRouter, Depends, Query, UploadFile, File, Form, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import get_current_user, require_admin
 from app.core.security import hash_password
 from app.db.session import get_db
+from app.models.team import Team
 from app.models.user import User, UserRole
 from app.repositories.user_repo import UserRepository
 from app.schemas.user import UserCreate, UserRead, UserUpdate
@@ -90,14 +92,16 @@ async def bulk_upload_employees(
     file: UploadFile = File(...),
     default_password: str = Form("Sunset@1234"),
     role: str = Form("employee"),
+    target_team_id: Optional[int] = Form(None),
+    target_manager_id: Optional[int] = Form(None),
     reset_existing_passwords: bool = Form(False),
     _: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Bulk register or update employees from a CSV file.
 
-    Existing employees retain their existing passwords unless
-    reset_existing_passwords is explicitly True.
+    Supports role-wise, team-wise, and supervisor-wise column detection or batch preset.
+    Existing employees retain their existing passwords unless reset_existing_passwords is True.
     """
     if not file.filename or not file.filename.lower().endswith((".csv", ".txt")):
         raise HTTPException(status_code=400, detail="Uploaded file must be a CSV file (.csv)")
@@ -134,6 +138,11 @@ async def bulk_upload_employees(
     email_idx = find_col_idx("email", "emailaddress")
     phone_idx = find_col_idx("phone number", "phone", "phonenumber", "mobile")
     desig_idx = find_col_idx("designation", "position", "title")
+    role_idx = find_col_idx("role", "user role", "userrole")
+    team_idx = find_col_idx("team", "gl team", "glteam", "team name")
+    manager_idx = find_col_idx(
+        "supervisor", "reporting manager", "reports to", "manager", "tl", "co", "coordinator", "team leader"
+    )
 
     if name_idx is None or email_idx is None:
         raise HTTPException(
@@ -145,6 +154,26 @@ async def bulk_upload_employees(
     if len(clean_default_password) < 8:
         clean_default_password = "Sunset@1234"
     hashed_default = hash_password(clean_default_password)
+
+    # Preload teams for matching
+    all_teams_res = await db.execute(select(Team))
+    all_teams = list(all_teams_res.scalars().all())
+    team_lookup: dict[str, int] = {}
+    for t in all_teams:
+        team_lookup[str(t.id)] = t.id
+        team_lookup[re.sub(r"[^a-z0-9]", "", t.name.lower())] = t.id
+        if t.director_name:
+            team_lookup[re.sub(r"[^a-z0-9]", "", t.director_name.lower())] = t.id
+
+    # Preload users for supervisor matching
+    all_users_res = await db.execute(select(User))
+    all_users = list(all_users_res.scalars().all())
+    user_lookup: dict[str, int] = {}
+    for u in all_users:
+        user_lookup[str(u.id)] = u.id
+        user_lookup[re.sub(r"[^a-z0-9]", "", u.username.lower())] = u.id
+        user_lookup[u.email.lower()] = u.id
+        user_lookup[re.sub(r"[^a-z0-9]", "", u.full_name.lower())] = u.id
 
     repo = UserRepository(db)
     created_count = 0
@@ -162,6 +191,9 @@ async def bulk_upload_employees(
         email = _get_val(row, email_idx).lower()
         phone = _get_val(row, phone_idx)
         designation = _get_val(row, desig_idx)
+        raw_role = _get_val(row, role_idx)
+        raw_team = _get_val(row, team_idx)
+        raw_manager = _get_val(row, manager_idx)
 
         if not name:
             errors.append(f"Row {row_num}: Missing employee name, skipped.")
@@ -185,8 +217,20 @@ async def bulk_upload_employees(
 
         # Resolve role to assign
         assigned_role = UserRole.EMPLOYEE
-        desig_lower = designation.lower()
-        if role == "auto":
+        if raw_role:
+            cleaned_role = re.sub(r"[^a-z0-9]", "", raw_role.lower())
+            if cleaned_role in ("co", "coordinator", "coordinatorco"):
+                assigned_role = UserRole.CO
+            elif cleaned_role in ("tl", "teamleader", "teamlead", "leader"):
+                assigned_role = UserRole.TL
+            elif cleaned_role in ("subadmin", "sub_admin"):
+                assigned_role = UserRole.SUB_ADMIN
+            elif cleaned_role in ("admin", "administrator"):
+                assigned_role = UserRole.ADMIN
+            elif cleaned_role in ("employee", "executive", "salesexecutive", "sales"):
+                assigned_role = UserRole.EMPLOYEE
+        elif role == "auto":
+            desig_lower = designation.lower()
             if "team leader" in desig_lower or "team lead" in desig_lower:
                 assigned_role = UserRole.TL
             elif "coordinator" in desig_lower or "co-ordinator" in desig_lower:
@@ -199,6 +243,32 @@ async def bulk_upload_employees(
                 assigned_role = UserRole.EMPLOYEE
         elif role in ("tl", "co", "sub_admin", "admin", "employee"):
             assigned_role = UserRole(role)
+
+        # Resolve team_id
+        row_team_id: Optional[int] = target_team_id
+        if raw_team:
+            cleaned_team = re.sub(r"[^a-z0-9]", "", raw_team.lower())
+            if cleaned_team in team_lookup:
+                row_team_id = team_lookup[cleaned_team]
+            elif "gazi" in cleaned_team:
+                for k, v in team_lookup.items():
+                    if "gazi" in k:
+                        row_team_id = v
+                        break
+            elif "hasib" in cleaned_team:
+                for k, v in team_lookup.items():
+                    if "hasib" in k:
+                        row_team_id = v
+                        break
+
+        # Resolve reporting_manager_id
+        row_manager_id: Optional[int] = target_manager_id
+        if raw_manager:
+            cleaned_mgr = re.sub(r"[^a-z0-9]", "", raw_manager.lower())
+            if cleaned_mgr in user_lookup:
+                row_manager_id = user_lookup[cleaned_mgr]
+            elif raw_manager.lower() in user_lookup:
+                row_manager_id = user_lookup[raw_manager.lower()]
 
         # Check existing user
         existing_user: Optional[User] = None
@@ -216,6 +286,13 @@ async def bulk_upload_employees(
                 existing_user.phone = phone
             if designation:
                 existing_user.designation = designation
+
+            # Update role, team, supervisor
+            existing_user.role = assigned_role
+            if row_team_id is not None:
+                existing_user.team_id = row_team_id
+            if row_manager_id is not None:
+                existing_user.reporting_manager_id = row_manager_id
 
             # Only update email if not in conflict
             if existing_user.email != email:
@@ -249,6 +326,8 @@ async def bulk_upload_employees(
                 "password_hash": hashed_default,
                 "role": assigned_role,
                 "is_active": True,
+                "team_id": row_team_id,
+                "reporting_manager_id": row_manager_id,
             }
             if emp_id is not None:
                 new_user_kwargs["id"] = emp_id
@@ -256,6 +335,12 @@ async def bulk_upload_employees(
             try:
                 await repo.create(new_user)
                 created_count += 1
+                # register in lookup so subsequent rows can reference this user as manager
+                if new_user.id:
+                    user_lookup[str(new_user.id)] = new_user.id
+                    user_lookup[re.sub(r"[^a-z0-9]", "", new_user.username.lower())] = new_user.id
+                    user_lookup[new_user.email.lower()] = new_user.id
+                    user_lookup[re.sub(r"[^a-z0-9]", "", new_user.full_name.lower())] = new_user.id
             except Exception as exc:
                 errors.append(f"Row {row_num}: Could not create user {name} ({exc})")
                 skipped_count += 1

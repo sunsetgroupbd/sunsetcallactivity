@@ -836,10 +836,18 @@ export const api = {
         method: "DELETE",
       });
     },
-    bulkAssign: async (teamId: number, employeeIds: number[]): Promise<{ message: string }> => {
+    bulkAssign: async (
+      teamId: number,
+      employeeIds: number[],
+      role?: string,
+      reportingManagerId?: number | null
+    ): Promise<{ message: string }> => {
+      const payload: Record<string, any> = { team_id: teamId, employee_ids: employeeIds };
+      if (role) payload.role = role;
+      if (reportingManagerId !== undefined) payload.reporting_manager_id = reportingManagerId;
       return request<{ message: string }>(`/teams/${teamId}/assign`, {
         method: "POST",
-        body: JSON.stringify({ team_id: teamId, employee_ids: employeeIds }),
+        body: JSON.stringify(payload),
       });
     },
   },

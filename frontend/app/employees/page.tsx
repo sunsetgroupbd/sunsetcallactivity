@@ -241,6 +241,7 @@ export default function EmployeesPage() {
 
   // Quick Assign Staff states
   const [quickAssignUserId, setQuickAssignUserId] = useState<number | "">("");
+  const [quickAssignRole, setQuickAssignRole] = useState<UserRole>("employee");
   const [quickAssignTeamId, setQuickAssignTeamId] = useState<number | "">("");
   const [quickAssignManagerId, setQuickAssignManagerId] = useState<number | "">("");
   const [quickAssignLoading, setQuickAssignLoading] = useState(false);
@@ -249,6 +250,8 @@ export default function EmployeesPage() {
   const [quickAssignMode, setQuickAssignMode] = useState<"single" | "batch">("single");
   const [selectedBatchIds, setSelectedBatchIds] = useState<number[]>([]);
   const [batchTargetTeamId, setBatchTargetTeamId] = useState<number | "">("");
+  const [batchTargetRole, setBatchTargetRole] = useState<UserRole>("employee");
+  const [batchTargetManagerId, setBatchTargetManagerId] = useState<number | "">("");
   const [batchLoading, setBatchLoading] = useState(false);
 
   // Bulk CSV Upload states
@@ -257,6 +260,8 @@ export default function EmployeesPage() {
   const [bulkDefaultPassword, setBulkDefaultPassword] = useState("Sunset@1234");
   const [bulkShowPassword, setBulkShowPassword] = useState(false);
   const [bulkRole, setBulkRole] = useState<string>("auto");
+  const [bulkTargetTeamId, setBulkTargetTeamId] = useState<number | "">("");
+  const [bulkTargetManagerId, setBulkTargetManagerId] = useState<number | "">("");
   const [bulkResetExisting, setBulkResetExisting] = useState(false);
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
   const [bulkError, setBulkError] = useState<string | null>(null);
@@ -420,6 +425,7 @@ export default function EmployeesPage() {
     setQuickAssignSuccess(null);
     try {
       const updated = await api.employees.update(Number(quickAssignUserId), {
+        role: quickAssignRole,
         team_id: quickAssignTeamId ? Number(quickAssignTeamId) : null,
         reporting_manager_id: quickAssignManagerId ? Number(quickAssignManagerId) : null,
       });
@@ -428,7 +434,7 @@ export default function EmployeesPage() {
       );
       await loadEmployees();
       await loadTeams();
-      setQuickAssignSuccess(`Hierarchy assigned successfully for "${updated.full_name}"!`);
+      setQuickAssignSuccess(`Hierarchy and role updated successfully for "${updated.full_name}"!`);
       setTimeout(() => setQuickAssignSuccess(null), 3500);
     } catch (err: unknown) {
       if (err instanceof ApiError) {
@@ -453,7 +459,12 @@ export default function EmployeesPage() {
     setQuickAssignError(null);
     setQuickAssignSuccess(null);
     try {
-      const res = await api.teams.bulkAssign(Number(batchTargetTeamId), selectedBatchIds);
+      const res = await api.teams.bulkAssign(
+        Number(batchTargetTeamId),
+        selectedBatchIds,
+        batchTargetRole,
+        batchTargetManagerId ? Number(batchTargetManagerId) : null
+      );
       await loadEmployees();
       await loadTeams();
       const count = selectedBatchIds.length;
@@ -471,6 +482,27 @@ export default function EmployeesPage() {
     } finally {
       setBatchLoading(false);
     }
+  };
+
+  const downloadSampleCsv = () => {
+    const csvContent =
+      "Employee ID,Full Name,Email,Phone Number,Designation,Role,GL Team,Reporting Manager\n" +
+      "101,Gazi Coordinator 1,co1@sunset.com,01700000001,Coordinator,co,Gazi Sir Team,\n" +
+      "102,Gazi TL 1,tl1@sunset.com,01700000002,Team Leader,tl,Gazi Sir Team,Gazi Coordinator 1\n" +
+      "103,Executive 1,exec1@sunset.com,01700000003,Sales Executive,employee,Gazi Sir Team,Gazi TL 1\n" +
+      "201,Hasib Coordinator 1,co2@sunset.com,01700000004,Coordinator,co,Hasib Sir Team,\n" +
+      "202,Hasib TL 1,tl2@sunset.com,01700000005,Team Leader,tl,Hasib Sir Team,Hasib Coordinator 1\n" +
+      "203,Executive 2,exec2@sunset.com,01700000006,Sales Executive,employee,Hasib Sir Team,Hasib TL 1\n";
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "Sunset_Staff_Role_Hierarchy_Template.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const toggleSelectBatchId = (id: number) => {
@@ -573,6 +605,12 @@ export default function EmployeesPage() {
       formData.append("file", bulkFile);
       formData.append("default_password", bulkDefaultPassword.trim() || "Sunset@1234");
       formData.append("role", bulkRole);
+      if (bulkTargetTeamId) {
+        formData.append("target_team_id", String(bulkTargetTeamId));
+      }
+      if (bulkTargetManagerId) {
+        formData.append("target_manager_id", String(bulkTargetManagerId));
+      }
       formData.append("reset_existing_passwords", String(bulkResetExisting));
 
       const res = await api.employees.bulkUpload(formData);
@@ -1701,7 +1739,7 @@ export default function EmployeesPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                        Select Reporting Coordinator (C.O.) *
+                        Select Reporting Coordinator (C.O.)
                       </label>
                       <select
                         value={reportingManagerId}
@@ -1717,11 +1755,8 @@ export default function EmployeesPage() {
                         }}
                         className="w-full border border-slate-300 rounded px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white"
                       >
-                        <option value="">Select Coordinator (Auto-fills GL Team)...</option>
-                        {(teamId
-                          ? availableCoordinators.filter((co) => co.team_id === Number(teamId))
-                          : availableCoordinators
-                        ).map((co) => {
+                        <option value="">Direct to GL Director (No C.O.)</option>
+                        {availableCoordinators.map((co) => {
                           const coTeam = teams.find((t) => t.id === co.team_id);
                           return (
                             <option key={co.id} value={co.id}>
@@ -1730,6 +1765,18 @@ export default function EmployeesPage() {
                           );
                         })}
                       </select>
+                      {availableCoordinators.length === 0 && (
+                        <div className="mt-1.5 p-2 bg-amber-50 border border-amber-200 rounded text-[11px] text-amber-900 flex items-center justify-between gap-2">
+                          <span>No C.O. accounts created yet.</span>
+                          <button
+                            type="button"
+                            onClick={() => setRole("co")}
+                            className="font-bold underline text-amber-950 hover:text-amber-800"
+                          >
+                            Switch to Add C.O. First
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     <div>
@@ -1983,9 +2030,19 @@ export default function EmployeesPage() {
 
             {/* File Upload Zone */}
             <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Select CSV File *
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                  Select CSV File *
+                </label>
+                <button
+                  type="button"
+                  onClick={downloadSampleCsv}
+                  className="text-xs text-indigo-700 hover:text-indigo-900 font-semibold underline inline-flex items-center gap-1 cursor-pointer"
+                >
+                  <Upload className="w-3.5 h-3.5 rotate-180" />
+                  Download Sample CSV Template
+                </button>
+              </div>
               <div className="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center hover:border-emerald-500 transition-colors bg-slate-50/50">
                 <input
                   type="file"
@@ -2006,7 +2063,7 @@ export default function EmployeesPage() {
                     {bulkFile ? bulkFile.name : "Click to select CSV file (or drag & drop)"}
                   </span>
                   <span className="text-[10px] text-slate-500">
-                    Accepts columns: S.L, Name, Employee ID, Username, Email, Phone Number, Designation
+                    Supports columns: Employee ID, Full Name, Email, Phone Number, Designation, Role (co/tl/employee), GL Team, Reporting Manager
                   </span>
                 </label>
               </div>
@@ -2082,25 +2139,75 @@ export default function EmployeesPage() {
             </div>
 
             {/* Role Selection */}
-            <div className="space-y-1.5 pt-1 border-t border-slate-100">
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                Assign Role to Uploaded Employees
-              </label>
-              <select
-                value={bulkRole}
-                onChange={(e) => setBulkRole(e.target.value)}
-                className="w-full border border-slate-300 rounded px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white"
-              >
-                <option value="auto">Auto-detect from Designation (Recommended)</option>
-                <option value="employee">Sales Executive (Employee)</option>
-                <option value="tl">Team Leader (TL)</option>
-                <option value="co">Coordinator (CO)</option>
-                <option value="sub_admin">Sub Admin</option>
-                <option value="admin">Administrator</option>
-              </select>
-              <span className="text-[10px] text-slate-500">
-                Auto-detect assigns Team Leader if designation has &quot;Team Leader&quot;, Coordinator if &quot;Coordinator&quot;, etc.
-              </span>
+            <div className="space-y-2 pt-1 border-t border-slate-100">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                  Assign Role to Uploaded Employees
+                </label>
+                <select
+                  value={bulkRole}
+                  onChange={(e) => setBulkRole(e.target.value)}
+                  className="w-full border border-slate-300 rounded px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white"
+                >
+                  <option value="auto">Auto-detect from Role / Designation in CSV (Recommended)</option>
+                  <option value="employee">Sales Executive (Employee)</option>
+                  <option value="tl">Team Leader (T.L.)</option>
+                  <option value="co">Coordinator (C.O.)</option>
+                  <option value="sub_admin">Sub Admin</option>
+                  <option value="admin">Administrator</option>
+                </select>
+                <span className="text-[10px] text-slate-500 block mt-0.5">
+                  Reads &quot;Role&quot; or &quot;Designation&quot; column from CSV, or assigns the selected role to all records in this file.
+                </span>
+              </div>
+
+              {/* Optional Team and Supervisor for Batch Assign */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    Default GL Team (Optional)
+                  </label>
+                  <select
+                    value={bulkTargetTeamId}
+                    onChange={(e) => setBulkTargetTeamId(e.target.value ? Number(e.target.value) : "")}
+                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs font-semibold text-slate-800 bg-white focus:ring-1 focus:ring-indigo-600 focus:outline-none"
+                  >
+                    <option value="">Detect from CSV or Leave Unassigned</option>
+                    {teams.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} {t.director_name ? `(${t.director_name})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    Default Supervisor (Optional)
+                  </label>
+                  <select
+                    value={bulkTargetManagerId}
+                    onChange={(e) => setBulkTargetManagerId(e.target.value ? Number(e.target.value) : "")}
+                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs font-semibold text-slate-800 bg-white focus:ring-1 focus:ring-indigo-600 focus:outline-none"
+                  >
+                    <option value="">Detect from CSV or None</option>
+                    <optgroup label="Coordinators (C.O.)">
+                      {availableCoordinators.map((co) => (
+                        <option key={co.id} value={co.id}>
+                          CO: {co.full_name} ({co.team_name || "Team"})
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Team Leaders (T.L.)">
+                      {availableTeamLeaders.map((tl) => (
+                        <option key={tl.id} value={tl.id}>
+                          TL: {tl.full_name} ({tl.team_name || "Team"})
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
+                </div>
+              </div>
             </div>
 
             {/* Smart Update & Password Option */}
@@ -2323,7 +2430,37 @@ export default function EmployeesPage() {
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-1.5 self-start sm:self-center">
+                          <div className="flex items-center gap-1.5 self-start sm:self-center flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsManageTeamsOpen(false);
+                                openCreateModal({ role: "co", teamId: t.id });
+                              }}
+                              className="px-2.5 py-1 text-xs font-semibold bg-sky-50 text-sky-800 hover:bg-sky-100 border border-sky-300 rounded-lg transition"
+                            >
+                              + Add C.O.
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsManageTeamsOpen(false);
+                                openCreateModal({ role: "tl", teamId: t.id });
+                              }}
+                              className="px-2.5 py-1 text-xs font-semibold bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300 rounded-lg transition"
+                            >
+                              + Add T.L.
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsManageTeamsOpen(false);
+                                openCreateModal({ role: "employee", teamId: t.id });
+                              }}
+                              className="px-2.5 py-1 text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition"
+                            >
+                              + Add Executive
+                            </button>
                             <button
                               type="button"
                               onClick={() => {
@@ -2336,24 +2473,38 @@ export default function EmployeesPage() {
                             >
                               Assign Staff
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setIsManageTeamsOpen(false);
-                                openCreateModal({ role: "employee", teamId: t.id });
-                              }}
-                              className="px-2.5 py-1 text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition"
-                            >
-                              Add Member
-                            </button>
                           </div>
                         </div>
 
                         {/* Team Body */}
                         <div className="p-3">
                           {membersInTeam.length === 0 ? (
-                            <div className="py-4 text-center text-xs text-slate-400">
-                              No members assigned to {t.name} yet.
+                            <div className="py-4 text-center text-xs text-slate-400 space-y-2">
+                              <p>No members assigned to {t.name} yet.</p>
+                              <div className="flex items-center justify-center gap-2 flex-wrap">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setIsManageTeamsOpen(false);
+                                    openCreateModal({ role: "co", teamId: t.id });
+                                  }}
+                                  className="px-2.5 py-1 text-xs font-semibold bg-sky-50 text-sky-800 hover:bg-sky-100 border border-sky-300 rounded-lg transition"
+                                >
+                                  + Add First C.O.
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setBatchTargetTeamId(t.id);
+                                    setQuickAssignTeamId(t.id);
+                                    setQuickAssignMode("batch");
+                                    setManageTeamsTab("quick_assign");
+                                  }}
+                                  className="px-2.5 py-1 text-xs font-semibold bg-indigo-50 text-indigo-800 hover:bg-indigo-100 border border-indigo-300 rounded-lg transition"
+                                >
+                                  Assign Staff to this Team
+                                </button>
+                              </div>
                             </div>
                           ) : (
                             <div className="space-y-2.5">
@@ -2390,7 +2541,7 @@ export default function EmployeesPage() {
                                         )}
                                       </div>
 
-                                      <div className="flex items-center gap-1.5">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
                                         <button
                                           type="button"
                                           onClick={() => {
@@ -2401,9 +2552,23 @@ export default function EmployeesPage() {
                                               reportingManagerId: co.id,
                                             });
                                           }}
-                                          className="px-2 py-0.5 text-[11px] font-medium bg-white text-slate-700 hover:bg-slate-100 border border-slate-300 rounded"
+                                          className="px-2 py-0.5 text-[11px] font-semibold bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-300 rounded"
                                         >
-                                          Add T.L.
+                                          + Add T.L.
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setQuickAssignMode("single");
+                                            setQuickAssignRole("tl");
+                                            setQuickAssignTeamId(t.id);
+                                            setQuickAssignManagerId(co.id);
+                                            setManageTeamsTab("quick_assign");
+                                          }}
+                                          className="px-2 py-0.5 text-[11px] font-medium bg-white text-slate-700 hover:bg-slate-100 border border-slate-300 rounded"
+                                          title="Assign an existing staff member as T.L. under this C.O."
+                                        >
+                                          Assign T.L.
                                         </button>
                                         <button
                                           type="button"
@@ -2621,28 +2786,108 @@ export default function EmployeesPage() {
                 {/* Sub-tab 1: Batch Assign Mode */}
                 {quickAssignMode === "batch" ? (
                   <div className="space-y-3 bg-slate-50/70 p-3 sm:p-4 rounded-xl border border-slate-200">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                      <div className="flex-1">
-                        <label className="block text-xs font-semibold text-slate-700 mb-1">
-                          Target Team *
-                        </label>
-                        <select
-                          value={batchTargetTeamId}
-                          onChange={(e) =>
-                            setBatchTargetTeamId(e.target.value ? Number(e.target.value) : "")
-                          }
-                          className="w-full sm:w-64 border border-slate-300 rounded px-2.5 py-1.5 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600"
-                        >
-                          <option value="">-- Choose Team --</option>
-                          {teams.map((t) => (
-                            <option key={t.id} value={t.id}>
-                              {t.name} {t.director_name ? `(${t.director_name})` : ""}
-                            </option>
-                          ))}
-                        </select>
+                    <div className="space-y-2.5">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1">
+                            1. Target GL Team *
+                          </label>
+                          <select
+                            value={batchTargetTeamId}
+                            onChange={(e) =>
+                              setBatchTargetTeamId(e.target.value ? Number(e.target.value) : "")
+                            }
+                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600"
+                          >
+                            <option value="">-- Choose Team --</option>
+                            {teams.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.name} {t.director_name ? `(${t.director_name})` : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1">
+                            2. Assign Role *
+                          </label>
+                          <select
+                            value={batchTargetRole}
+                            onChange={(e) => {
+                              const r = e.target.value as UserRole;
+                              setBatchTargetRole(r);
+                              if (r === "co") setBatchTargetManagerId("");
+                            }}
+                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600"
+                          >
+                            <option value="employee">Sales Executive</option>
+                            <option value="tl">Team Leader (T.L.)</option>
+                            <option value="co">Coordinator (C.O.)</option>
+                          </select>
+                        </div>
+
+                        {batchTargetRole === "tl" && (
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">
+                              3. Reporting Coordinator (C.O.)
+                            </label>
+                            <select
+                              value={batchTargetManagerId}
+                              onChange={(e) =>
+                                setBatchTargetManagerId(e.target.value ? Number(e.target.value) : "")
+                              }
+                              className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600"
+                            >
+                              <option value="">Direct to GL (No C.O.)</option>
+                              {availableCoordinators.map((co) => (
+                                <option key={co.id} value={co.id}>
+                                  CO: {co.full_name} ({co.team_name || "Team"})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        {batchTargetRole === "employee" && (
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">
+                              3. Supervisor (Optional)
+                            </label>
+                            <select
+                              value={batchTargetManagerId}
+                              onChange={(e) =>
+                                setBatchTargetManagerId(e.target.value ? Number(e.target.value) : "")
+                              }
+                              className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600"
+                            >
+                              <option value="">Direct to Team / GL</option>
+                              <optgroup label="Team Leaders (T.L.)">
+                                {availableTeamLeaders.map((tl) => (
+                                  <option key={tl.id} value={tl.id}>
+                                    TL: {tl.full_name} ({tl.team_name || "Team"})
+                                  </option>
+                                ))}
+                              </optgroup>
+                              <optgroup label="Coordinators (C.O.)">
+                                {availableCoordinators.map((co) => (
+                                  <option key={co.id} value={co.id}>
+                                    CO: {co.full_name} ({co.team_name || "Team"})
+                                  </option>
+                                ))}
+                              </optgroup>
+                            </select>
+                          </div>
+                        )}
+
+                        {batchTargetRole === "co" && (
+                          <div className="flex items-center text-xs text-sky-800 bg-sky-50 p-2 rounded border border-sky-200">
+                            Coordinators report directly to the GL Director.
+                          </div>
+                        )}
                       </div>
 
-                      <div className="flex items-center gap-2 self-start sm:self-end">
+                      <div className="flex items-center justify-end pt-1">
                         <Button
                           type="button"
                           variant="primary"
@@ -2652,7 +2897,13 @@ export default function EmployeesPage() {
                           onClick={handleBatchAssign}
                           className="bg-indigo-600 hover:bg-indigo-700"
                         >
-                          Assign {selectedBatchIds.length} Staff to Team
+                          Assign {selectedBatchIds.length} Staff as{" "}
+                          {batchTargetRole === "tl"
+                            ? "Team Leaders"
+                            : batchTargetRole === "co"
+                            ? "Coordinators"
+                            : "Executives"}{" "}
+                          to Team
                         </Button>
                       </div>
                     </div>
@@ -2726,6 +2977,7 @@ export default function EmployeesPage() {
                           setQuickAssignUserId(idVal);
                           if (idVal) {
                             const sel = employees.find((u) => u.id === idVal);
+                            setQuickAssignRole(sel?.role || "employee");
                             setQuickAssignTeamId(sel?.team_id || "");
                             setQuickAssignManagerId(sel?.reporting_manager_id || "");
                           }
@@ -2755,71 +3007,139 @@ export default function EmployeesPage() {
                     </div>
 
                     {quickAssignUserId && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200">
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-700 mb-1">
-                            GL Team *
-                          </label>
-                          <select
-                            value={quickAssignTeamId}
-                            required
-                            onChange={(e) => {
-                              const val = e.target.value ? Number(e.target.value) : "";
-                              setQuickAssignTeamId(val);
-                            }}
-                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600"
-                          >
-                            <option value="">-- Select Team --</option>
-                            {teams.map((t) => (
-                              <option key={t.id} value={t.id}>
-                                {t.name} {t.director_name ? `(${t.director_name})` : ""}
-                              </option>
-                            ))}
-                          </select>
+                      <div className="space-y-3 pt-2 border-t border-slate-200">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">
+                              Role Assignment *
+                            </label>
+                            <select
+                              value={quickAssignRole}
+                              onChange={(e) => {
+                                const newR = e.target.value as UserRole;
+                                setQuickAssignRole(newR);
+                                if (newR === "co") setQuickAssignManagerId("");
+                              }}
+                              className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600"
+                            >
+                              <option value="employee">Sales Executive</option>
+                              <option value="tl">Team Leader (T.L.)</option>
+                              <option value="co">Coordinator (C.O.)</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">
+                              GL Team *
+                            </label>
+                            <select
+                              value={quickAssignTeamId}
+                              required
+                              onChange={(e) => {
+                                const val = e.target.value ? Number(e.target.value) : "";
+                                setQuickAssignTeamId(val);
+                              }}
+                              className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600"
+                            >
+                              <option value="">-- Select Team --</option>
+                              {teams.map((t) => (
+                                <option key={t.id} value={t.id}>
+                                  {t.name} {t.director_name ? `(${t.director_name})` : ""}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
                         </div>
 
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-700 mb-1">
-                            Supervisor (Optional)
-                          </label>
-                          <select
-                            value={quickAssignManagerId}
-                            onChange={(e) =>
-                              setQuickAssignManagerId(e.target.value ? Number(e.target.value) : "")
-                            }
-                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600"
-                          >
-                            <option value="">Direct to Team / GL</option>
-                            <optgroup label="Team Leaders (T.L.)">
-                              {(quickAssignTeamId
-                                ? availableTeamLeaders.filter(
-                                    (tl) => tl.team_id === Number(quickAssignTeamId)
-                                  )
-                                : availableTeamLeaders
-                              )
-                                .filter((tl) => tl.id !== quickAssignUserId)
-                                .map((tl) => (
-                                  <option key={tl.id} value={tl.id}>
-                                    TL: {tl.full_name} ({tl.team_name || "Team"})
-                                  </option>
-                                ))}
-                            </optgroup>
-                            <optgroup label="Coordinators (C.O.)">
-                              {(quickAssignTeamId
-                                ? availableCoordinators.filter(
-                                    (co) => co.team_id === Number(quickAssignTeamId)
-                                  )
-                                : availableCoordinators
-                              )
+                        {quickAssignRole === "tl" && (
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">
+                              Reporting Coordinator (C.O.)
+                            </label>
+                            <select
+                              value={quickAssignManagerId}
+                              onChange={(e) => {
+                                const val = e.target.value ? Number(e.target.value) : "";
+                                setQuickAssignManagerId(val);
+                                if (val) {
+                                  const co = employees.find((u) => u.id === val);
+                                  if (co?.team_id) setQuickAssignTeamId(co.team_id);
+                                }
+                              }}
+                              className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600"
+                            >
+                              <option value="">Direct to GL Director (No C.O.)</option>
+                              {availableCoordinators
                                 .filter((co) => co.id !== quickAssignUserId)
                                 .map((co) => (
                                   <option key={co.id} value={co.id}>
                                     CO: {co.full_name} ({co.team_name || "Team"})
                                   </option>
                                 ))}
-                            </optgroup>
-                          </select>
-                        </div>
+                            </select>
+                            {availableCoordinators.length === 0 && (
+                              <p className="text-[10px] text-amber-700 mt-1">
+                                No Coordinators exist yet. This T.L. will report directly to the GL Director.
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {quickAssignRole === "employee" && (
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">
+                              Supervisor (T.L. or C.O.)
+                            </label>
+                            <select
+                              value={quickAssignManagerId}
+                              onChange={(e) => {
+                                const val = e.target.value ? Number(e.target.value) : "";
+                                setQuickAssignManagerId(val);
+                                if (val) {
+                                  const s = employees.find((u) => u.id === val);
+                                  if (s?.team_id) setQuickAssignTeamId(s.team_id);
+                                }
+                              }}
+                              className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600"
+                            >
+                              <option value="">None (Reports directly to Team / GL)</option>
+                              <optgroup label="Team Leaders (T.L.)">
+                                {(quickAssignTeamId
+                                  ? availableTeamLeaders.filter(
+                                      (tl) => tl.team_id === Number(quickAssignTeamId)
+                                    )
+                                  : availableTeamLeaders
+                                )
+                                  .filter((tl) => tl.id !== quickAssignUserId)
+                                  .map((tl) => (
+                                    <option key={tl.id} value={tl.id}>
+                                      TL: {tl.full_name} ({tl.team_name || "Team"})
+                                    </option>
+                                  ))}
+                              </optgroup>
+                              <optgroup label="Coordinators (C.O.)">
+                                {(quickAssignTeamId
+                                  ? availableCoordinators.filter(
+                                      (co) => co.team_id === Number(quickAssignTeamId)
+                                    )
+                                  : availableCoordinators
+                                )
+                                  .filter((co) => co.id !== quickAssignUserId)
+                                  .map((co) => (
+                                    <option key={co.id} value={co.id}>
+                                      CO: {co.full_name} ({co.team_name || "Team"})
+                                    </option>
+                                  ))}
+                              </optgroup>
+                            </select>
+                          </div>
+                        )}
+
+                        {quickAssignRole === "co" && (
+                          <div className="p-2 bg-sky-50 border border-sky-200 rounded text-xs text-sky-800">
+                            Coordinators report directly to the GL Director of their team.
+                          </div>
+                        )}
                       </div>
                     )}
 

@@ -6,6 +6,8 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
+from app.models.user import UserRole
+
 
 class TeamBase(BaseModel):
     name: str = Field(..., max_length=100)
@@ -37,4 +39,6 @@ class TeamRead(TeamBase):
 class TeamBulkAssign(BaseModel):
     team_id: int
     employee_ids: list[int]
+    role: Optional[UserRole] = None
+    reporting_manager_id: Optional[int] = None
 

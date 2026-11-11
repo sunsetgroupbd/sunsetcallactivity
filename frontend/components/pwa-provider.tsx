@@ -154,12 +154,12 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
       {!isInstalled && canInstall && !bannerDismissed && (
         <div className="fixed bottom-3 left-3 right-3 sm:left-auto sm:right-4 sm:max-w-md z-50 animate-in fade-in slide-in-from-bottom duration-300">
           <div className="bg-slate-900/95 backdrop-blur-md border border-slate-700 text-white rounded-2xl p-3.5 shadow-2xl flex items-center justify-between gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-700 p-0.5 shrink-0 shadow-md flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-white p-1 shrink-0 shadow-md flex items-center justify-center border border-slate-200">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src="/icon-192x192.png"
+                src="/Sunset-Group-Logo.png?v=2"
                 alt="Sunset App"
-                className="w-full h-full object-cover rounded-[10px]"
+                className="w-full h-full object-contain"
               />
             </div>
 

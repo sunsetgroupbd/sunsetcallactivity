@@ -596,8 +596,11 @@ function DailyCallActivityContent() {
 
     const slotDials = slot1 + slot2 + slot3;
     const totalDialed = Math.max(slotDials, totalConnected);
+    const totalNotReached = Math.max(0, totalDialed - totalConnected);
     const connectionRate =
       totalDialed > 0 ? Math.round((totalConnected / totalDialed) * 100) : 0;
+    const notReachedRate =
+      totalDialed > 0 ? Math.round((totalNotReached / totalDialed) * 100) : 0;
 
     return {
       slot1,
@@ -605,7 +608,9 @@ function DailyCallActivityContent() {
       slot3,
       totalDialed,
       totalConnected,
+      totalNotReached,
       connectionRate,
+      notReachedRate,
       tillToday,
       totalUpdatedLeads,
       hp,
@@ -1208,12 +1213,15 @@ function DailyCallActivityContent() {
                           {cat.label}
                         </h3>
                       </div>
-                      <div className="flex items-center gap-1.5 text-xs font-semibold">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold flex-wrap justify-end">
                         <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md text-[11px] font-bold border border-slate-200">
                           Dialed: {rowDialed}
                         </span>
                         <span className="bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded-md text-[11px] font-bold border border-emerald-200">
                           Conn: {rowConnected}
+                        </span>
+                        <span className="bg-slate-50 text-slate-600 px-2 py-0.5 rounded-md text-[11px] font-bold border border-slate-200" title="Not Reached (NR)">
+                          NR: {Math.max(0, rowDialed - rowConnected)}
                         </span>
                       </div>
                     </div>
@@ -1521,6 +1529,11 @@ function DailyCallActivityContent() {
                         <span className="font-bold text-emerald-900 border-b border-dotted border-emerald-700 hover:text-emerald-950">Connected</span>
                       </Tooltip>
                     </th>
+                    <th className="py-2.5 px-2 text-center w-20 bg-slate-50 font-bold">
+                      <Tooltip content="NR — Not Reached" subcontent="Unanswered, busy, or switched off calls (Total Dialed − Connected)." align="right">
+                        <span className="font-bold text-slate-700 border-b border-dotted border-slate-400 hover:text-slate-900">NR</span>
+                      </Tooltip>
+                    </th>
                     <th className="py-2.5 px-2 text-center w-24 bg-emerald-50/70 font-bold">
                       <Tooltip content="Updated Total Leads" subcontent="Remaining leads after transfers and classification. Carries forward to next day.">
                         <span className="font-bold text-emerald-950 border-b border-dotted border-emerald-700">Updated Total</span>
@@ -1691,6 +1704,16 @@ function DailyCallActivityContent() {
                           />
                         </td>
 
+                        {/* Row NR — Not Reached */}
+                        <td className="py-2.5 px-2 text-center font-bold text-slate-600 bg-slate-50/50 align-middle">
+                          <span
+                            className="inline-flex items-center justify-center min-w-[28px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-bold text-xs border border-slate-200"
+                            title={`Not Reached (NR) = ${rowDialed} Dialed - ${rowConnected} Connected`}
+                          >
+                            {Math.max(0, rowDialed - rowConnected)}
+                          </span>
+                        </td>
+
                         {/* Updated Total */}
                         <td className="py-2.5 px-2 text-center font-bold text-emerald-900 bg-emerald-50/40 align-middle">
                           <span
@@ -1722,6 +1745,9 @@ function DailyCallActivityContent() {
                     <td className="py-2.5 px-2 text-center text-slate-700 font-bold">{totals.ni || 0}</td>
                     <td className="py-2.5 px-2.5 text-center text-base font-extrabold text-emerald-800 bg-emerald-100/50">
                       {totals.totalConnected || 0}
+                    </td>
+                    <td className="py-2.5 px-2 text-center text-base font-extrabold text-slate-700 bg-slate-200/80" title="Total Not Reached (NR)">
+                      {totals.totalNotReached || 0}
                     </td>
                     <td className="py-2.5 px-2.5 text-center text-base font-extrabold text-emerald-950 bg-emerald-100/80">
                       {totals.totalUpdatedLeads || 0}
@@ -1875,9 +1901,9 @@ function DailyCallActivityContent() {
         </Card>
 
         {/* ── Bottom Summary Breakdown Cards ───────────────────────────────── */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
 
-          <Card className="p-4">
+          <Card className="p-3.5">
             <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">
               Total Dialed Today
             </span>
@@ -1887,8 +1913,8 @@ function DailyCallActivityContent() {
             <p className="text-xs text-slate-600 font-medium mt-0.5">Sum of all 3 slots</p>
           </Card>
 
-          <Card className="p-4">
-            <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">
+          <Card className="p-3.5">
+            <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider block">
               Total Connected
             </span>
             <div className="flex items-baseline gap-2 mt-1">
@@ -1901,7 +1927,24 @@ function DailyCallActivityContent() {
             </p>
           </Card>
 
-          <Card className="p-4">
+          <Card className="p-3.5 bg-slate-50/70 border-slate-300">
+            <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">
+              Not Reached (NR)
+            </span>
+            <div className="flex items-baseline gap-2 mt-1">
+              <div className="text-2xl font-bold text-slate-700">
+                {totals.totalNotReached}
+              </div>
+              <span className="text-xs font-semibold text-slate-500">
+                ({totals.notReachedRate}%)
+              </span>
+            </div>
+            <p className="text-xs text-slate-600 font-medium mt-0.5">
+              Dialed − Connected
+            </p>
+          </Card>
+
+          <Card className="p-3.5">
             <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">
               Connection Rate
             </span>
@@ -1911,7 +1954,7 @@ function DailyCallActivityContent() {
             <p className="text-xs text-slate-600 font-medium mt-0.5">Target: 40%+</p>
           </Card>
 
-          <Card className="p-4">
+          <Card className="p-3.5 col-span-2 sm:col-span-1">
             <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">
               Updated Lead Stock
             </span>
@@ -1927,10 +1970,12 @@ function DailyCallActivityContent() {
         {/* ── Fixed Mobile App Sticky Bottom Bar (Mobile Only - sits above bottom nav) ──────────────── */}
         <div className="md:hidden fixed bottom-14 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 px-4 py-2.5 shadow-lg flex items-center justify-between gap-3">
           <div className="flex flex-col text-xs leading-tight">
-            <div className="font-bold text-slate-900 flex items-center gap-1.5">
+            <div className="font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
               <span>Dialed: <strong className="text-green-800">{totals.totalDialed}</strong></span>
               <span>•</span>
               <span>Conn: <strong className="text-emerald-700">{totals.totalConnected}</strong></span>
+              <span>•</span>
+              <span>NR: <strong className="text-slate-700">{totals.totalNotReached}</strong></span>
             </div>
             <div className="text-[11px] text-slate-600 font-medium">
               Updated Stock: <strong className="text-emerald-800">{totals.totalUpdatedLeads}</strong>
@@ -2030,6 +2075,10 @@ function DailyCallActivityContent() {
               <div className="flex justify-between">
                 <span className="text-slate-500">Total Connected:</span>
                 <span className="font-bold text-emerald-700">{totals.totalConnected}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Not Reached (NR):</span>
+                <span className="font-bold text-slate-700">{totals.totalNotReached}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Connection Rate:</span>

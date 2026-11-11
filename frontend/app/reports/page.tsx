@@ -256,8 +256,12 @@ function ReportsContent() {
         limit: 100,
       });
 
-      // Enhance with summary for each report
-      const safeRaw = Array.isArray(rawReports) ? rawReports : [];
+      // Enhance with summary for each report; exclude administrative/system accounts from daily calling reports log
+      const safeRaw = (Array.isArray(rawReports) ? rawReports : []).filter((r) => {
+        const name = (r.employee_name || "").toLowerCase();
+        if (name.includes("admin") || name.includes("sunset admin")) return false;
+        return true;
+      });
       const detailed = await Promise.all(
         safeRaw.map(async (r) => {
           try {

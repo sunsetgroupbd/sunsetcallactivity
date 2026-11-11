@@ -158,7 +158,7 @@ function getLeadRiskInfo(categoryKey: string, startLeads: number | null | undefi
 function DailyCallActivityContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { user, isAdmin, isSubAdmin } = useAuth();
+  const { user, isAdmin, isSubAdmin, loading: authLoading } = useAuth();
   const isSupervisor = isAdmin || isSubAdmin;
 
   const today = getDhakaToday();
@@ -349,6 +349,12 @@ function DailyCallActivityContent() {
         r = await api.reports.getByDate(dateStr, empId);
       } catch (err: unknown) {
         if (err instanceof ApiError && err.status === 404) {
+          // If supervisor / admin viewing without selecting an employee, never auto-create an admin report
+          if (!empId && (isAdmin || isSubAdmin)) {
+            setLoading(false);
+            setReport(null);
+            return;
+          }
           // Create draft report for date
           r = await api.reports.create(dateStr, empId);
         } else {
@@ -446,9 +452,14 @@ function DailyCallActivityContent() {
   }, []);
 
   useEffect(() => {
-    if (isSupervisor && !selectedEmpId) return;
+    if (authLoading) return;
+    if (isSupervisor && !selectedEmpId) {
+      setLoading(false);
+      setReport(null);
+      return;
+    }
     loadReport(reportDate, isSupervisor ? selectedEmpId : undefined);
-  }, [reportDate, selectedEmpId, isSupervisor, loadReport]);
+  }, [reportDate, selectedEmpId, isSupervisor, authLoading, loadReport]);
 
   const handleCellChange = (
     category: LeadCategory,

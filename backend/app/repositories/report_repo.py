@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.report import DailyActivityReport, ReportStatus
+from app.models.user import User, UserRole
 
 
 class ReportRepository:
@@ -69,6 +70,11 @@ class ReportRepository:
     def _apply_filters(self, stmt, employee_id, date_from, date_to, status):
         if employee_id is not None:
             stmt = stmt.where(DailyActivityReport.employee_id == employee_id)
+        else:
+            # Exclude administrator and sub-administrator accounts from general reports log
+            stmt = stmt.join(User, DailyActivityReport.employee_id == User.id).where(
+                User.role.notin_([UserRole.ADMIN, UserRole.SUB_ADMIN])
+            )
         if date_from is not None:
             stmt = stmt.where(DailyActivityReport.report_date >= date_from)
         if date_to is not None:

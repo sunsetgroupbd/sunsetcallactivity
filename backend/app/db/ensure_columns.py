@@ -285,6 +285,20 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
             except Exception as e:
                 logger.warning("Postgres schema update step error (non-fatal): %s -> %s", stmt_str[:60], e)
 
+    # Clean up any empty draft reports mistakenly created for administrator accounts
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text("""
+                DELETE FROM daily_activity_reports
+                WHERE employee_id IN (
+                    SELECT id FROM users 
+                    WHERE LOWER(CAST(role AS TEXT)) IN ('admin', 'sub_admin')
+                       OR LOWER(username) IN ('admin', 'sunsetadmin')
+                )
+            """))
+    except Exception as e:
+        logger.debug("Admin draft reports cleanup info: %s", e)
+
     # Seed default KPI rules in app_settings if not present
     try:
         async with engine.begin() as conn:

@@ -939,9 +939,9 @@ export default function EmployeesPage() {
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-indigo-700 hover:text-indigo-900 hover:bg-indigo-50 border border-indigo-200 transition"
             >
               <Network className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Team & Hierarchy Tree</span>
+              <span>Group & Team Hierarchy</span>
               <span className="text-[10px] bg-indigo-100 text-indigo-800 px-1.5 py-0.2 rounded-full font-bold">
-                {teams.length} Teams
+                {teams.length} Groups
               </span>
             </Link>
           </div>
@@ -1012,21 +1012,21 @@ export default function EmployeesPage() {
                   </select>
                 </div>
 
-                {/* GL Team filter */}
+                {/* GL Group filter */}
                 <div className="flex items-center gap-1.5 text-xs text-slate-700">
-                  <span className="font-semibold text-slate-700">Team:</span>
+                  <span className="font-semibold text-slate-700">Group:</span>
                   <select
                     value={teamFilter}
                     onChange={(e) => setTeamFilter(e.target.value)}
                     className="border border-slate-300 rounded px-2 py-1 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none bg-white"
                   >
-                    <option value="all">All GL Teams</option>
+                    <option value="all">All Groups</option>
                     {teams.map((t) => (
                       <option key={t.id} value={String(t.id)}>
                         {t.name} {t.director_name ? `(${t.director_name})` : ""}
                       </option>
                     ))}
-                    <option value="unassigned">Unassigned to Team</option>
+                    <option value="unassigned">Unassigned to Group</option>
                   </select>
                 </div>
               </div>
@@ -1788,7 +1788,7 @@ export default function EmployeesPage() {
                               const isMatch = teamId && tl.team_id === Number(teamId);
                               return (
                                 <option key={tl.id} value={tl.id}>
-                                  TL: {tl.full_name} {tlTeam ? `[${tlTeam.name}]` : "[No Team]"} {tlCo ? `(C.O: ${tlCo.full_name})` : ""} {isMatch ? "✓" : ""}
+                                  TL: {tl.full_name} (#{formatEmployeeId(tl.id)}) {tlTeam ? `[${tlTeam.name}]` : "[No Team]"} {tlCo ? `(C.O: ${tlCo.full_name})` : ""} {isMatch ? "✓" : ""}
                                 </option>
                               );
                             })}
@@ -1802,7 +1802,7 @@ export default function EmployeesPage() {
                               const isMatch = teamId && co.team_id === Number(teamId);
                               return (
                                 <option key={co.id} value={co.id}>
-                                  CO: {co.full_name} {coTeam ? `[${coTeam.name}]` : "[No Team]"} {isMatch ? "✓" : ""}
+                                  CO: {co.full_name} (#{formatEmployeeId(co.id)}) {coTeam ? `[${coTeam.name}]` : "[No Team]"} {isMatch ? "✓" : ""}
                                 </option>
                               );
                             })}
@@ -1815,7 +1815,7 @@ export default function EmployeesPage() {
                               const stTeam = teams.find((t) => t.id === st.team_id);
                               return (
                                 <option key={st.id} value={st.id}>
-                                  Staff: {st.full_name} (@{st.username}) {stTeam ? `[${stTeam.name}]` : ""}
+                                  Staff: {st.full_name} (#{formatEmployeeId(st.id)}) (@{st.username}) {stTeam ? `[${stTeam.name}]` : ""}
                                 </option>
                               );
                             })}
@@ -1883,7 +1883,7 @@ export default function EmployeesPage() {
                             const isMatch = teamId && co.team_id === Number(teamId);
                             return (
                               <option key={co.id} value={co.id}>
-                                CO: {co.full_name} {coTeam ? `[${coTeam.name}]` : "[No Team]"} {isMatch ? "✓" : ""}
+                                CO: {co.full_name} (#{formatEmployeeId(co.id, co.created_at)}) {coTeam ? `[${coTeam.name}]` : "[No Team]"} {isMatch ? "✓" : ""}
                               </option>
                             );
                           })}
@@ -1892,7 +1892,7 @@ export default function EmployeesPage() {
                           <optgroup label="Other Staff">
                             {availableOtherStaff.map((st) => (
                               <option key={st.id} value={st.id}>
-                                {st.full_name} (@{st.username})
+                                {st.full_name} (#{formatEmployeeId(st.id, st.created_at)}) (@{st.username})
                               </option>
                             ))}
                           </optgroup>
@@ -2305,14 +2305,14 @@ export default function EmployeesPage() {
                     <optgroup label="Coordinators (C.O.)">
                       {availableCoordinators.map((co) => (
                         <option key={co.id} value={co.id}>
-                          CO: {co.full_name} ({co.team_name || "Team"})
+                          CO: {co.full_name} (#{formatEmployeeId(co.id, co.created_at)}) ({co.team_name || "Team"})
                         </option>
                       ))}
                     </optgroup>
                     <optgroup label="Team Leaders (T.L.)">
                       {availableTeamLeaders.map((tl) => (
                         <option key={tl.id} value={tl.id}>
-                          TL: {tl.full_name} ({tl.team_name || "Team"})
+                          TL: {tl.full_name} (#{formatEmployeeId(tl.id, tl.created_at)}) ({tl.team_name || "Team"})
                         </option>
                       ))}
                     </optgroup>
@@ -2962,7 +2962,7 @@ export default function EmployeesPage() {
                               <optgroup label="Coordinators (C.O.)">
                                 {availableCoordinators.map((co) => (
                                   <option key={co.id} value={co.id}>
-                                    CO: {co.full_name} ({co.team_name || "Team"})
+                                    CO: {co.full_name} (#{formatEmployeeId(co.id, co.created_at)}) ({co.team_name || "Team"})
                                   </option>
                                 ))}
                               </optgroup>
@@ -2970,7 +2970,7 @@ export default function EmployeesPage() {
                                 <optgroup label="Other Staff">
                                   {availableOtherStaff.map((st) => (
                                     <option key={st.id} value={st.id}>
-                                      Staff: {st.full_name} (@{st.username})
+                                      Staff: {st.full_name} (#{formatEmployeeId(st.id, st.created_at)}) (@{st.username})
                                     </option>
                                   ))}
                                 </optgroup>
@@ -2996,7 +2996,7 @@ export default function EmployeesPage() {
                                 <optgroup label="Team Leaders (T.L.)">
                                   {availableTeamLeaders.map((tl) => (
                                     <option key={tl.id} value={tl.id}>
-                                      TL: {tl.full_name} ({tl.team_name || "Team"})
+                                      TL: {tl.full_name} (#{formatEmployeeId(tl.id, tl.created_at)}) ({tl.team_name || "Team"})
                                     </option>
                                   ))}
                                 </optgroup>
@@ -3005,7 +3005,7 @@ export default function EmployeesPage() {
                                 <optgroup label="Coordinators (C.O.)">
                                   {availableCoordinators.map((co) => (
                                     <option key={co.id} value={co.id}>
-                                      CO: {co.full_name} ({co.team_name || "Team"})
+                                      CO: {co.full_name} (#{formatEmployeeId(co.id, co.created_at)}) ({co.team_name || "Team"})
                                     </option>
                                   ))}
                                 </optgroup>
@@ -3014,7 +3014,7 @@ export default function EmployeesPage() {
                                 <optgroup label="Other Staff">
                                   {availableOtherStaff.map((st) => (
                                     <option key={st.id} value={st.id}>
-                                      Staff: {st.full_name} (@{st.username})
+                                      Staff: {st.full_name} (#{formatEmployeeId(st.id, st.created_at)}) (@{st.username})
                                     </option>
                                   ))}
                                 </optgroup>
@@ -3143,7 +3143,7 @@ export default function EmployeesPage() {
                             })
                             .map((u) => (
                               <option key={u.id} value={u.id}>
-                                {u.full_name} (@{u.username}) — {normalizeRole(u.role, u.designation).toUpperCase()}
+                                {u.full_name} (#{formatEmployeeId(u.id, u.created_at)}) (@{u.username}) — {normalizeRole(u.role, u.designation).toUpperCase()}
                               </option>
                             ))}
                         </optgroup>
@@ -3155,7 +3155,7 @@ export default function EmployeesPage() {
                             })
                             .map((u) => (
                               <option key={u.id} value={u.id}>
-                                {u.full_name} (@{u.username}) — {u.team_name || "Assigned"} ({normalizeRole(u.role, u.designation).toUpperCase()})
+                                {u.full_name} (#{formatEmployeeId(u.id, u.created_at)}) (@{u.username}) — {u.team_name || "Assigned"} ({normalizeRole(u.role, u.designation).toUpperCase()})
                               </option>
                             ))}
                         </optgroup>
@@ -3232,7 +3232,7 @@ export default function EmployeesPage() {
                                     const coTeam = teams.find((t) => t.id === co.team_id);
                                     return (
                                       <option key={co.id} value={co.id}>
-                                        CO: {co.full_name} {coTeam ? `[${coTeam.name}]` : "[No Team]"}
+                                        CO: {co.full_name} (#{formatEmployeeId(co.id, co.created_at)}) {coTeam ? `[${coTeam.name}]` : "[No Team]"}
                                       </option>
                                     );
                                   })}
@@ -3243,7 +3243,7 @@ export default function EmployeesPage() {
                                     .filter((st) => st.id !== quickAssignUserId)
                                     .map((st) => (
                                       <option key={st.id} value={st.id}>
-                                        {st.full_name} (@{st.username})
+                                        {st.full_name} (#{formatEmployeeId(st.id, st.created_at)}) (@{st.username})
                                       </option>
                                     ))}
                                 </optgroup>
@@ -3283,7 +3283,7 @@ export default function EmployeesPage() {
                                       const tlTeam = teams.find((t) => t.id === tl.team_id);
                                       return (
                                         <option key={tl.id} value={tl.id}>
-                                          TL: {tl.full_name} {tlTeam ? `[${tlTeam.name}]` : "[No Team]"}
+                                          TL: {tl.full_name} (#{formatEmployeeId(tl.id, tl.created_at)}) {tlTeam ? `[${tlTeam.name}]` : "[No Team]"}
                                         </option>
                                       );
                                     })}
@@ -3297,7 +3297,7 @@ export default function EmployeesPage() {
                                       const coTeam = teams.find((t) => t.id === co.team_id);
                                       return (
                                         <option key={co.id} value={co.id}>
-                                          CO: {co.full_name} {coTeam ? `[${coTeam.name}]` : "[No Team]"}
+                                          CO: {co.full_name} (#{formatEmployeeId(co.id, co.created_at)}) {coTeam ? `[${coTeam.name}]` : "[No Team]"}
                                         </option>
                                       );
                                     })}
@@ -3311,7 +3311,7 @@ export default function EmployeesPage() {
                                       const stTeam = teams.find((t) => t.id === st.team_id);
                                       return (
                                         <option key={st.id} value={st.id}>
-                                          Staff: {st.full_name} (@{st.username}) {stTeam ? `[${stTeam.name}]` : ""}
+                                          Staff: {st.full_name} (#{formatEmployeeId(st.id, st.created_at)}) (@{st.username}) {stTeam ? `[${stTeam.name}]` : ""}
                                         </option>
                                       );
                                     })}

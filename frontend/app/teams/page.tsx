@@ -596,12 +596,12 @@ export default function TeamHierarchyPage() {
   // ─── Security Check ─────────────────────────────────────────────────────────
   if (!authLoading && !isAdmin && !isSubAdmin) {
     return (
-      <DashboardLayout title="Team Hierarchy" subtitle="Access Restricted">
+      <DashboardLayout title="Group & Team Hierarchy" subtitle="Access Restricted">
         <div className="max-w-md mx-auto my-12 p-6 bg-white border border-rose-200 rounded-xl text-center shadow-sm">
           <Shield className="w-12 h-12 text-rose-500 mx-auto mb-3" />
           <h2 className="text-lg font-bold text-slate-800">Administrator Access Required</h2>
           <p className="text-xs text-slate-500 mt-1">
-            Only administrators and sub-administrators can view and manage the team organizational hierarchy.
+            Only administrators and sub-administrators can view and manage the group & team organizational hierarchy.
           </p>
           <Link
             href="/"
@@ -617,8 +617,8 @@ export default function TeamHierarchyPage() {
   // ─── Render ─────────────────────────────────────────────────────────────────
   return (
     <DashboardLayout
-      title="Team & Hierarchy Management"
-      subtitle="Organize dynamic GL Teams, Coordinators (C.O.), Team Leaders (T.L.), and Executives."
+      title="Group & Team Hierarchy Management"
+      subtitle="Organize dynamic Groups (GL), Coordinators (C.O.), Team Leaders (T.L.), and Calling Executives."
     >
       <div className="space-y-4 max-w-7xl mx-auto pb-12">
         {/* Success Toast */}
@@ -635,7 +635,7 @@ export default function TeamHierarchyPage() {
           </div>
         )}
 
-        {/* Top Navigation Tabs: Staff Directory vs Team Hierarchy */}
+        {/* Top Navigation Tabs: Staff Directory vs Group Hierarchy */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-2.5 sm:p-3 rounded-xl border border-slate-200 shadow-2xs">
           <div className="flex items-center gap-2">
             <Link
@@ -651,9 +651,9 @@ export default function TeamHierarchyPage() {
 
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-50 text-indigo-800 border border-indigo-200 shadow-2xs">
               <Network className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Team Hierarchy Tree</span>
+              <span>Group & Team Hierarchy</span>
               <span className="text-[10px] bg-indigo-100 text-indigo-800 px-1.5 py-0.2 rounded-full font-bold">
-                {stats.teamsCount} Teams
+                {stats.teamsCount} Groups
               </span>
             </span>
           </div>
@@ -683,7 +683,7 @@ export default function TeamHierarchyPage() {
               className="bg-indigo-700 hover:bg-indigo-800 text-white text-xs h-8"
             >
               <FolderPlus className="w-3.5 h-3.5 mr-1" />
-              + New GL Team
+              + New Group
             </Button>
           </div>
         </div>
@@ -692,7 +692,7 @@ export default function TeamHierarchyPage() {
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3">
           <div className="bg-white p-3 rounded-xl border border-slate-200 flex items-center justify-between">
             <div>
-              <p className="text-[10px] uppercase font-bold text-slate-400">GL Teams</p>
+              <p className="text-[10px] uppercase font-bold text-slate-400">GL Groups</p>
               <p className="text-xl font-bold text-slate-900 mt-0.5">{stats.teamsCount}</p>
             </div>
             <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
@@ -773,7 +773,7 @@ export default function TeamHierarchyPage() {
               onChange={(e) => setSelectedTeamFilter(e.target.value)}
               className="px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
             >
-              <option value="all">All GL Teams ({teams.length})</option>
+              <option value="all">All Groups ({teams.length})</option>
               {teams.map((t) => (
                 <option key={t.id} value={t.id.toString()}>
                   {t.name}
@@ -1287,7 +1287,7 @@ export default function TeamHierarchyPage() {
                         Unassigned Staff Accounts ({unassignedEmployees.length})
                       </h4>
                       <p className="text-[11px] text-slate-500">
-                        These employees are not assigned to any GL Team or Leader yet. Select and assign them below.
+                        These employees are not assigned to any Group or Leader yet. Select and assign them below.
                       </p>
                     </div>
                   </div>
@@ -1322,7 +1322,7 @@ export default function TeamHierarchyPage() {
                     onChange={(e) => setQuickBatchTeamId(e.target.value === "" ? "" : Number(e.target.value))}
                     className="text-xs bg-white border border-slate-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-rose-500"
                   >
-                    <option value="">Select GL Team...</option>
+                    <option value="">Select Group (GL)...</option>
                     {teams.map((t) => (
                       <option key={t.id} value={t.id}>
                         {t.name}
@@ -1379,7 +1379,10 @@ export default function TeamHierarchyPage() {
                           className="rounded text-rose-600 focus:ring-rose-500 w-3.5 h-3.5"
                         />
                         <div className="truncate flex-1">
-                          <p className="truncate font-semibold">{emp.full_name}</p>
+                          <p className="truncate font-semibold flex items-center gap-1">
+                            <span>{emp.full_name}</span>
+                            <span className="text-[9.5px] font-bold text-slate-500 font-mono">#{formatEmployeeId(emp.id)}</span>
+                          </p>
                           <p className="text-[10px] text-slate-400 font-mono">@{emp.username}</p>
                         </div>
                         <button
@@ -1451,7 +1454,7 @@ export default function TeamHierarchyPage() {
                   <option value="">-- Choose Staff Member --</option>
                   {assignableEmployees.map((emp) => (
                     <option key={emp.id} value={emp.id}>
-                      {emp.full_name} (@{emp.username}) — Current: {emp.role.toUpperCase()}
+                      {emp.full_name} (#{formatEmployeeId(emp.id)}) (@{emp.username}) — Current: {emp.role.toUpperCase()}
                       {emp.team_name ? ` in ${emp.team_name}` : " (Unassigned)"}
                     </option>
                   ))}
@@ -1577,7 +1580,7 @@ export default function TeamHierarchyPage() {
                   <option value="">-- Choose Staff Member --</option>
                   {assignableEmployees.map((emp) => (
                     <option key={emp.id} value={emp.id}>
-                      {emp.full_name} (@{emp.username}) — Current: {emp.role.toUpperCase()}
+                      {emp.full_name} (#{formatEmployeeId(emp.id)}) (@{emp.username}) — Current: {emp.role.toUpperCase()}
                       {emp.team_name ? ` in ${emp.team_name}` : " (Unassigned)"}
                     </option>
                   ))}
@@ -1779,9 +1782,12 @@ export default function TeamHierarchyPage() {
                         }}
                         className="rounded text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5"
                       />
-                      <div className="flex-1 min-w-0">
-                        <span className="truncate">{emp.full_name}</span>
-                        <span className="text-[10px] text-slate-400 font-mono ml-1.5">
+                      <div className="flex-1 min-w-0 flex items-center gap-1.5 flex-wrap">
+                        <span className="font-semibold text-slate-900 truncate">{emp.full_name}</span>
+                        <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-1 py-0.2 rounded border border-slate-200">
+                          #{formatEmployeeId(emp.id)}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-mono">
                           @{emp.username}
                         </span>
                       </div>
@@ -1845,9 +1851,9 @@ export default function TeamHierarchyPage() {
               </select>
             </div>
 
-            {/* Target GL Team */}
+            {/* Target Group */}
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Target GL Team</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Target Group (GL)</label>
               <select
                 value={targetTeamId}
                 onChange={(e) => {
@@ -1888,7 +1894,7 @@ export default function TeamHierarchyPage() {
                     })
                     .map((sup) => (
                       <option key={sup.id} value={sup.id}>
-                        {sup.full_name} ({normalizeRole(sup.role, sup.designation).toUpperCase()})
+                        {sup.full_name} (#{formatEmployeeId(sup.id)}) ({normalizeRole(sup.role, sup.designation).toUpperCase()})
                       </option>
                     ))}
                 </select>
@@ -1924,37 +1930,37 @@ export default function TeamHierarchyPage() {
           </form>
         </Modal>
 
-        {/* ─── MODAL 5: NEW / EDIT GL TEAM ─────────────────────────────────── */}
+        {/* ─── MODAL 5: NEW / EDIT GROUP ───────────────────────────────────── */}
         <Modal
           isOpen={teamModal.isOpen}
           onClose={() => setTeamModal({ isOpen: false, editingTeam: null })}
-          title={teamModal.editingTeam ? `Edit Team: ${teamModal.editingTeam.name}` : "Create New GL Team"}
-          description="A GL Team groups Coordinators, Team Leaders, and Executives under a Director."
+          title={teamModal.editingTeam ? `Edit Group: ${teamModal.editingTeam.name}` : "Create New Group"}
+          description="A Group organizes Coordinators, Team Leaders, and Executives under a Group Leader / Director."
         >
           <form onSubmit={handleSaveTeam} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                GL Team Name * (e.g. Gazi Sir Team, Hasib Sir Team)
+                Group Name * (e.g. Gazi Sir Group, Hasib Sir Group)
               </label>
               <input
                 type="text"
                 required
                 value={teamFormName}
                 onChange={(e) => setTeamFormName(e.target.value)}
-                placeholder="Team Name"
+                placeholder="Group Name"
                 className="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
               />
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Director / Head Name (e.g. Gazi Sir, Hasib Sir)
+                Director / Group Leader (e.g. Gazi Sir, Hasib Sir)
               </label>
               <input
                 type="text"
                 value={teamFormDirector}
                 onChange={(e) => setTeamFormDirector(e.target.value)}
-                placeholder="Director Name"
+                placeholder="Group Leader Name"
                 className="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
               />
             </div>
@@ -1985,7 +1991,7 @@ export default function TeamHierarchyPage() {
                 loading={teamFormSubmitting}
                 className="bg-indigo-700 hover:bg-indigo-800 text-white"
               >
-                {teamModal.editingTeam ? "Save Team" : "Create GL Team"}
+                {teamModal.editingTeam ? "Save Group" : "Create Group"}
               </Button>
             </div>
           </form>

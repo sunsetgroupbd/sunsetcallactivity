@@ -23,6 +23,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { useNoticesBadge } from "@/lib/use-notices-badge";
 import { cn, formatEmployeeId } from "@/lib/utils";
+import { PwaInstallButton } from "@/components/pwa-install-button";
 
 interface SidebarProps {
   isOpen?: boolean;
@@ -198,6 +199,11 @@ export function Sidebar({
           );
         })}
       </nav>
+
+      {/* PWA Install Button */}
+      <div className={cn("px-3 pb-2", collapsed && "px-1.5 flex justify-center")}>
+        <PwaInstallButton collapsed={collapsed} />
+      </div>
 
       {/* User Footer Summary */}
       {user && (

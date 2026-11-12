@@ -70,6 +70,7 @@ export default function CrmLeadsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [projectFilter, setProjectFilter] = useState("all");
+  const [orderDir, setOrderDir] = useState<"desc" | "asc">("desc");
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(100);
   const [totalPages, setTotalPages] = useState(1);
@@ -104,7 +105,8 @@ export default function CrmLeadsPage() {
       targetPage = page,
       targetPerPage = perPage,
       targetQuery = searchQuery,
-      targetStatus = statusFilter
+      targetStatus = statusFilter,
+      targetOrderDir = orderDir
     ) => {
       try {
         if (forceRefresh) setRefreshing(true);
@@ -125,6 +127,9 @@ export default function CrmLeadsPage() {
           per_page: targetPerPage,
           query: targetQuery || undefined,
           status: targetStatus !== "all" ? targetStatus : undefined,
+          from_date: "1971-01-01",
+          active_status: "Active",
+          order_dir: targetOrderDir,
         });
 
         if (!res.success) {
@@ -151,7 +156,7 @@ export default function CrmLeadsPage() {
         setRefreshing(false);
       }
     },
-    [page, perPage, searchQuery, statusFilter]
+    [page, perPage, searchQuery, statusFilter, orderDir]
   );
 
   useEffect(() => {
@@ -608,6 +613,23 @@ export default function CrmLeadsPage() {
                     {p}
                   </option>
                 ))}
+              </select>
+            </div>
+
+            {/* Sort Order */}
+            <div className="flex items-center gap-1.5 text-xs text-slate-600">
+              <span className="font-semibold text-slate-500">Sort:</span>
+              <select
+                value={orderDir}
+                onChange={(e) => {
+                  const newDir = e.target.value as "desc" | "asc";
+                  setOrderDir(newDir);
+                  loadLeads(true, 1, perPage, searchQuery, statusFilter, newDir);
+                }}
+                className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600"
+              >
+                <option value="desc">Newest First (Desc)</option>
+                <option value="asc">Oldest First (Asc)</option>
               </select>
             </div>
           </div>

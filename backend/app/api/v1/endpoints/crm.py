@@ -46,6 +46,10 @@ async def get_crm_leads(
     force_refresh: bool = Query(False, description="Bypass cache and fetch live from CRM"),
     query: Optional[str] = Query(None, description="Search keyword in leads"),
     status: Optional[str] = Query(None, description="Filter by lead status"),
+    from_date: Optional[str] = Query("1971-01-01", description="Filter from date (YYYY-MM-DD)"),
+    to_date: Optional[str] = Query(None, description="Filter to date (YYYY-MM-DD)"),
+    active_status: Optional[str] = Query("Active", description="Active status filter (Active, all)"),
+    order_dir: Optional[str] = Query("desc", description="Sort direction (desc, asc)"),
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(100, ge=10, le=1000, description="Items per page"),
     current_user: User = Depends(get_current_user),
@@ -65,6 +69,10 @@ async def get_crm_leads(
         length=per_page,
         start=start,
         search_query=query,
+        from_date=from_date,
+        to_date=to_date,
+        active_status=active_status,
+        order_dir=order_dir,
     )
 
     if not result.get("success", False):

@@ -216,13 +216,32 @@ class CrmService:
         length: Optional[int] = 100,
         start: Optional[int] = 0,
         search_query: Optional[str] = None,
+        from_date: Optional[str] = "1971-01-01",
+        to_date: Optional[str] = None,
+        active_status: Optional[str] = "Active",
+        order_column: Optional[int] = 0,
+        order_dir: Optional[str] = "desc",
+        team_id: Optional[str] = None,
+        lead_cat_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Fetch lead data from Somikoron CRM with DataTables pagination support."""
+        """Fetch lead data from Somikoron CRM with full DataTables pagination and filter support."""
         import urllib.parse
+        from datetime import datetime
         now = time.time()
+        today_str = datetime.now().strftime("%Y-%m-%d")
 
-        # Cache key based on start, length, and search
-        is_default_query = (start == 0 and length == 100 and not search_query)
+        effective_from = from_date if from_date is not None else "1971-01-01"
+        effective_to = to_date if to_date is not None else today_str
+        effective_status = "Active" if (active_status is None or active_status == "Active") else ("" if str(active_status).lower() == "all" else active_status)
+        effective_order_dir = order_dir or "desc"
+
+        # Cache key based on start, length, search, dates, status, order
+        is_default_query = (
+            start == 0 and length == 100 and not search_query and
+            effective_from == "1971-01-01" and
+            effective_status == "Active" and
+            effective_order_dir == "desc"
+        )
         if not force_refresh and is_default_query and CrmService._cached_leads is not None and CrmService._cached_records_total is not None:
             if (now - CrmService._cache_timestamp) < self.CACHE_TTL_SECONDS:
                 return {
@@ -287,14 +306,46 @@ class CrmService:
             elif CrmService._cookies and "XSRF-TOKEN" in CrmService._cookies:
                 req_headers["X-XSRF-TOKEN"] = urllib.parse.unquote(CrmService._cookies["XSRF-TOKEN"])
 
-            # Build query parameters for DataTables
-            query_params: Dict[str, Any] = {}
-            if length is not None:
-                query_params["length"] = length
-            if start is not None:
-                query_params["start"] = start
-            if search_query:
-                query_params["search[value]"] = search_query
+            # Build full DataTables query parameters exactly as Somikoron CRM expects
+            query_params: Dict[str, Any] = {
+                "draw": 1,
+                "start": start or 0,
+                "length": length if length is not None else 100,
+                "search[value]": search_query or "",
+                "search[regex]": "false",
+                "order[0][column]": str(order_column if order_column is not None else 0),
+                "order[0][dir]": effective_order_dir,
+                "team_id": team_id or "",
+                "lead_cat_id": lead_cat_id or "",
+                "converted_customer": "",
+                "keyword": search_query or "",
+                "special_date": "",
+                "active_status": effective_status,
+                "from_date": effective_from,
+                "to_date": effective_to,
+                "_": int(time.time() * 1000),
+            }
+
+            # Exact DataTables column mapping matching Somikoron CRM
+            columns_spec = [
+                ("id", "id", "true", "true"),
+                ("checkbox", "checkbox", "false", "false"),
+                ("name", "leads.name", "true", "true"),
+                ("mobile", "mobile", "true", "true"),
+                ("user_id", "user_id", "true", "true"),
+                ("cr_name", "cr_name", "true", "true"),
+                ("last_Activity", "last_Activity", "true", "true"),
+                ("next_Activity", "next_Activity", "true", "true"),
+                ("action", "action", "true", "true"),
+            ]
+            for idx, (col_data, col_name, col_searchable, col_orderable) in enumerate(columns_spec):
+                pfx = f"columns[{idx}]"
+                query_params[f"{pfx}[data]"] = col_data
+                query_params[f"{pfx}[name]"] = col_name
+                query_params[f"{pfx}[searchable]"] = col_searchable
+                query_params[f"{pfx}[orderable]"] = col_orderable
+                query_params[f"{pfx}[search][value]"] = ""
+                query_params[f"{pfx}[search][regex]"] = "false"
 
             # Fetch the actual lead data endpoint
             try:
@@ -773,7 +824,7 @@ class CrmService:
         # If raw is a list/tuple (DataTables array format)
         if isinstance(raw, (list, tuple)):
             dict_val: Dict[str, Any] = {}
-            col_map = ["id", "name", "phone", "project", "status", "source", "assigned_to", "created_at", "action"]
+            col_map = ["id", "checkbox", "name", "mobile", "user_id", "cr_name", "last_Activity", "next_Activity", "action"]
             for i, val in enumerate(raw):
                 key = col_map[i] if i < len(col_map) else f"col_{i}"
                 dict_val[key] = val
@@ -893,7 +944,7 @@ class CrmService:
         clean_project = strip_html(raw_project) if raw_project else "—"
 
         # Resolve Assigned To
-        raw_assigned = pick("assigned_to", "executive", "employee", "agent", "handler", "assigned_person")
+        raw_assigned = pick("cr_name", "user_id", "assigned_to", "executive", "employee", "agent", "handler", "assigned_person")
         clean_assigned = strip_html(raw_assigned) if raw_assigned else "Unassigned"
         if not clean_assigned or clean_assigned in ("—", "-"):
             clean_assigned = "Unassigned"
@@ -901,6 +952,12 @@ class CrmService:
         # Resolve Created At
         raw_created = pick("created_at", "entry_date", "date", "created_date", "lead_date")
         clean_created = strip_html(raw_created) if raw_created else "—"
+
+        # Last & Next Activity
+        raw_last_act = pick("last_Activity", "last_activity")
+        last_activity = strip_html(raw_last_act) if raw_last_act else None
+        raw_next_act = pick("next_Activity", "next_activity")
+        next_activity = strip_html(raw_next_act) if raw_next_act else None
 
         # Profession
         raw_prof = pick("profession", "occupation")
@@ -927,5 +984,7 @@ class CrmService:
             "notes": notes,
             "badge": badge,
             "crm_link": crm_link,
+            "last_activity": last_activity,
+            "next_activity": next_activity,
             "raw": raw,
         }

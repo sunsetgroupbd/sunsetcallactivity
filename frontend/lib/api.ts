@@ -963,6 +963,10 @@ export const api = {
       force_refresh?: boolean;
       query?: string;
       status?: string;
+      from_date?: string;
+      to_date?: string;
+      active_status?: string;
+      order_dir?: string;
       page?: number;
       per_page?: number;
     }): Promise<{
@@ -985,6 +989,8 @@ export const api = {
         notes?: string;
         badge?: string;
         crm_link?: string;
+        last_activity?: string;
+        next_activity?: string;
         raw?: any;
       }>;
       total: number;
@@ -1001,6 +1007,10 @@ export const api = {
       if (params?.force_refresh) q.set("force_refresh", "true");
       if (params?.query) q.set("query", params.query);
       if (params?.status) q.set("status", params.status);
+      if (params?.from_date) q.set("from_date", params.from_date);
+      if (params?.to_date) q.set("to_date", params.to_date);
+      if (params?.active_status) q.set("active_status", params.active_status);
+      if (params?.order_dir) q.set("order_dir", params.order_dir);
       if (params?.page) q.set("page", params.page.toString());
       if (params?.per_page) q.set("per_page", params.per_page.toString());
       const queryStr = q.toString() ? `?${q.toString()}` : "";

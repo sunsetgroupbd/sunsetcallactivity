@@ -18,6 +18,8 @@ logger = logging.getLogger("uvicorn.error")
 class CrmService:
     # In-memory cache for leads, session cookies, and dynamic tokens
     _cached_leads: Optional[List[Dict[str, Any]]] = None
+    _cached_records_total: Optional[int] = None
+    _cached_records_filtered: Optional[int] = None
     _cache_timestamp: float = 0
     _cookies: Optional[Dict[str, str]] = None
     _cookie_timestamp: float = 0
@@ -200,18 +202,25 @@ class CrmService:
             "landed_on_login": landed_on_login,
         }
 
-    async def fetch_leads(self, force_refresh: bool = False) -> Dict[str, Any]:
+    async def fetch_leads(
+        self,
+        force_refresh: bool = False,
+        length: Optional[int] = None,
+        start: Optional[int] = None,
+    ) -> Dict[str, Any]:
         """Fetch lead data from Somikoron CRM."""
         import urllib.parse
         now = time.time()
 
-        # Check in-memory cache if not forcing refresh
-        if not force_refresh and CrmService._cached_leads is not None:
+        # Check in-memory cache if not forcing refresh and no custom pagination
+        if not force_refresh and length is None and start is None and CrmService._cached_leads is not None:
             if (now - CrmService._cache_timestamp) < self.CACHE_TTL_SECONDS:
                 return {
                     "success": True,
                     "leads": CrmService._cached_leads,
                     "total": len(CrmService._cached_leads),
+                    "records_total": CrmService._cached_records_total,
+                    "records_filtered": CrmService._cached_records_filtered,
                     "from_cache": True,
                     "fetched_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(CrmService._cache_timestamp)),
                 }
@@ -266,9 +275,16 @@ class CrmService:
             elif CrmService._cookies and "XSRF-TOKEN" in CrmService._cookies:
                 req_headers["X-XSRF-TOKEN"] = urllib.parse.unquote(CrmService._cookies["XSRF-TOKEN"])
 
+            # Build query parameters
+            query_params: Dict[str, Any] = {}
+            if length is not None:
+                query_params["length"] = length
+            if start is not None:
+                query_params["start"] = start
+
             # Fetch the actual lead data endpoint
             try:
-                resp = await client.get(self.leads_url, headers=req_headers)
+                resp = await client.get(self.leads_url, headers=req_headers, params=query_params or None)
 
                 # If redirected to login page or 401/403, try re-logging in once
                 if resp.status_code in (401, 403) or (resp.history and "login" in str(resp.url).lower()):
@@ -285,7 +301,7 @@ class CrmService:
                                 req_headers["Authorization"] = f"Bearer {active_token}"
                             if "XSRF-TOKEN" in client.cookies:
                                 req_headers["X-XSRF-TOKEN"] = urllib.parse.unquote(client.cookies["XSRF-TOKEN"])
-                            resp = await client.get(self.leads_url, headers=req_headers)
+                            resp = await client.get(self.leads_url, headers=req_headers, params=query_params or None)
                         except Exception as e:
                             return {
                                 "success": False,
@@ -299,7 +315,7 @@ class CrmService:
                     clean_headers = dict(req_headers)
                     clean_headers.pop("X-Requested-With", None)
                     clean_headers["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,application/json,*/*;q=0.8"
-                    resp = await client.get(self.leads_url, headers=clean_headers)
+                    resp = await client.get(self.leads_url, headers=clean_headers, params=query_params or None)
 
                 # Fallback: If still 401, also try HTTP Basic Auth fallback on the leads URL directly
                 if resp.status_code == 401 and self.username and self.password:
@@ -307,6 +323,7 @@ class CrmService:
                         self.leads_url,
                         auth=(self.username, self.password),
                         headers=req_headers,
+                        params=query_params or None,
                     )
 
                 if resp.status_code != 200:
@@ -332,6 +349,13 @@ class CrmService:
                         "raw_snippet": snippet,
                     }
 
+                # Extract recordsTotal and recordsFiltered from DataTables response
+                records_total = None
+                records_filtered = None
+                if isinstance(data, dict):
+                    records_total = data.get("recordsTotal") or data.get("total")
+                    records_filtered = data.get("recordsFiltered") or data.get("filtered")
+
                 # Standardize leads list from whatever format CRM returned
                 raw_leads = []
                 if isinstance(data, list):
@@ -347,14 +371,19 @@ class CrmService:
 
                 normalized_leads = [self._normalize_lead(lead, idx + 1) for idx, lead in enumerate(raw_leads)]
 
-                # Update in-memory cache
-                CrmService._cached_leads = normalized_leads
-                CrmService._cache_timestamp = now
+                # Update in-memory cache if standard request
+                if length is None and start is None:
+                    CrmService._cached_leads = normalized_leads
+                    CrmService._cached_records_total = records_total
+                    CrmService._cached_records_filtered = records_filtered
+                    CrmService._cache_timestamp = now
 
                 return {
                     "success": True,
                     "leads": normalized_leads,
                     "total": len(normalized_leads),
+                    "records_total": records_total,
+                    "records_filtered": records_filtered,
                     "from_cache": False,
                     "fetched_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now)),
                 }
@@ -456,16 +485,58 @@ class CrmService:
                     fallback_status = fb_resp.status_code
                     fallback_snippet = fb_resp.text[:200].strip()
 
+                # Inspect JSON response from CRM
+                crm_keys = []
+                crm_records_total = None
+                crm_records_filtered = None
+                crm_data_count = None
+                try:
+                    j3 = resp3.json()
+                    if isinstance(j3, dict):
+                        crm_keys = list(j3.keys())
+                        crm_records_total = j3.get("recordsTotal") or j3.get("total")
+                        crm_records_filtered = j3.get("recordsFiltered") or j3.get("filtered")
+                        if "data" in j3 and isinstance(j3["data"], list):
+                            crm_data_count = len(j3["data"])
+                except Exception:
+                    pass
+
                 diagnostics["steps"].append({
                     "step": "3. GET leads_url",
                     "status_code": resp3.status_code,
                     "final_url": str(resp3.url),
                     "content_type": resp3.headers.get("content-type"),
                     "snippet": resp3.text[:300].strip(),
+                    "crm_keys": crm_keys,
+                    "recordsTotal": crm_records_total,
+                    "recordsFiltered": crm_records_filtered,
+                    "data_returned_count": crm_data_count,
                     "xsrf_header_sent": bool("X-XSRF-TOKEN" in req_headers),
                     "fallback_without_xhr_status": fallback_status,
                     "fallback_snippet": fallback_snippet,
                 })
+
+                # Probe 4: Pagination & Parameter test (length=500)
+                try:
+                    probe_resp = await client.get(
+                        self.leads_url,
+                        headers=req_headers,
+                        params={"start": 0, "length": 500},
+                    )
+                    if probe_resp.status_code == 200:
+                        pj = probe_resp.json()
+                        diagnostics["steps"].append({
+                            "step": "4. DataTables Pagination Probe (?length=500)",
+                            "status_code": probe_resp.status_code,
+                            "recordsTotal": pj.get("recordsTotal") if isinstance(pj, dict) else None,
+                            "recordsFiltered": pj.get("recordsFiltered") if isinstance(pj, dict) else None,
+                            "data_returned_count": len(pj.get("data", [])) if isinstance(pj, dict) and isinstance(pj.get("data"), list) else None,
+                        })
+                except Exception as ex_probe:
+                    diagnostics["steps"].append({
+                        "step": "4. DataTables Pagination Probe (?length=500)",
+                        "error": str(ex_probe),
+                    })
             except Exception as e:
                 diagnostics["steps"].append({
                     "step": "3. GET leads_url",

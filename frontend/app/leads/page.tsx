@@ -55,6 +55,8 @@ export default function CrmLeadsPage() {
   const { user, isAdmin, isSubAdmin, loading: authLoading } = useAuth();
 
   const [leads, setLeads] = useState<CrmLead[]>([]);
+  const [recordsTotal, setRecordsTotal] = useState<number | null>(null);
+  const [recordsFiltered, setRecordsFiltered] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -112,6 +114,8 @@ export default function CrmLeadsPage() {
         setLeads([]);
       } else {
         setLeads(res.leads || []);
+        if (res.records_total !== undefined) setRecordsTotal(res.records_total ?? null);
+        if (res.records_filtered !== undefined) setRecordsFiltered(res.records_filtered ?? null);
         setFetchedAt(res.fetched_at || null);
         setFromCache(res.from_cache ?? false);
       }
@@ -287,8 +291,13 @@ export default function CrmLeadsPage() {
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base font-bold text-slate-900">Somikoron CRM Leads</h2>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
-                  {leads.length} Total Leads
+                  {recordsTotal ? `${recordsTotal.toLocaleString()} In CRM Database` : `${leads.length} Leads`}
                 </span>
+                {recordsTotal && recordsTotal > leads.length && (
+                  <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                    {leads.length} active pipeline leads loaded
+                  </span>
+                )}
                 {fromCache && (
                   <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
                     Cached
@@ -462,9 +471,13 @@ export default function CrmLeadsPage() {
         {/* Summary KPI Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
           <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Leads</p>
-            <p className="text-xl font-bold text-slate-900 mt-0.5">{leads.length}</p>
-            <p className="text-[10px] text-slate-400 mt-0.5">Fetched from CRM</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total in CRM</p>
+            <p className="text-xl font-bold text-slate-900 mt-0.5">
+              {recordsTotal ? recordsTotal.toLocaleString() : leads.length}
+            </p>
+            <p className="text-[10px] text-slate-400 mt-0.5">
+              {recordsTotal ? `${leads.length} loaded in active pipeline` : "Fetched from CRM"}
+            </p>
           </div>
 
           <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">

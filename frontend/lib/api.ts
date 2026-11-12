@@ -983,6 +983,8 @@ export const api = {
       }>;
       total: number;
       raw_total?: number;
+      records_total?: number;
+      records_filtered?: number;
       from_cache?: boolean;
       fetched_at?: string;
     }> => {

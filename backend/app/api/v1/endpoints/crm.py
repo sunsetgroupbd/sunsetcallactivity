@@ -85,6 +85,8 @@ async def get_crm_leads(
         "leads": leads,
         "total": len(leads),
         "raw_total": result.get("total", len(leads)),
+        "records_total": result.get("records_total"),
+        "records_filtered": result.get("records_filtered"),
         "from_cache": result.get("from_cache", False),
         "fetched_at": result.get("fetched_at"),
     }

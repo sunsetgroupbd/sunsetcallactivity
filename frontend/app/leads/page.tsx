@@ -401,24 +401,34 @@ export default function CrmLeadsPage() {
                     {debugInfo.steps && (
                       <div className="space-y-1.5 pt-1">
                         {debugInfo.steps.map((st: any, i: number) => (
-                          <div key={i} className="p-2 rounded bg-slate-800/80 border border-slate-700/60 space-y-0.5">
+                          <div key={i} className="p-2.5 rounded bg-slate-800/80 border border-slate-700/60 space-y-1">
                             <div className="font-bold text-amber-400 flex items-center justify-between">
                               <span>{st.step}</span>
                               {st.status_code && (
-                                <span className={st.status_code === 200 ? "text-emerald-400" : "text-rose-400"}>
+                                <span className={st.status_code === 200 ? "text-emerald-400 font-bold" : "text-rose-400 font-bold"}>
                                   HTTP {st.status_code}
                                 </span>
                               )}
                             </div>
-                            {st.error && <div className="text-rose-300 text-[10px]">Error: {st.error}</div>}
+                            {st.error && <div className="text-rose-300 text-[10px] font-semibold">Error: {st.error}</div>}
+                            {st.form_action && <div className="text-slate-400 text-[10px]">Form Action: {st.form_action}</div>}
+                            {st.inputs_found && st.inputs_found.length > 0 && (
+                              <div className="text-slate-400 text-[10px]">Inputs Found: {st.inputs_found.join(", ")}</div>
+                            )}
                             {st.result && (
-                              <div className="text-slate-300 text-[10px]">
-                                Result: Status {st.result.status_code}, Cookies: {st.result.cookies?.join(", ") || "None"}
+                              <div className="text-slate-300 text-[10px] space-y-0.5">
+                                <div>Status: {st.result.status_code} | Landed on: {st.result.final_url}</div>
+                                <div>Cookies: {st.result.cookies?.join(", ") || "None"}</div>
+                                {st.result.detected_error && (
+                                  <div className="text-rose-300 font-bold bg-rose-950/40 p-1 rounded border border-rose-800/50 mt-1">
+                                    CRM Error: {st.result.detected_error}
+                                  </div>
+                                )}
                               </div>
                             )}
                             {st.snippet && (
-                              <div className="text-slate-400 text-[9px] truncate max-w-full">
-                                Snippet: {st.snippet}
+                              <div className="text-slate-400 text-[9px] font-mono break-all bg-slate-950/60 p-1.5 rounded border border-slate-800">
+                                {st.snippet}
                               </div>
                             )}
                           </div>

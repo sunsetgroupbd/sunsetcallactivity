@@ -45,6 +45,8 @@ class CrmService:
         Perform login to Somikoron CRM and extract session cookies or Bearer token.
         Supports both form-data and JSON login, and auto-detects CSRF tokens.
         """
+        import urllib.parse
+
         if not self.username or not self.password:
             raise ValueError("CRM_USERNAME or CRM_PASSWORD is not configured in backend .env")
 
@@ -54,49 +56,69 @@ class CrmService:
             "Referer": self.login_url,
         }
 
-        # Step 1: GET the login page to capture initial session cookies and CSRF token if present
+        # Step 1: GET the login page to capture initial session cookies, CSRF token, and form action
         csrf_token = None
+        form_action = self.login_url
+        input_names: List[str] = []
         try:
             get_resp = await client.get(self.login_url, headers=headers, timeout=15.0)
             if get_resp.status_code == 404:
                 raise ValueError(f"CRM Login URL returned 404 Not Found ({self.login_url}). Please verify CRM_LOGIN_URL in .env.")
 
             html = get_resp.text
-            # Look for Laravel / standard CSRF tokens
-            csrf_match = re.search(r'name=["\'](?:_token|csrf_token|csrf-token)["\']\s+value=["\']([^"\']+)["\']', html)
-            if not csrf_match:
-                csrf_match = re.search(r'name=["\']csrf-token["\']\s+content=["\']([^"\']+)["\']', html)
-            if not csrf_match:
-                csrf_match = re.search(r'content=["\']([^"\']+)["\']\s+name=["\']csrf-token["\']', html)
 
-            if csrf_match:
-                csrf_token = csrf_match.group(1)
+            # Extract form action
+            fa_m = re.search(r'<form[^>]+action=["\']([^"\']*)["\']', html, re.I)
+            if fa_m and fa_m.group(1).strip():
+                form_action = urllib.parse.urljoin(str(get_resp.url), fa_m.group(1).strip())
+
+            # Extract input names
+            input_names = re.findall(r'<input[^>]+name=["\']([^"\']+)["\']', html, re.I)
+
+            # Robust CSRF token extraction
+            m1 = re.search(r'<input[^>]+name=["\']_token["\'][^>]+value=["\']([^"\']+)["\']', html, re.I)
+            if not m1:
+                m1 = re.search(r'<input[^>]+value=["\']([^"\']+)["\'][^>]+name=["\']_token["\']', html, re.I)
+            if not m1:
+                m1 = re.search(r'<meta[^>]+name=["\'](?:csrf-token|csrf_token)["\'][^>]+content=["\']([^"\']+)["\']', html, re.I)
+            if not m1:
+                m1 = re.search(r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+name=["\'](?:csrf-token|csrf_token)["\']', html, re.I)
+
+            if m1:
+                csrf_token = m1.group(1)
         except ValueError:
             raise
         except Exception as e:
             logger.warning("CRM GET login page failed or bypassed: %s", e)
 
-        # Step 2: POST credentials (try both user_field and common variations)
+        # Step 2: POST credentials
         post_data: Dict[str, Any] = {
             self.user_field: self.username,
             self.pass_field: self.password,
+            "email": self.username,
+            "username": self.username,
+            "password": self.password,
         }
-        # If user_field is "email", also provide "username" in case CRM form expects username
-        if self.user_field == "email":
-            post_data["username"] = self.username
-        elif self.user_field == "username":
-            post_data["email"] = self.username
+        if "user" in input_names:
+            post_data["user"] = self.username
+        if "login" in input_names:
+            post_data["login"] = self.username
 
         if csrf_token:
             post_data["_token"] = csrf_token
 
         post_headers = dict(headers)
+        post_headers["Referer"] = self.login_url
+        post_headers["Origin"] = self.base_url
         if csrf_token:
             post_headers["X-CSRF-TOKEN"] = csrf_token
 
-        # Try form POST first
+        if "XSRF-TOKEN" in client.cookies:
+            post_headers["X-XSRF-TOKEN"] = urllib.parse.unquote(client.cookies["XSRF-TOKEN"])
+
+        # Try form POST
         post_resp = await client.post(
-            self.login_url,
+            form_action,
             data=post_data,
             headers=post_headers,
             timeout=20.0,
@@ -118,22 +140,40 @@ class CrmService:
         if not cookies_dict:
             cookies_dict = dict(post_resp.cookies)
 
-        # If form POST didn't return cookies or token, try JSON POST
-        if not cookies_dict and not CrmService._dynamic_token and post_resp.status_code in (400, 401, 419, 422):
+        # Check if login stayed on login page or redirected to an error
+        final_url_str = str(post_resp.url).rstrip("/")
+        landed_on_login = final_url_str.endswith("/login") or "/login" in final_url_str
+
+        # Scan for explicit HTML error messages
+        detected_error = None
+        html_resp = post_resp.text
+        html_lower = html_resp.lower()
+        if "credentials do not match" in html_lower or "these credentials do not match our records" in html_lower:
+            detected_error = "These credentials do not match the CRM records (Invalid username or password)."
+        elif "page expired" in html_lower or "419" in html_lower:
+            detected_error = "CSRF Token mismatch or Page Expired (HTTP 419)."
+        elif "too many login attempts" in html_lower:
+            detected_error = "Too many login attempts. Account temporarily throttled by CRM."
+        else:
+            err_m = re.search(r'<(?:span|div|p)[^>]*class=["\'][^"\']*(?:invalid-feedback|alert-danger|text-danger|error)[^"\']*["\'][^>]*>(.*?)</(?:span|div|p)>', html_resp, re.I | re.S)
+            if err_m:
+                raw_err = re.sub(r'<[^>]+>', '', err_m.group(1)).strip()
+                if raw_err:
+                    detected_error = raw_err
+
+        # If form POST failed and didn't set dynamic token, try JSON POST fallback
+        if (landed_on_login or post_resp.status_code in (400, 401, 419, 422)) and not CrmService._dynamic_token:
             json_headers = dict(post_headers)
             json_headers["Content-Type"] = "application/json"
             json_headers["Accept"] = "application/json"
-            post_resp = await client.post(
-                self.login_url,
+            json_resp = await client.post(
+                form_action,
                 json=post_data,
                 headers=json_headers,
                 timeout=20.0,
             )
-            cookies_dict = dict(client.cookies)
-            if not cookies_dict:
-                cookies_dict = dict(post_resp.cookies)
             try:
-                post_json = post_resp.json()
+                post_json = json_resp.json()
                 if isinstance(post_json, dict):
                     for tok_key in ("token", "access_token", "bearer_token", "api_token", "jwt", "key"):
                         if tok_key in post_json and isinstance(post_json[tok_key], str):
@@ -141,23 +181,28 @@ class CrmService:
                             break
             except Exception:
                 pass
+            if json_resp.cookies:
+                cookies_dict.update(dict(json_resp.cookies))
 
-        if not cookies_dict and not CrmService._dynamic_token:
-            snippet = post_resp.text[:300].strip()
-            raise ValueError(
-                f"CRM Login did not yield session cookies or token (HTTP {post_resp.status_code}). Response snippet: {snippet}"
-            )
+        if landed_on_login and not CrmService._dynamic_token and detected_error:
+            raise ValueError(f"CRM Login Failed: {detected_error}")
 
         CrmService._cookies = cookies_dict
         CrmService._cookie_timestamp = time.time()
         return {
             "status_code": post_resp.status_code,
+            "final_url": final_url_str,
             "cookies": list(cookies_dict.keys()),
             "has_token": bool(CrmService._dynamic_token),
+            "inputs_detected": input_names,
+            "form_action": form_action,
+            "detected_error": detected_error,
+            "landed_on_login": landed_on_login,
         }
 
     async def fetch_leads(self, force_refresh: bool = False) -> Dict[str, Any]:
         """Fetch lead data from Somikoron CRM."""
+        import urllib.parse
         now = time.time()
 
         # Check in-memory cache if not forcing refresh
@@ -180,12 +225,13 @@ class CrmService:
             }
 
         async with httpx.AsyncClient(timeout=35.0, follow_redirects=True) as client:
-            # Prepare headers
+            # Prepare headers with stateful origin and referer
             req_headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 "Accept": "application/json, text/plain, */*",
                 "X-Requested-With": "XMLHttpRequest",
-                "Referer": self.base_url,
+                "Referer": f"{self.base_url}/",
+                "Origin": self.base_url,
             }
 
             active_token = self.auth_token or CrmService._dynamic_token
@@ -214,6 +260,12 @@ class CrmService:
                 else:
                     client.cookies.update(CrmService._cookies or {})
 
+            # Attach X-XSRF-TOKEN header if cookie is present
+            if "XSRF-TOKEN" in client.cookies:
+                req_headers["X-XSRF-TOKEN"] = urllib.parse.unquote(client.cookies["XSRF-TOKEN"])
+            elif CrmService._cookies and "XSRF-TOKEN" in CrmService._cookies:
+                req_headers["X-XSRF-TOKEN"] = urllib.parse.unquote(CrmService._cookies["XSRF-TOKEN"])
+
             # Fetch the actual lead data endpoint
             try:
                 resp = await client.get(self.leads_url, headers=req_headers)
@@ -231,6 +283,8 @@ class CrmService:
                             active_token = self.auth_token or CrmService._dynamic_token
                             if active_token:
                                 req_headers["Authorization"] = f"Bearer {active_token}"
+                            if "XSRF-TOKEN" in client.cookies:
+                                req_headers["X-XSRF-TOKEN"] = urllib.parse.unquote(client.cookies["XSRF-TOKEN"])
                             resp = await client.get(self.leads_url, headers=req_headers)
                         except Exception as e:
                             return {
@@ -240,7 +294,14 @@ class CrmService:
                                 "total": 0,
                             }
 
-                # If still 401, also try HTTP Basic Auth fallback on the leads URL directly
+                # Fallback: If still 401, try without X-Requested-With (standard browser GET)
+                if resp.status_code == 401:
+                    clean_headers = dict(req_headers)
+                    clean_headers.pop("X-Requested-With", None)
+                    clean_headers["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,application/json,*/*;q=0.8"
+                    resp = await client.get(self.leads_url, headers=clean_headers)
+
+                # Fallback: If still 401, also try HTTP Basic Auth fallback on the leads URL directly
                 if resp.status_code == 401 and self.username and self.password:
                     resp = await client.get(
                         self.leads_url,
@@ -328,14 +389,22 @@ class CrmService:
 
         async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
             # Probe 1: GET login URL
+            import urllib.parse
+            html = ""
             try:
                 resp1 = await client.get(self.login_url)
+                html = resp1.text
+                input_names = re.findall(r'<input[^>]+name=["\']([^"\']+)["\']', html, re.I)
+                fa_m = re.search(r'<form[^>]+action=["\']([^"\']*)["\']', html, re.I)
+                form_action = fa_m.group(1).strip() if fa_m else self.login_url
                 diagnostics["steps"].append({
                     "step": "1. GET login_url",
                     "url": self.login_url,
                     "status_code": resp1.status_code,
                     "final_url": str(resp1.url),
                     "cookies_set": list(client.cookies.keys()),
+                    "form_action": form_action,
+                    "inputs_found": input_names[:10],
                     "is_html": "text/html" in resp1.headers.get("content-type", ""),
                 })
             except Exception as e:
@@ -358,24 +427,44 @@ class CrmService:
                     "error": str(e),
                 })
 
-            # Probe 3: GET leads URL
+            # Probe 3: GET leads URL (with stateful headers)
             try:
                 req_headers = {
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                     "Accept": "application/json, text/plain, */*",
                     "X-Requested-With": "XMLHttpRequest",
+                    "Referer": f"{self.base_url}/",
+                    "Origin": self.base_url,
                 }
+                if "XSRF-TOKEN" in client.cookies:
+                    req_headers["X-XSRF-TOKEN"] = urllib.parse.unquote(client.cookies["XSRF-TOKEN"])
+
                 active_token = self.auth_token or CrmService._dynamic_token
                 if active_token:
                     req_headers["Authorization"] = f"Bearer {active_token}"
 
                 resp3 = await client.get(self.leads_url, headers=req_headers)
+
+                # Fallback probe if 401: try standard browser request without XMLHttpRequest
+                fallback_status = None
+                fallback_snippet = None
+                if resp3.status_code == 401:
+                    clean_headers = dict(req_headers)
+                    clean_headers.pop("X-Requested-With", None)
+                    clean_headers["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,application/json,*/*;q=0.8"
+                    fb_resp = await client.get(self.leads_url, headers=clean_headers)
+                    fallback_status = fb_resp.status_code
+                    fallback_snippet = fb_resp.text[:200].strip()
+
                 diagnostics["steps"].append({
                     "step": "3. GET leads_url",
                     "status_code": resp3.status_code,
                     "final_url": str(resp3.url),
                     "content_type": resp3.headers.get("content-type"),
                     "snippet": resp3.text[:300].strip(),
+                    "xsrf_header_sent": bool("X-XSRF-TOKEN" in req_headers),
+                    "fallback_without_xhr_status": fallback_status,
+                    "fallback_snippet": fallback_snippet,
                 })
             except Exception as e:
                 diagnostics["steps"].append({

@@ -33,6 +33,14 @@ async def get_crm_status(current_user: User = Depends(get_current_user)) -> Dict
     }
 
 
+@router.get("/debug")
+async def debug_crm_connection(current_user: User = Depends(get_current_user)) -> Dict[str, Any]:
+    """Diagnostic probe for testing CRM connection step-by-step."""
+    _require_admin(current_user)
+    svc = CrmService()
+    return await svc.debug_connection()
+
+
 @router.get("/leads")
 async def get_crm_leads(
     force_refresh: bool = Query(False, description="Bypass cache and fetch live from CRM"),

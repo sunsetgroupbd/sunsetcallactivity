@@ -21,6 +21,9 @@ import {
   Eye,
   X,
   FileSpreadsheet,
+  Terminal,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, Button, Modal } from "@/components/ui";
@@ -62,6 +65,26 @@ export default function CrmLeadsPage() {
 
   // Lead Detail Modal
   const [selectedLead, setSelectedLead] = useState<CrmLead | null>(null);
+
+  // Diagnostic state
+  const [debugInfo, setDebugInfo] = useState<any>(null);
+  const [debugLoading, setDebugLoading] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
+
+  const runDiagnostics = async () => {
+    setDebugLoading(true);
+    try {
+      const data = await api.crm.getDebug();
+      setDebugInfo(data);
+      setShowDebug(true);
+    } catch (err: unknown) {
+      const msg = err instanceof ApiError ? err.message : "Failed to run diagnostics";
+      setDebugInfo({ error: msg });
+      setShowDebug(true);
+    } finally {
+      setDebugLoading(false);
+    }
+  };
 
   // Load CRM Status and Leads
   const loadLeads = useCallback(async (forceRefresh = false) => {
@@ -314,14 +337,97 @@ export default function CrmLeadsPage() {
           </div>
         </div>
 
-        {/* Configuration Setup Warning if not configured yet */}
+        {/* Configuration Setup Warning / Error Notice */}
         {error && (
-          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-amber-900 space-y-2 shadow-2xs">
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-amber-900 space-y-3 shadow-2xs">
             <div className="flex items-start gap-2.5">
               <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-              <div className="flex-1 text-xs">
-                <h4 className="font-bold text-amber-950 text-sm">CRM Connection Notice</h4>
-                <p className="mt-1 leading-relaxed text-amber-800">{error}</p>
+              <div className="flex-1 text-xs space-y-2">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <h4 className="font-bold text-amber-950 text-sm">CRM Connection Notice</h4>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={runDiagnostics}
+                      loading={debugLoading}
+                      className="text-[11px] h-7 bg-white text-slate-700 hover:bg-slate-50 border-amber-300"
+                    >
+                      <Terminal className="w-3.5 h-3.5 mr-1 text-slate-500" />
+                      Run Diagnostic Probe
+                    </Button>
+                    {debugInfo && (
+                      <button
+                        onClick={() => setShowDebug(!showDebug)}
+                        className="text-[11px] text-amber-800 font-semibold hover:underline flex items-center gap-0.5"
+                      >
+                        {showDebug ? "Hide Details" : "Show Details"}
+                        {showDebug ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <p className="leading-relaxed text-amber-800 font-medium">{error}</p>
+
+                {error.includes("401") && (
+                  <div className="p-3 bg-white/90 rounded-xl border border-amber-200/80 text-[11px] text-slate-700 space-y-1.5">
+                    <p className="font-bold text-amber-950">💡 What does 401 Unauthorized mean?</p>
+                    <p>
+                      The CRM server (<code className="font-mono bg-slate-100 px-1 py-0.5 rounded">sunset.somikoronitltd.com</code>)
+                      received our request, but <strong>refused to deliver the lead data because it does not recognize an active authenticated session</strong>.
+                    </p>
+                    <ul className="list-disc pl-4 space-y-0.5 text-slate-600">
+                      <li>The CRM login form might be at a different URL (e.g. <code className="font-mono bg-slate-100 px-1 rounded">/admin/login</code> or root <code className="font-mono bg-slate-100 px-1 rounded">/</code> rather than <code className="font-mono bg-slate-100 px-1 rounded">/login</code>).</li>
+                      <li>The CRM form might expect the input field name <code className="font-mono bg-slate-100 px-1 rounded">username</code> instead of <code className="font-mono bg-slate-100 px-1 rounded">email</code>.</li>
+                      <li>Check your browser address bar when you log in manually to see the exact login URL.</li>
+                    </ul>
+                  </div>
+                )}
+
+                {/* Diagnostic Details Accordion */}
+                {showDebug && debugInfo && (
+                  <div className="mt-3 p-3.5 bg-slate-900 text-slate-200 rounded-xl font-mono text-[11px] space-y-2 border border-slate-800 overflow-x-auto">
+                    <div className="flex items-center justify-between text-slate-400 border-b border-slate-800 pb-1.5 font-sans font-semibold text-xs">
+                      <span>Live Diagnostic Probe Results</span>
+                      <span>Configured: {debugInfo.configured ? "Yes" : "No"}</span>
+                    </div>
+                    <div className="text-[10px] space-y-0.5 text-slate-400">
+                      <div>Base URL: {debugInfo.base_url}</div>
+                      <div>Login URL: {debugInfo.login_url}</div>
+                      <div>Leads URL: {debugInfo.leads_url}</div>
+                      <div>User: {debugInfo.username} | Has Password: {debugInfo.has_password ? "Yes" : "No"}</div>
+                    </div>
+                    {debugInfo.steps && (
+                      <div className="space-y-1.5 pt-1">
+                        {debugInfo.steps.map((st: any, i: number) => (
+                          <div key={i} className="p-2 rounded bg-slate-800/80 border border-slate-700/60 space-y-0.5">
+                            <div className="font-bold text-amber-400 flex items-center justify-between">
+                              <span>{st.step}</span>
+                              {st.status_code && (
+                                <span className={st.status_code === 200 ? "text-emerald-400" : "text-rose-400"}>
+                                  HTTP {st.status_code}
+                                </span>
+                              )}
+                            </div>
+                            {st.error && <div className="text-rose-300 text-[10px]">Error: {st.error}</div>}
+                            {st.result && (
+                              <div className="text-slate-300 text-[10px]">
+                                Result: Status {st.result.status_code}, Cookies: {st.result.cookies?.join(", ") || "None"}
+                              </div>
+                            )}
+                            {st.snippet && (
+                              <div className="text-slate-400 text-[9px] truncate max-w-full">
+                                Snippet: {st.snippet}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {crmStatus && !crmStatus.username_configured && (
                   <div className="mt-3 p-3 bg-white/80 rounded-xl border border-amber-300 text-[11px] font-mono space-y-1">
                     <p className="font-sans font-bold text-slate-800">

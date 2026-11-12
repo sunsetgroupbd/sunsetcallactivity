@@ -993,6 +993,29 @@ export const api = {
       const queryStr = q.toString() ? `?${q.toString()}` : "";
       return request(`/crm/leads${queryStr}`);
     },
+    getDebug: async (): Promise<{
+      configured: boolean;
+      base_url: string;
+      login_url: string;
+      leads_url: string;
+      username?: string;
+      has_password?: boolean;
+      has_auth_token?: boolean;
+      steps: Array<{
+        step: string;
+        url?: string;
+        status_code?: number;
+        final_url?: string;
+        cookies_set?: string[];
+        is_html?: boolean;
+        result?: any;
+        content_type?: string;
+        snippet?: string;
+        error?: string;
+      }>;
+    }> => {
+      return request("/crm/debug");
+    },
   },
 };
 

@@ -574,15 +574,35 @@ class CrmService:
                     "fallback_snippet": fallback_snippet,
                 })
 
-                # Probe 4: Automated Parameter Discovery on lead_data
+                # Probe 4: Automated Parameter & Endpoint Discovery
                 probe_variants = [
                     {"label": "Standard (start=0, length=100)", "params": {"start": 0, "length": 100}},
                     {"label": "Filter: status=all", "params": {"start": 0, "length": 100, "status": "all"}},
+                    {"label": "Filter: status= (empty)", "params": {"start": 0, "length": 100, "status": ""}},
                     {"label": "Filter: lead_type=all", "params": {"start": 0, "length": 100, "lead_type": "all"}},
                     {"label": "Filter: type=all", "params": {"start": 0, "length": 100, "type": "all"}},
                     {"label": "Filter: account_id=all", "params": {"start": 0, "length": 100, "account_id": "all"}},
+                    {"label": "Filter: account_id= (empty)", "params": {"start": 0, "length": 100, "account_id": ""}},
                     {"label": "Filter: from_date/to_date (All Time)", "params": {"start": 0, "length": 100, "from_date": "2020-01-01", "to_date": "2030-12-31"}},
                     {"label": "Filter: date_from/date_to (All Time)", "params": {"start": 0, "length": 100, "date_from": "2020-01-01", "date_to": "2030-12-31"}},
+                    {"label": "Filter: start_date/end_date (All Time)", "params": {"start": 0, "length": 100, "start_date": "2020-01-01", "end_date": "2030-12-31"}},
+                    {"label": "Filter: daterange=all", "params": {"start": 0, "length": 100, "daterange": "all"}},
+                    {"label": "Filter: date_range=2020-01-01 - 2030-12-31", "params": {"start": 0, "length": 100, "date_range": "2020-01-01 - 2030-12-31"}},
+                    {"label": "Filter: all_leads=1", "params": {"start": 0, "length": 100, "all_leads": "1"}},
+                    {"label": "Filter: all=1", "params": {"start": 0, "length": 100, "all": "1"}},
+                    {"label": "Filter: lead_stage=all", "params": {"start": 0, "length": 100, "lead_stage": "all"}},
+                    {"label": "Filter: stage=all", "params": {"start": 0, "length": 100, "stage": "all"}},
+                    {"label": "Filter: user_id=all", "params": {"start": 0, "length": 100, "user_id": "all"}},
+                ]
+
+                # Also test alternate candidate endpoints in Probe 4
+                candidate_endpoints = [
+                    f"{self.base_url}/crm-module/lead_data",
+                    f"{self.base_url}/crm-module/lead-list",
+                    f"{self.base_url}/crm-module/all_leads",
+                    f"{self.base_url}/crm-module/all-leads",
+                    f"{self.base_url}/crm-module/lead-account-data",
+                    f"{self.base_url}/crm-module/lead-data",
                 ]
 
                 probe_results = []
@@ -617,6 +637,47 @@ class CrmService:
                     "step": "4. Parameter Discovery on lead_data",
                     "results": probe_results,
                     "discovered_working_params": discovered_all_leads_params,
+                })
+
+                # Probe 4b: Test Alternate CRM Endpoints
+                endpoint_results = []
+                for ep in candidate_endpoints:
+                    try:
+                        ep_resp = await client.get(
+                            ep,
+                            headers=req_headers,
+                            params={"start": 0, "length": 100},
+                            timeout=8.0,
+                        )
+                        ep_rt = None
+                        ep_rf = None
+                        ep_cnt = None
+                        if ep_resp.status_code == 200:
+                            try:
+                                ep_j = ep_resp.json()
+                                if isinstance(ep_j, dict):
+                                    ep_rt = ep_j.get("recordsTotal") or ep_j.get("total")
+                                    ep_rf = ep_j.get("recordsFiltered") or ep_j.get("filtered")
+                                    if "data" in ep_j and isinstance(ep_j["data"], list):
+                                        ep_cnt = len(ep_j["data"])
+                            except Exception:
+                                pass
+                        endpoint_results.append({
+                            "endpoint": ep.replace(self.base_url, ""),
+                            "status": ep_resp.status_code,
+                            "recordsTotal": ep_rt,
+                            "recordsFiltered": ep_rf,
+                            "count": ep_cnt,
+                        })
+                    except Exception as e_ep:
+                        endpoint_results.append({
+                            "endpoint": ep.replace(self.base_url, ""),
+                            "error": str(e_ep),
+                        })
+
+                diagnostics["steps"].append({
+                    "step": "4b. Candidate Endpoint Probing",
+                    "results": endpoint_results,
                 })
 
                 # Probe 5: Inspect add-lead-account URL

@@ -453,16 +453,16 @@ export default function CrmLeadsPage() {
                             )}
                             {st.results && (
                               <div className="space-y-1 pt-1">
-                                <div className="text-amber-300 font-bold text-[10px]">Parameter Discovery Tests:</div>
+                                <div className="text-amber-300 font-bold text-[10px]">Parameter / Endpoint Tests:</div>
                                 {st.results.map((r: any, rIdx: number) => (
                                   <div key={rIdx} className="text-[10px] bg-slate-900/60 p-1.5 rounded flex items-center justify-between">
-                                    <span className="text-slate-300">{r.test}:</span>
-                                    {r.recordsFiltered ? (
+                                    <span className="text-slate-300">{r.test || r.endpoint}:</span>
+                                    {r.recordsFiltered || r.recordsTotal ? (
                                       <span className="text-emerald-400 font-bold">
-                                        Total: {r.recordsTotal} | Filtered: {r.recordsFiltered} | Items: {r.returned}
+                                        Total: {r.recordsTotal ?? "—"} | Filtered: {r.recordsFiltered ?? "—"} | Items: {r.returned ?? r.count ?? 0}
                                       </span>
                                     ) : (
-                                      <span className="text-rose-400">{r.error || "0 returned"}</span>
+                                      <span className="text-rose-400">{r.error || (r.status ? `HTTP ${r.status}` : "0 returned")}</span>
                                     )}
                                   </div>
                                 ))}

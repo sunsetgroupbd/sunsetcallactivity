@@ -559,6 +559,60 @@ class CrmService:
                         "step": "4. DataTables Pagination Probe (?length=500)",
                         "error": str(ex_probe),
                     })
+
+                # Probe 5: Inspect add-lead-account URL
+                try:
+                    target_url = f"{self.base_url}/crm-module/add-lead-account"
+                    # First GET as HTML (browser view)
+                    h_resp = await client.get(
+                        target_url,
+                        headers={
+                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                            "Referer": f"{self.base_url}/",
+                        },
+                    )
+
+                    ajax_endpoints = []
+                    if h_resp.status_code == 200:
+                        html_content = h_resp.text
+                        ajax_matches = re.findall(r'ajax\s*:\s*(?:{\s*url\s*:\s*)?["\']([^"\']+)["\']', html_content, re.I)
+                        crm_urls = re.findall(r'["\'](/crm-module/[^"\']+)["\']', html_content, re.I)
+                        ajax_endpoints = list(set([u for u in (ajax_matches + crm_urls) if "logout" not in u and "login" not in u]))
+
+                    # Second GET as AJAX (JSON DataTables)
+                    a_resp = await client.get(
+                        target_url,
+                        headers=req_headers,
+                        params={"start": 0, "length": 100},
+                    )
+                    a_total = None
+                    a_count = None
+                    try:
+                        j_a = a_resp.json()
+                        if isinstance(j_a, dict):
+                            a_total = j_a.get("recordsTotal") or j_a.get("total")
+                            if "data" in j_a and isinstance(j_a["data"], list):
+                                a_count = len(j_a["data"])
+                    except Exception:
+                        pass
+
+                    diagnostics["steps"].append({
+                        "step": "5. Probe add-lead-account",
+                        "url": target_url,
+                        "html_status": h_resp.status_code,
+                        "detected_ajax_urls": ajax_endpoints[:10],
+                        "ajax_status": a_resp.status_code,
+                        "ajax_content_type": a_resp.headers.get("content-type"),
+                        "ajax_recordsTotal": a_total,
+                        "ajax_data_count": a_count,
+                        "ajax_snippet": a_resp.text[:250].strip(),
+                    })
+                except Exception as e_add:
+                    diagnostics["steps"].append({
+                        "step": "5. Probe add-lead-account",
+                        "error": str(e_add),
+                    })
             except Exception as e:
                 diagnostics["steps"].append({
                     "step": "3. GET leads_url",

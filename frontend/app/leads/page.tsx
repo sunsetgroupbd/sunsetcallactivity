@@ -451,6 +451,21 @@ export default function CrmLeadsPage() {
                             {st.inputs_found && st.inputs_found.length > 0 && (
                               <div className="text-slate-400 text-[10px]">Inputs Found: {st.inputs_found.join(", ")}</div>
                             )}
+                            {st.recordsTotal !== undefined && st.recordsTotal !== null && (
+                              <div className="text-emerald-300 font-bold text-[10px]">
+                                recordsTotal: {st.recordsTotal} | recordsFiltered: {st.recordsFiltered} | returned: {st.data_returned_count}
+                              </div>
+                            )}
+                            {st.detected_ajax_urls && st.detected_ajax_urls.length > 0 && (
+                              <div className="text-sky-300 text-[10px] break-all">
+                                Detected AJAX endpoints: {st.detected_ajax_urls.join(", ")}
+                              </div>
+                            )}
+                            {st.ajax_recordsTotal !== undefined && st.ajax_recordsTotal !== null && (
+                              <div className="text-emerald-300 font-bold text-[10px]">
+                                add-lead-account AJAX recordsTotal: {st.ajax_recordsTotal} | count: {st.ajax_data_count}
+                              </div>
+                            )}
                             {st.result && (
                               <div className="text-slate-300 text-[10px] space-y-0.5">
                                 <div>Status: {st.result.status_code} | Landed on: {st.result.final_url}</div>

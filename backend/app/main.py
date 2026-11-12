@@ -5,6 +5,10 @@ from __future__ import annotations
 
 import logging
 import os
+
+# Disable compiled Cython C-extensions in SQLAlchemy to support Windows Application Control environments
+os.environ["DISABLE_SQLALCHEMY_CEXT"] = "1"
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request

@@ -948,6 +948,52 @@ export const api = {
       });
     },
   },
+
+  crm: {
+    getStatus: async (): Promise<{
+      configured: boolean;
+      base_url: string;
+      leads_url: string;
+      username_configured: boolean;
+      auth_token_configured: boolean;
+    }> => {
+      return request("/crm/status");
+    },
+    getLeads: async (params?: {
+      force_refresh?: boolean;
+      query?: string;
+      status?: string;
+    }): Promise<{
+      success: boolean;
+      error?: string;
+      leads: Array<{
+        id: string | number;
+        name: string;
+        phone: string;
+        email: string;
+        project: string;
+        status: string;
+        source: string;
+        assigned_to: string;
+        created_at: string;
+        address?: string;
+        profession?: string;
+        notes?: string;
+        raw?: any;
+      }>;
+      total: number;
+      raw_total?: number;
+      from_cache?: boolean;
+      fetched_at?: string;
+    }> => {
+      const q = new URLSearchParams();
+      if (params?.force_refresh) q.set("force_refresh", "true");
+      if (params?.query) q.set("query", params.query);
+      if (params?.status) q.set("status", params.status);
+      const queryStr = q.toString() ? `?${q.toString()}` : "";
+      return request(`/crm/leads${queryStr}`);
+    },
+  },
 };
 
 export { ApiError };

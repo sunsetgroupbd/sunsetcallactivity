@@ -1,6 +1,9 @@
 """Application configuration — reads from environment / .env file."""
 from __future__ import annotations
 
+import os
+os.environ["DISABLE_SQLALCHEMY_CEXT"] = "1"
+
 from typing import List
 
 from pydantic import field_validator
@@ -44,6 +47,16 @@ class Settings(BaseSettings):
 
     # ── Business ──────────────────────────────────────────────────────────────
     BUSINESS_TIMEZONE: str = "Asia/Dhaka"
+
+    # ── External CRM (Somikoron CRM Integration) ──────────────────────────────
+    CRM_BASE_URL: str = "https://sunset.somikoronitltd.com"
+    CRM_LOGIN_URL: str = "https://sunset.somikoronitltd.com/login"
+    CRM_LEADS_URL: str = "https://sunset.somikoronitltd.com/crm-module/lead_data"
+    CRM_USERNAME: str = ""
+    CRM_PASSWORD: str = ""
+    CRM_USERNAME_FIELD: str = "email"
+    CRM_PASSWORD_FIELD: str = "password"
+    CRM_AUTH_TOKEN: str = ""
 
     @property
     def allowed_origins_list(self) -> List[str]:

@@ -276,6 +276,7 @@ erDiagram
 | `/reports/executive-collection/print` | `app/reports/executive-collection/print/page.tsx` | Admin / Supervisors | A4 Landscape print/PDF voucher for management meetings. |
 | `/reports/print` & `/[id]/print` | `app/reports/print/page.tsx` | All Authenticated | Summary print voucher and single daily report voucher. |
 | `/teams` | `app/teams/page.tsx` | Admin & Sub-Admin | **Group & Team Organizational Hierarchy**. Tree view, 1-click add/move/unassign for C.O., T.L., and Executives. |
+| `/leads` | `app/leads/page.tsx` | Admin & Sub-Admin | **CRM Leads Directory**. Live Somikoron CRM lead feed, search, project/status filters, detail modal & CSV export. |
 | `/employees` | `app/employees/page.tsx` | Admin & Sub-Admin | Staff directory, ID editing, password reset with eye toggle, quick assign, batch assign, and CSV import. |
 | `/settings` | `app/settings/page.tsx` | Admin & Sub-Admin | Benchmark KPI targets and global system configurations. |
 | `/notices` | `app/notices/page.tsx` | All Authenticated | Company announcements with PDF view/download. |

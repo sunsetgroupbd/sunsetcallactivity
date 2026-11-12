@@ -14,6 +14,7 @@ import {
   UserCheck,
   Network,
   Settings,
+  Database,
   X,
   BellRing,
   LogOut,
@@ -51,6 +52,7 @@ export function Sidebar({
     { name: "Notice Board", href: "/notices", icon: BellRing },
     ...(isAdmin || isSubAdmin
       ? [
+          { name: "CRM Leads", href: "/leads", icon: Database },
           { name: "Performance & Collection", href: "/reports/performance-collection", icon: Target },
           { name: "Executive Collection", href: "/reports/executive-collection", icon: FileSpreadsheet },
           { name: "Employees", href: "/employees", icon: UserCheck },

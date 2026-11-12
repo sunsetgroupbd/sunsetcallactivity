@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Link from "next/link";
 import {
   Database,
@@ -26,6 +26,8 @@ import {
   ChevronUp,
   ChevronLeft,
   ChevronRight,
+  Layers,
+  Loader2,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, Button, Modal } from "@/components/ui";
@@ -50,6 +52,8 @@ interface CrmLead {
   notes?: string;
   badge?: string;
   crm_link?: string;
+  last_activity?: string;
+  next_activity?: string;
   raw?: Record<string, any>;
 }
 
@@ -74,6 +78,26 @@ export default function CrmLeadsPage() {
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(100);
   const [totalPages, setTotalPages] = useState(1);
+
+  // Export states
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportProgress, setExportProgress] = useState<{
+    current: number;
+    total: number;
+    percent: number;
+    statusText: string;
+    isRunning: boolean;
+    isCancelled: boolean;
+  }>({
+    current: 0,
+    total: 0,
+    percent: 0,
+    statusText: "",
+    isRunning: false,
+    isCancelled: false,
+  });
+  const exportCancelledRef = useRef(false);
 
   // Lead Detail Modal
   const [selectedLead, setSelectedLead] = useState<CrmLead | null>(null);
@@ -212,50 +236,180 @@ export default function CrmLeadsPage() {
     });
   }, [leads, searchQuery, statusFilter, projectFilter]);
 
-  // CSV Export handler
-  const handleExportCsv = () => {
-    if (filteredLeads.length === 0) return;
-
-    const headers = [
-      "ID",
-      "Customer Name",
-      "Phone",
-      "Email",
-      "Project / Product",
-      "Status",
-      "Source",
-      "Assigned Executive",
-      "Created Date",
-      "Address",
-      "Profession",
-      "Notes",
-    ];
-
-    const rows = filteredLeads.map((l) => [
-      `"${l.id}"`,
-      `"${(l.name || "").replace(/"/g, '""')}"`,
-      `"${(l.phone || "").replace(/"/g, '""')}"`,
-      `"${(l.email || "").replace(/"/g, '""')}"`,
-      `"${(l.project || "").replace(/"/g, '""')}"`,
-      `"${(l.status || "").replace(/"/g, '""')}"`,
-      `"${(l.source || "").replace(/"/g, '""')}"`,
-      `"${(l.assigned_to || "").replace(/"/g, '""')}"`,
-      `"${(l.created_at || "").replace(/"/g, '""')}"`,
-      `"${(l.address || "").replace(/"/g, '""')}"`,
-      `"${(l.profession || "").replace(/"/g, '""')}"`,
-      `"${(l.notes || "").replace(/"/g, '""')}"`,
-    ]);
-
-    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
-    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+  // CSV Export helpers
+  const downloadCsvBlob = (csvString: string, filename: string) => {
+    const blob = new Blob(["\uFEFF" + csvString], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    const todayStr = new Date().toISOString().split("T")[0];
     link.setAttribute("href", url);
-    link.setAttribute("download", `crm_leads_${todayStr}.csv`);
+    link.setAttribute("download", filename);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const escapeCsv = (val: any) => `"${String(val ?? "").replace(/"/g, '""')}"`;
+
+  const CSV_HEADERS = [
+    "SL",
+    "ID",
+    "Lead Code",
+    "Customer Name",
+    "Phone",
+    "Email",
+    "Project / Product",
+    "Status",
+    "Source",
+    "Assigned Executive",
+    "Created Date",
+    "Address",
+    "Profession",
+    "Last Activity",
+    "Next Activity",
+    "Notes",
+    "CRM Link",
+  ];
+
+  const formatLeadCsvRow = (l: CrmLead, serial: number) =>
+    [
+      escapeCsv(serial),
+      escapeCsv(l.id),
+      escapeCsv(l.lead_code || ""),
+      escapeCsv(l.name),
+      escapeCsv(l.phone),
+      escapeCsv(l.email),
+      escapeCsv(l.project),
+      escapeCsv(l.status),
+      escapeCsv(l.source),
+      escapeCsv(l.assigned_to),
+      escapeCsv(l.created_at),
+      escapeCsv(l.address || ""),
+      escapeCsv(l.profession || ""),
+      escapeCsv(l.last_activity || ""),
+      escapeCsv(l.next_activity || ""),
+      escapeCsv(l.notes || ""),
+      escapeCsv(l.crm_link || ""),
+    ].join(",");
+
+  // Export current page only (instant)
+  const handleExportCurrentPage = () => {
+    if (filteredLeads.length === 0) return;
+    const rows = [
+      CSV_HEADERS.join(","),
+      ...filteredLeads.map((l, idx) => formatLeadCsvRow(l, (page - 1) * perPage + idx + 1)),
+    ];
+    const todayStr = new Date().toISOString().split("T")[0];
+    downloadCsvBlob(rows.join("\n"), `crm_leads_page_${page}_${todayStr}.csv`);
+  };
+
+  // Export bulk / all leads with batching and progress tracking
+  const handleExportBulk = async (maxRecords?: number) => {
+    setExportMenuOpen(false);
+    exportCancelledRef.current = false;
+
+    const totalToFetch = maxRecords
+      ? Math.min(maxRecords, recordsFiltered || recordsTotal || 52482)
+      : (recordsFiltered || recordsTotal || 52482);
+
+    setExportProgress({
+      current: 0,
+      total: totalToFetch,
+      percent: 0,
+      statusText: "Connecting to Somikoron CRM lead stream...",
+      isRunning: true,
+      isCancelled: false,
+    });
+    setExportModalOpen(true);
+
+    const allRows: string[] = [CSV_HEADERS.join(",")];
+    const batchSize = 500;
+    const totalBatches = Math.ceil(totalToFetch / batchSize);
+    let fetchedCount = 0;
+
+    try {
+      for (let b = 1; b <= totalBatches; b++) {
+        if (exportCancelledRef.current) {
+          break;
+        }
+
+        const remaining = totalToFetch - fetchedCount;
+        const currentBatchLimit = Math.min(batchSize, remaining);
+
+        setExportProgress({
+          current: fetchedCount,
+          total: totalToFetch,
+          percent: Math.round((fetchedCount / totalToFetch) * 100),
+          statusText: `Downloading batch ${b} of ${totalBatches} (${fetchedCount.toLocaleString()} / ${totalToFetch.toLocaleString()} leads)...`,
+          isRunning: true,
+          isCancelled: false,
+        });
+
+        const res = await api.crm.getLeads({
+          page: b,
+          per_page: currentBatchLimit,
+          from_date: "1971-01-01",
+          active_status: "Active",
+          order_dir: orderDir,
+          query: searchQuery || undefined,
+          status: statusFilter !== "all" ? statusFilter : undefined,
+        });
+
+        if (!res.success || !res.leads || res.leads.length === 0) {
+          break;
+        }
+
+        for (const [idx, l] of res.leads.entries()) {
+          const serial = fetchedCount + idx + 1;
+          allRows.push(formatLeadCsvRow(l as CrmLead, serial));
+        }
+
+        fetchedCount += res.leads.length;
+
+        if (res.leads.length < currentBatchLimit) {
+          break;
+        }
+
+        // Brief delay between batches to keep browser responsive
+        await new Promise((resolve) => setTimeout(resolve, 60));
+      }
+
+      const wasCancelled = exportCancelledRef.current;
+      setExportProgress({
+        current: fetchedCount,
+        total: totalToFetch,
+        percent: 100,
+        statusText: wasCancelled
+          ? `Export stopped. Preparing ${fetchedCount.toLocaleString()} downloaded leads...`
+          : `Export complete! Generating CSV file for ${fetchedCount.toLocaleString()} leads...`,
+        isRunning: false,
+        isCancelled: wasCancelled,
+      });
+
+      if (allRows.length > 1) {
+        const todayStr = new Date().toISOString().split("T")[0];
+        const filename = wasCancelled
+          ? `somikoron_crm_leads_partial_${fetchedCount}_${todayStr}.csv`
+          : maxRecords
+          ? `somikoron_crm_leads_top_${fetchedCount}_${todayStr}.csv`
+          : `somikoron_crm_leads_all_${fetchedCount}_${todayStr}.csv`;
+        downloadCsvBlob(allRows.join("\n"), filename);
+      }
+    } catch (err: any) {
+      setExportProgress((prev) => ({
+        ...prev,
+        isRunning: false,
+        statusText: `Interrupted: ${err?.message || "Connection error"}. Saving downloaded leads...`,
+      }));
+
+      if (allRows.length > 1) {
+        const todayStr = new Date().toISOString().split("T")[0];
+        downloadCsvBlob(
+          allRows.join("\n"),
+          `somikoron_crm_leads_recovered_${allRows.length - 1}_${todayStr}.csv`
+        );
+      }
+    }
   };
 
   // Helper for Status Badge Color
@@ -365,16 +519,92 @@ export default function CrmLeadsPage() {
               Sync Now
             </Button>
 
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={handleExportCsv}
-              disabled={filteredLeads.length === 0}
-              className="text-xs h-8 bg-emerald-700 hover:bg-emerald-800 text-white shadow-2xs"
-            >
-              <Download className="w-3.5 h-3.5 mr-1" />
-              Export CSV
-            </Button>
+            {/* Export Dropdown Menu */}
+            <div className="relative">
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setExportMenuOpen(!exportMenuOpen)}
+                disabled={loading || exportProgress.isRunning}
+                className="text-xs h-8 bg-emerald-700 hover:bg-emerald-800 text-white shadow-2xs flex items-center gap-1"
+              >
+                {exportProgress.isRunning ? (
+                  <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                ) : (
+                  <Download className="w-3.5 h-3.5 mr-1" />
+                )}
+                <span>Export CSV</span>
+                <ChevronDown className="w-3 h-3 ml-0.5" />
+              </Button>
+
+              {exportMenuOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-20"
+                    onClick={() => setExportMenuOpen(false)}
+                  />
+                  <div className="absolute right-0 mt-1.5 w-64 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-30 text-xs text-slate-700 animate-in fade-in slide-in-from-top-1 duration-150">
+                    <div className="px-3 py-1 border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Export Options
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExportMenuOpen(false);
+                        handleExportCurrentPage();
+                      }}
+                      className="w-full text-left px-3.5 py-2.5 hover:bg-slate-50 flex items-center justify-between gap-2 transition"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <div>
+                          <p className="font-semibold text-slate-800">Current Page</p>
+                          <p className="text-[10px] text-slate-400">Download visible {filteredLeads.length} leads</p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                        100
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleExportBulk(1000)}
+                      className="w-full text-left px-3.5 py-2.5 hover:bg-slate-50 flex items-center justify-between gap-2 border-t border-slate-100 transition"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Layers className="w-4 h-4 text-indigo-600 shrink-0" />
+                        <div>
+                          <p className="font-semibold text-slate-800">First 1,000 Leads</p>
+                          <p className="text-[10px] text-slate-400">Quick bulk snapshot (2 batches)</p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-mono font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
+                        1,000
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleExportBulk()}
+                      className="w-full text-left px-3.5 py-2.5 hover:bg-slate-50 flex items-center justify-between gap-2 border-t border-slate-100 transition"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Database className="w-4 h-4 text-amber-600 shrink-0" />
+                        <div>
+                          <p className="font-semibold text-slate-800">All CRM Leads</p>
+                          <p className="text-[10px] text-slate-400">Full database batch stream</p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-mono font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                        {recordsTotal ? `${recordsTotal.toLocaleString()}` : "52,482"}
+                      </span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -1101,6 +1331,80 @@ export default function CrmLeadsPage() {
               </div>
             </div>
           )}
+        </Modal>
+
+        {/* Bulk Export Progress Modal */}
+        <Modal
+          isOpen={exportModalOpen}
+          onClose={() => {
+            if (!exportProgress.isRunning) {
+              setExportModalOpen(false);
+            }
+          }}
+          title="Exporting CRM Leads to CSV"
+          description="Downloading leads from Somikoron CRM in safe, optimized batches."
+        >
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
+                <span className="flex items-center gap-1.5">
+                  {exportProgress.isRunning && (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-600 shrink-0" />
+                  )}
+                  <span>{exportProgress.statusText}</span>
+                </span>
+                <span className="font-bold text-indigo-700 font-mono">
+                  {exportProgress.percent}%
+                </span>
+              </div>
+
+              {/* Progress Bar Track */}
+              <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+                <div
+                  className="h-full bg-linear-to-r from-indigo-500 via-sky-500 to-emerald-500 transition-all duration-300 rounded-full"
+                  style={{ width: `${Math.min(100, Math.max(3, exportProgress.percent))}%` }}
+                />
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono">
+                <span>Downloaded: {exportProgress.current.toLocaleString()} leads</span>
+                <span>Total Target: {exportProgress.total.toLocaleString()} leads</span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-600 space-y-1">
+              <p className="font-semibold text-slate-800 flex items-center gap-1">
+                <span>💡 Safe Batch Streaming</span>
+              </p>
+              <p>
+                Leads are queried from Somikoron CRM in chunks of 500 to keep the CRM server stable and fast. You can cancel at any time to immediately download all leads fetched up to that point.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              {exportProgress.isRunning ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    exportCancelledRef.current = true;
+                  }}
+                  className="text-xs text-rose-700 border-rose-300 hover:bg-rose-50"
+                >
+                  Stop & Download {exportProgress.current.toLocaleString()} Leads
+                </Button>
+              ) : (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setExportModalOpen(false)}
+                  className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white"
+                >
+                  Close
+                </Button>
+              )}
+            </div>
+          </div>
         </Modal>
       </div>
     </DashboardLayout>

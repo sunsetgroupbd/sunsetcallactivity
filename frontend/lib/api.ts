@@ -963,11 +963,14 @@ export const api = {
       force_refresh?: boolean;
       query?: string;
       status?: string;
+      page?: number;
+      per_page?: number;
     }): Promise<{
       success: boolean;
       error?: string;
       leads: Array<{
         id: string | number;
+        lead_code?: string;
         name: string;
         phone: string;
         email: string;
@@ -977,14 +980,20 @@ export const api = {
         assigned_to: string;
         created_at: string;
         address?: string;
+        organization?: string;
         profession?: string;
         notes?: string;
+        badge?: string;
+        crm_link?: string;
         raw?: any;
       }>;
       total: number;
       raw_total?: number;
       records_total?: number;
       records_filtered?: number;
+      page?: number;
+      per_page?: number;
+      total_pages?: number;
       from_cache?: boolean;
       fetched_at?: string;
     }> => {
@@ -992,6 +1001,8 @@ export const api = {
       if (params?.force_refresh) q.set("force_refresh", "true");
       if (params?.query) q.set("query", params.query);
       if (params?.status) q.set("status", params.status);
+      if (params?.page) q.set("page", params.page.toString());
+      if (params?.per_page) q.set("per_page", params.per_page.toString());
       const queryStr = q.toString() ? `?${q.toString()}` : "";
       return request(`/crm/leads${queryStr}`);
     },

@@ -46,47 +46,51 @@ async def get_crm_leads(
     force_refresh: bool = Query(False, description="Bypass cache and fetch live from CRM"),
     query: Optional[str] = Query(None, description="Search keyword in leads"),
     status: Optional[str] = Query(None, description="Filter by lead status"),
+    page: int = Query(1, ge=1, description="Page number"),
+    per_page: int = Query(100, ge=10, le=1000, description="Items per page"),
     current_user: User = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """
-    Fetch lead records from Somikoron CRM.
+    Fetch lead records from Somikoron CRM with pagination support.
     Strictly restricted to Admin and Sub-Admin accounts.
     """
+    import math
+
     _require_admin(current_user)
 
+    start = (page - 1) * per_page
     svc = CrmService()
-    result = await svc.fetch_leads(force_refresh=force_refresh)
+    result = await svc.fetch_leads(
+        force_refresh=force_refresh,
+        length=per_page,
+        start=start,
+        search_query=query,
+    )
 
     if not result.get("success", False):
         return result
 
     leads = result.get("leads", [])
 
-    # Optional server-side keyword filtering
-    if query:
-        q = query.strip().lower()
-        leads = [
-            l for l in leads
-            if q in l.get("name", "").lower()
-            or q in l.get("phone", "").lower()
-            or q in l.get("email", "").lower()
-            or q in l.get("project", "").lower()
-            or q in l.get("assigned_to", "").lower()
-            or q in l.get("address", "").lower()
-        ]
-
     # Optional status filtering
     if status and status.lower() != "all":
         st = status.strip().lower()
         leads = [l for l in leads if l.get("status", "").lower() == st]
+
+    rec_total = result.get("records_total")
+    rec_filtered = result.get("records_filtered") or rec_total or len(leads)
+    total_pages = math.ceil(rec_filtered / per_page) if rec_filtered else 1
 
     return {
         "success": True,
         "leads": leads,
         "total": len(leads),
         "raw_total": result.get("total", len(leads)),
-        "records_total": result.get("records_total"),
-        "records_filtered": result.get("records_filtered"),
+        "records_total": rec_total,
+        "records_filtered": rec_filtered,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": total_pages,
         "from_cache": result.get("from_cache", False),
         "fetched_at": result.get("fetched_at"),
     }

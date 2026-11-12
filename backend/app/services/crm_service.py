@@ -205,15 +205,17 @@ class CrmService:
     async def fetch_leads(
         self,
         force_refresh: bool = False,
-        length: Optional[int] = None,
-        start: Optional[int] = None,
+        length: Optional[int] = 100,
+        start: Optional[int] = 0,
+        search_query: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Fetch lead data from Somikoron CRM."""
+        """Fetch lead data from Somikoron CRM with DataTables pagination support."""
         import urllib.parse
         now = time.time()
 
-        # Check in-memory cache if not forcing refresh and no custom pagination
-        if not force_refresh and length is None and start is None and CrmService._cached_leads is not None:
+        # Cache key based on start, length, and search
+        is_default_query = (start == 0 and length == 100 and not search_query)
+        if not force_refresh and is_default_query and CrmService._cached_leads is not None and CrmService._cached_records_total is not None:
             if (now - CrmService._cache_timestamp) < self.CACHE_TTL_SECONDS:
                 return {
                     "success": True,
@@ -221,6 +223,8 @@ class CrmService:
                     "total": len(CrmService._cached_leads),
                     "records_total": CrmService._cached_records_total,
                     "records_filtered": CrmService._cached_records_filtered,
+                    "start": 0,
+                    "length": 100,
                     "from_cache": True,
                     "fetched_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(CrmService._cache_timestamp)),
                 }
@@ -275,12 +279,14 @@ class CrmService:
             elif CrmService._cookies and "XSRF-TOKEN" in CrmService._cookies:
                 req_headers["X-XSRF-TOKEN"] = urllib.parse.unquote(CrmService._cookies["XSRF-TOKEN"])
 
-            # Build query parameters
+            # Build query parameters for DataTables
             query_params: Dict[str, Any] = {}
             if length is not None:
                 query_params["length"] = length
             if start is not None:
                 query_params["start"] = start
+            if search_query:
+                query_params["search[value]"] = search_query
 
             # Fetch the actual lead data endpoint
             try:
@@ -353,8 +359,21 @@ class CrmService:
                 records_total = None
                 records_filtered = None
                 if isinstance(data, dict):
-                    records_total = data.get("recordsTotal") or data.get("total")
-                    records_filtered = data.get("recordsFiltered") or data.get("filtered")
+                    for k in ("recordsTotal", "records_total", "total", "iTotalRecords", "count", "total_records"):
+                        if k in data and data[k] is not None:
+                            try:
+                                records_total = int(data[k])
+                                break
+                            except (ValueError, TypeError):
+                                pass
+
+                    for k in ("recordsFiltered", "records_filtered", "filtered", "iTotalDisplayRecords", "filtered_records"):
+                        if k in data and data[k] is not None:
+                            try:
+                                records_filtered = int(data[k])
+                                break
+                            except (ValueError, TypeError):
+                                pass
 
                 # Standardize leads list from whatever format CRM returned
                 raw_leads = []
@@ -369,10 +388,11 @@ class CrmService:
                     if not raw_leads and "aaData" in data and isinstance(data["aaData"], list):
                         raw_leads = data["aaData"]
 
-                normalized_leads = [self._normalize_lead(lead, idx + 1) for idx, lead in enumerate(raw_leads)]
+                base_index = start or 0
+                normalized_leads = [self._normalize_lead(lead, base_index + idx + 1) for idx, lead in enumerate(raw_leads)]
 
-                # Update in-memory cache if standard request
-                if length is None and start is None:
+                # Update in-memory cache if default query
+                if is_default_query:
                     CrmService._cached_leads = normalized_leads
                     CrmService._cached_records_total = records_total
                     CrmService._cached_records_filtered = records_filtered
@@ -384,6 +404,8 @@ class CrmService:
                     "total": len(normalized_leads),
                     "records_total": records_total,
                     "records_filtered": records_filtered,
+                    "start": start,
+                    "length": length,
                     "from_cache": False,
                     "fetched_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now)),
                 }

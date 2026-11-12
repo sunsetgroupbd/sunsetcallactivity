@@ -24,6 +24,8 @@ import {
   Terminal,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, Button, Modal } from "@/components/ui";
@@ -64,10 +66,13 @@ export default function CrmLeadsPage() {
   const [fromCache, setFromCache] = useState(false);
   const [crmStatus, setCrmStatus] = useState<any>(null);
 
-  // Filters & Search
+  // Filters, Search & Pagination
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [projectFilter, setProjectFilter] = useState("all");
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(100);
+  const [totalPages, setTotalPages] = useState(1);
 
   // Lead Detail Modal
   const [selectedLead, setSelectedLead] = useState<CrmLead | null>(null);
@@ -93,43 +98,61 @@ export default function CrmLeadsPage() {
   };
 
   // Load CRM Status and Leads
-  const loadLeads = useCallback(async (forceRefresh = false) => {
-    try {
-      if (forceRefresh) setRefreshing(true);
-      else setLoading(true);
-      setError(null);
-
-      // Check CRM status first
+  const loadLeads = useCallback(
+    async (
+      forceRefresh = false,
+      targetPage = page,
+      targetPerPage = perPage,
+      targetQuery = searchQuery,
+      targetStatus = statusFilter
+    ) => {
       try {
-        const st = await api.crm.getStatus();
-        setCrmStatus(st);
-      } catch {
-        // ignore
-      }
+        if (forceRefresh) setRefreshing(true);
+        else setLoading(true);
+        setError(null);
 
-      const res = await api.crm.getLeads({ force_refresh: forceRefresh });
+        // Check CRM status first
+        try {
+          const st = await api.crm.getStatus();
+          setCrmStatus(st);
+        } catch {
+          // ignore
+        }
 
-      if (!res.success) {
-        setError(res.error || "Failed to load CRM leads.");
-        setLeads([]);
-      } else {
-        setLeads(res.leads || []);
-        if (res.records_total !== undefined) setRecordsTotal(res.records_total ?? null);
-        if (res.records_filtered !== undefined) setRecordsFiltered(res.records_filtered ?? null);
-        setFetchedAt(res.fetched_at || null);
-        setFromCache(res.from_cache ?? false);
+        const res = await api.crm.getLeads({
+          force_refresh: forceRefresh,
+          page: targetPage,
+          per_page: targetPerPage,
+          query: targetQuery || undefined,
+          status: targetStatus !== "all" ? targetStatus : undefined,
+        });
+
+        if (!res.success) {
+          setError(res.error || "Failed to load CRM leads.");
+          setLeads([]);
+        } else {
+          setLeads(res.leads || []);
+          if (res.records_total !== undefined) setRecordsTotal(res.records_total ?? null);
+          if (res.records_filtered !== undefined) setRecordsFiltered(res.records_filtered ?? null);
+          if (res.page !== undefined) setPage(res.page);
+          if (res.per_page !== undefined) setPerPage(res.per_page);
+          if (res.total_pages !== undefined) setTotalPages(res.total_pages);
+          setFetchedAt(res.fetched_at || null);
+          setFromCache(res.from_cache ?? false);
+        }
+      } catch (err: unknown) {
+        if (err instanceof ApiError) {
+          setError(err.message);
+        } else {
+          setError("Unable to connect to the backend CRM service.");
+        }
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-    } catch (err: unknown) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError("Unable to connect to the backend CRM service.");
-      }
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
+    },
+    [page, perPage, searchQuery, statusFilter]
+  );
 
   useEffect(() => {
     if (authLoading) return;
@@ -779,6 +802,84 @@ export default function CrmLeadsPage() {
               </div>
             ))
           )}
+        </div>
+
+        {/* Pagination Toolbar */}
+        <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600">
+          <div className="flex items-center gap-1.5">
+            <span>
+              Showing{" "}
+              <strong className="text-slate-900 font-bold">
+                {leads.length > 0 ? (page - 1) * perPage + 1 : 0}
+              </strong>{" "}
+              to{" "}
+              <strong className="text-slate-900 font-bold">
+                {Math.min(page * perPage, recordsFiltered || recordsTotal || (page - 1) * perPage + leads.length)}
+              </strong>{" "}
+              of{" "}
+              <strong className="text-indigo-700 font-bold">
+                {(recordsFiltered || recordsTotal || leads.length).toLocaleString()}
+              </strong>{" "}
+              entries
+            </span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <span>Show</span>
+              <select
+                value={perPage}
+                onChange={(e) => {
+                  const newPer = Number(e.target.value);
+                  setPerPage(newPer);
+                  setPage(1);
+                  loadLeads(false, 1, newPer);
+                }}
+                className="border border-slate-200 rounded px-2 py-1 text-xs font-semibold bg-white text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-600"
+              >
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={250}>250</option>
+                <option value={500}>500</option>
+              </select>
+              <span>per page</span>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const newP = Math.max(1, page - 1);
+                  setPage(newP);
+                  loadLeads(false, newP);
+                }}
+                disabled={page <= 1 || loading}
+                className="h-7 w-7 p-0 flex items-center justify-center text-slate-600"
+                title="Previous page"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </Button>
+              <span className="px-2 font-semibold text-slate-700 text-xs">
+                Page {page} of {Math.max(1, totalPages)}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const newP = Math.min(totalPages, page + 1);
+                  setPage(newP);
+                  loadLeads(false, newP);
+                }}
+                disabled={page >= totalPages || loading}
+                className="h-7 w-7 p-0 flex items-center justify-center text-slate-600"
+                title="Next page"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          </div>
         </div>
 
         {/* Lead Detail Modal */}

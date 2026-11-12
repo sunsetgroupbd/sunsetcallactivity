@@ -451,9 +451,26 @@ export default function CrmLeadsPage() {
                             {st.inputs_found && st.inputs_found.length > 0 && (
                               <div className="text-slate-400 text-[10px]">Inputs Found: {st.inputs_found.join(", ")}</div>
                             )}
-                            {st.recordsTotal !== undefined && st.recordsTotal !== null && (
-                              <div className="text-emerald-300 font-bold text-[10px]">
-                                recordsTotal: {st.recordsTotal} | recordsFiltered: {st.recordsFiltered} | returned: {st.data_returned_count}
+                            {st.results && (
+                              <div className="space-y-1 pt-1">
+                                <div className="text-amber-300 font-bold text-[10px]">Parameter Discovery Tests:</div>
+                                {st.results.map((r: any, rIdx: number) => (
+                                  <div key={rIdx} className="text-[10px] bg-slate-900/60 p-1.5 rounded flex items-center justify-between">
+                                    <span className="text-slate-300">{r.test}:</span>
+                                    {r.recordsFiltered ? (
+                                      <span className="text-emerald-400 font-bold">
+                                        Total: {r.recordsTotal} | Filtered: {r.recordsFiltered} | Items: {r.returned}
+                                      </span>
+                                    ) : (
+                                      <span className="text-rose-400">{r.error || "0 returned"}</span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {st.script_datatable_urls && st.script_datatable_urls.length > 0 && (
+                              <div className="text-indigo-300 text-[10px] break-all">
+                                Scripts DataTables URLs: {st.script_datatable_urls.join(", ")}
                               </div>
                             )}
                             {st.detected_ajax_urls && st.detected_ajax_urls.length > 0 && (

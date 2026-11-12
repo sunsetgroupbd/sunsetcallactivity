@@ -574,27 +574,50 @@ class CrmService:
                     "fallback_snippet": fallback_snippet,
                 })
 
-                # Probe 4: Pagination & Parameter test (length=500)
-                try:
-                    probe_resp = await client.get(
-                        self.leads_url,
-                        headers=req_headers,
-                        params={"start": 0, "length": 500},
-                    )
-                    if probe_resp.status_code == 200:
-                        pj = probe_resp.json()
-                        diagnostics["steps"].append({
-                            "step": "4. DataTables Pagination Probe (?length=500)",
-                            "status_code": probe_resp.status_code,
-                            "recordsTotal": pj.get("recordsTotal") if isinstance(pj, dict) else None,
-                            "recordsFiltered": pj.get("recordsFiltered") if isinstance(pj, dict) else None,
-                            "data_returned_count": len(pj.get("data", [])) if isinstance(pj, dict) and isinstance(pj.get("data"), list) else None,
-                        })
-                except Exception as ex_probe:
-                    diagnostics["steps"].append({
-                        "step": "4. DataTables Pagination Probe (?length=500)",
-                        "error": str(ex_probe),
-                    })
+                # Probe 4: Automated Parameter Discovery on lead_data
+                probe_variants = [
+                    {"label": "Standard (start=0, length=100)", "params": {"start": 0, "length": 100}},
+                    {"label": "Filter: status=all", "params": {"start": 0, "length": 100, "status": "all"}},
+                    {"label": "Filter: lead_type=all", "params": {"start": 0, "length": 100, "lead_type": "all"}},
+                    {"label": "Filter: type=all", "params": {"start": 0, "length": 100, "type": "all"}},
+                    {"label": "Filter: account_id=all", "params": {"start": 0, "length": 100, "account_id": "all"}},
+                    {"label": "Filter: from_date/to_date (All Time)", "params": {"start": 0, "length": 100, "from_date": "2020-01-01", "to_date": "2030-12-31"}},
+                    {"label": "Filter: date_from/date_to (All Time)", "params": {"start": 0, "length": 100, "date_from": "2020-01-01", "date_to": "2030-12-31"}},
+                ]
+
+                probe_results = []
+                discovered_all_leads_params = None
+                for pv in probe_variants:
+                    try:
+                        p_resp = await client.get(
+                            f"{self.base_url}/crm-module/lead_data",
+                            headers=req_headers,
+                            params=pv["params"],
+                            timeout=10.0,
+                        )
+                        if p_resp.status_code == 200:
+                            pj = p_resp.json()
+                            if isinstance(pj, dict):
+                                rt = pj.get("recordsTotal") or pj.get("total")
+                                rf = pj.get("recordsFiltered") or pj.get("filtered")
+                                cnt = len(pj.get("data", [])) if isinstance(pj.get("data"), list) else 0
+                                probe_results.append({
+                                    "test": pv["label"],
+                                    "recordsTotal": rt,
+                                    "recordsFiltered": rf,
+                                    "returned": cnt,
+                                })
+                                # If any filter yields 50k+ records
+                                if (rt and int(rt) > 1000) or (rf and int(rf) > 1000):
+                                    discovered_all_leads_params = pv["params"]
+                    except Exception as e_pv:
+                        probe_results.append({"test": pv["label"], "error": str(e_pv)})
+
+                diagnostics["steps"].append({
+                    "step": "4. Parameter Discovery on lead_data",
+                    "results": probe_results,
+                    "discovered_working_params": discovered_all_leads_params,
+                })
 
                 # Probe 5: Inspect add-lead-account URL
                 try:
@@ -610,11 +633,19 @@ class CrmService:
                     )
 
                     ajax_endpoints = []
+                    dt_urls = []
                     if h_resp.status_code == 200:
                         html_content = h_resp.text
                         ajax_matches = re.findall(r'ajax\s*:\s*(?:{\s*url\s*:\s*)?["\']([^"\']+)["\']', html_content, re.I)
                         crm_urls = re.findall(r'["\'](/crm-module/[^"\']+)["\']', html_content, re.I)
                         ajax_endpoints = list(set([u for u in (ajax_matches + crm_urls) if "logout" not in u and "login" not in u]))
+
+                        # Extract script URLs
+                        scripts = re.findall(r'<script[^>]*>([\s\S]*?)</script>', html_content, re.I)
+                        for scr in scripts:
+                            if "datatable" in scr.lower() or "ajax" in scr.lower() or "lead" in scr.lower():
+                                u_m = re.findall(r'(?:url|ajax)\s*:\s*["\']([^"\']+)["\']', scr, re.I)
+                                dt_urls.extend(u_m)
 
                     # Second GET as AJAX (JSON DataTables)
                     a_resp = await client.get(
@@ -638,11 +669,11 @@ class CrmService:
                         "url": target_url,
                         "html_status": h_resp.status_code,
                         "detected_ajax_urls": ajax_endpoints[:10],
+                        "script_datatable_urls": list(set(dt_urls)),
                         "ajax_status": a_resp.status_code,
-                        "ajax_content_type": a_resp.headers.get("content-type"),
                         "ajax_recordsTotal": a_total,
                         "ajax_data_count": a_count,
-                        "ajax_snippet": a_resp.text[:250].strip(),
+                        "ajax_snippet": a_resp.text[:200].strip(),
                     })
                 except Exception as e_add:
                     diagnostics["steps"].append({

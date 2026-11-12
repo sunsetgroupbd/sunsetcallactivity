@@ -33,6 +33,7 @@ import { cn } from "@/lib/utils";
 
 interface CrmLead {
   id: string | number;
+  lead_code?: string;
   name: string;
   phone: string;
   email: string;
@@ -42,8 +43,11 @@ interface CrmLead {
   assigned_to: string;
   created_at: string;
   address?: string;
+  organization?: string;
   profession?: string;
   notes?: string;
+  badge?: string;
+  crm_link?: string;
   raw?: Record<string, any>;
 }
 
@@ -585,12 +589,22 @@ export default function CrmLeadsPage() {
 
                       {/* Customer Name */}
                       <td className="py-3 px-3">
-                        <div className="font-bold text-slate-900">{lead.name}</div>
-                        {lead.email && lead.email !== "—" && (
-                          <div className="text-[10px] text-slate-400 truncate max-w-[160px]">
-                            {lead.email}
-                          </div>
-                        )}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-bold text-slate-900">{lead.name}</span>
+                          {lead.badge && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                              {lead.badge}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
+                          {lead.lead_code && (
+                            <span className="font-mono text-slate-500 font-semibold">{lead.lead_code}</span>
+                          )}
+                          {lead.email && lead.email !== "—" && (
+                            <span className="truncate max-w-[150px]">{lead.email}</span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Phone */}
@@ -649,17 +663,31 @@ export default function CrmLeadsPage() {
 
                       {/* View Action */}
                       <td className="py-3 px-3 text-center">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedLead(lead);
-                          }}
-                          className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
-                          title="View lead details"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedLead(lead);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+                            title="View lead details"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          {lead.crm_link && (
+                            <a
+                              href={lead.crm_link}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+                              title="Open in Somikoron CRM"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -689,7 +717,17 @@ export default function CrmLeadsPage() {
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <h4 className="text-xs font-bold text-slate-900 truncate">{lead.name}</h4>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <h4 className="text-xs font-bold text-slate-900 truncate">{lead.name}</h4>
+                      {lead.badge && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          {lead.badge}
+                        </span>
+                      )}
+                    </div>
+                    {lead.lead_code && (
+                      <p className="text-[10px] font-mono text-slate-500 font-semibold">{lead.lead_code}</p>
+                    )}
                     {lead.project && lead.project !== "—" && (
                       <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5 truncate">
                         <Building className="w-3 h-3 text-slate-400 shrink-0" />
@@ -735,7 +773,11 @@ export default function CrmLeadsPage() {
           isOpen={!!selectedLead}
           onClose={() => setSelectedLead(null)}
           title={selectedLead?.name || "Lead Details"}
-          description={`ID: #${selectedLead?.id} • CRM Record Details`}
+          description={
+            selectedLead?.lead_code
+              ? `ID: ${selectedLead.lead_code} • Somikoron CRM Record`
+              : `ID: #${selectedLead?.id} • Somikoron CRM Record`
+          }
         >
           {selectedLead && (
             <div className="space-y-4 text-xs">
@@ -848,7 +890,20 @@ export default function CrmLeadsPage() {
                 </div>
               )}
 
-              <div className="pt-2 flex justify-end">
+              <div className="pt-2 flex items-center justify-between gap-2">
+                {selectedLead.crm_link ? (
+                  <a
+                    href={selectedLead.crm_link}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition"
+                  >
+                    <span>Open in Somikoron CRM</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                ) : (
+                  <div />
+                )}
                 <Button
                   type="button"
                   variant="outline"

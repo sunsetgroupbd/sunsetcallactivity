@@ -475,8 +475,35 @@ class CrmService:
         return diagnostics
 
     def _normalize_lead(self, raw: Any, index: int) -> Dict[str, Any]:
-        """Normalize a CRM lead record into standardized fields."""
-        if not isinstance(raw, dict):
+        """
+        Normalize a CRM lead record into standardized fields.
+        Extracts structured data from HTML cells (e.g. Laravel DataTables lead-info markup).
+        """
+        import html as html_lib
+
+        def strip_html(text: Any) -> str:
+            if text is None:
+                return ""
+            s = str(text)
+            # Replace breaks/divs with space
+            s = re.sub(r'<(?:br|div|p|tr|td)[^>]*>', ' ', s, flags=re.I)
+            # Remove tags
+            s = re.sub(r'<[^>]+>', '', s)
+            # Unescape entities
+            s = html_lib.unescape(s)
+            # Normalize whitespace
+            s = re.sub(r'\s+', ' ', s).strip()
+            return s
+
+        # If raw is a list/tuple (DataTables array format)
+        if isinstance(raw, (list, tuple)):
+            dict_val: Dict[str, Any] = {}
+            col_map = ["id", "name", "phone", "project", "status", "source", "assigned_to", "created_at", "action"]
+            for i, val in enumerate(raw):
+                key = col_map[i] if i < len(col_map) else f"col_{i}"
+                dict_val[key] = val
+            raw = dict_val
+        elif not isinstance(raw, dict):
             return {"id": index, "name": str(raw), "raw": raw}
 
         def pick(*keys: str) -> Optional[str]:
@@ -487,31 +514,143 @@ class CrmService:
                         return val
             return None
 
-        lead_id = pick("id", "lead_id", "leadId", "sl", "code") or str(index)
-        name = pick("name", "client_name", "customer_name", "full_name", "lead_name") or "Unnamed Lead"
-        phone = pick("phone", "mobile", "contact", "phone_number", "contact_no", "cell") or "—"
-        email = pick("email", "email_address") or "—"
-        project = pick("project", "project_name", "property", "interested_project", "product") or "—"
-        status = pick("status", "lead_status", "stage", "category", "lead_type") or "New"
-        source = pick("source", "lead_source", "media", "campaign", "channel") or "—"
-        assigned = pick("assigned_to", "executive", "employee", "agent", "handler", "assigned_person") or "Unassigned"
-        created_at = pick("created_at", "entry_date", "date", "created_date", "lead_date") or "—"
-        address = pick("address", "location", "city", "area") or "—"
-        profession = pick("profession", "occupation", "designation") or "—"
-        notes = pick("remarks", "notes", "description", "comment", "feedback") or "—"
+        # Check if any field contains the rich HTML lead-info block
+        html_blob = ""
+        for v in raw.values():
+            if isinstance(v, str) and ("lead-info" in v or "lead-field" in v or "lead-details" in v):
+                html_blob = v
+                break
+
+        embedded: Dict[str, str] = {}
+        crm_link = None
+        badge = None
+
+        if html_blob:
+            # Extract CRM details URL
+            href_m = re.search(r'href=["\']([^"\']+)["\']', html_blob, re.I)
+            if href_m:
+                crm_link = href_m.group(1).strip()
+
+            # Extract badge (e.g. "New Assignment")
+            badge_m = re.search(r'<span[^>]*>(.*?)</span>', html_blob, re.I | re.S)
+            if badge_m:
+                b_text = strip_html(badge_m.group(1))
+                if b_text:
+                    badge = b_text
+
+            # Extract all <div class="lead-field">Key: Value</div>
+            field_matches = re.findall(r'<div[^>]*class=["\'][^"\']*lead-field[^"\']*["\'][^>]*>(.*?)</div>', html_blob, re.I | re.S)
+            for fm in field_matches:
+                clean_fm = strip_html(fm)
+                if ":" in clean_fm:
+                    k, val = clean_fm.split(":", 1)
+                    embedded[k.strip().lower()] = val.strip()
+
+        # Resolve Clean Name
+        raw_name = pick("name", "client_name", "customer_name", "full_name", "lead_name")
+        clean_name = embedded.get("name")
+        if not clean_name and raw_name:
+            clean_name = strip_html(raw_name)
+            # If strip_html left "Name: XYZ" or "ID: XYZ"
+            if clean_name.lower().startswith("name:"):
+                clean_name = clean_name[5:].strip()
+        if not clean_name or clean_name in ("—", "-"):
+            clean_name = f"Lead #{index}"
+
+        # Resolve ID and Lead Code
+        embedded_id = embedded.get("id")
+        raw_id = pick("id", "lead_id", "leadId", "sl", "code")
+        if raw_id:
+            raw_id = strip_html(raw_id)
+        lead_id = raw_id or str(index)
+        lead_code = embedded_id or (lead_id if lead_id != str(index) else None)
+
+        # Resolve Phone
+        raw_phone = pick("phone", "mobile", "contact", "phone_number", "contact_no", "cell")
+        phone = strip_html(raw_phone) if raw_phone else "—"
+
+        # Resolve Email and Designation
+        raw_email = pick("email", "email_address")
+        clean_email = strip_html(raw_email) if raw_email else ""
+        designation = embedded.get("designation", "")
+        organization = embedded.get("organization", "")
+        if not clean_email or clean_email in ("—", "-"):
+            if "@" in designation:
+                clean_email = designation
+                designation = ""
+            elif "@" in organization:
+                clean_email = organization
+                organization = ""
+            else:
+                clean_email = "—"
+
+        # Resolve Address & Location
+        raw_address = pick("address", "location", "city", "area")
+        clean_address = strip_html(raw_address) if raw_address else ""
+        emb_address = embedded.get("address", "")
+        if emb_address:
+            if clean_address and clean_address not in ("—", "-") and clean_address != emb_address:
+                clean_address = f"{emb_address}, {clean_address}"
+            else:
+                clean_address = emb_address
+        if organization and organization != clean_address:
+            if clean_address and clean_address not in ("—", "-"):
+                clean_address = f"{clean_address} ({organization})"
+            else:
+                clean_address = organization
+        if not clean_address:
+            clean_address = "—"
+
+        # Resolve Source
+        raw_source = pick("source", "lead_source", "media", "campaign", "channel")
+        clean_source = strip_html(raw_source) if raw_source else ""
+        if not clean_source or clean_source in ("—", "-"):
+            clean_source = embedded.get("source", "—")
+
+        # Resolve Status
+        raw_status = pick("status", "lead_status", "stage", "category", "lead_type")
+        clean_status = strip_html(raw_status) if raw_status else "Active"
+        if not clean_status or clean_status in ("—", "-"):
+            clean_status = "Active"
+
+        # Resolve Project
+        raw_project = pick("project", "project_name", "property", "interested_project", "product")
+        clean_project = strip_html(raw_project) if raw_project else "—"
+
+        # Resolve Assigned To
+        raw_assigned = pick("assigned_to", "executive", "employee", "agent", "handler", "assigned_person")
+        clean_assigned = strip_html(raw_assigned) if raw_assigned else "Unassigned"
+        if not clean_assigned or clean_assigned in ("—", "-"):
+            clean_assigned = "Unassigned"
+
+        # Resolve Created At
+        raw_created = pick("created_at", "entry_date", "date", "created_date", "lead_date")
+        clean_created = strip_html(raw_created) if raw_created else "—"
+
+        # Profession
+        raw_prof = pick("profession", "occupation")
+        profession = strip_html(raw_prof) if raw_prof else designation or "—"
+
+        # Notes
+        raw_notes = pick("remarks", "notes", "description", "comment", "feedback")
+        notes = strip_html(raw_notes) if raw_notes else "—"
 
         return {
             "id": lead_id,
-            "name": name,
+            "lead_code": lead_code,
+            "name": clean_name,
             "phone": phone,
-            "email": email,
-            "project": project,
-            "status": status,
-            "source": source,
-            "assigned_to": assigned,
-            "created_at": created_at,
-            "address": address,
+            "email": clean_email,
+            "project": clean_project,
+            "status": clean_status,
+            "source": clean_source,
+            "assigned_to": clean_assigned,
+            "created_at": clean_created,
+            "address": clean_address,
+            "organization": organization or None,
             "profession": profession,
             "notes": notes,
+            "badge": badge,
+            "crm_link": crm_link,
             "raw": raw,
         }

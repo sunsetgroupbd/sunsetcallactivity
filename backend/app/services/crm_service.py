@@ -29,14 +29,22 @@ class CrmService:
     SESSION_TTL_SECONDS = 3600  # 1 hour session cookie validity
 
     def __init__(self) -> None:
-        self.base_url = settings.CRM_BASE_URL.rstrip("/")
-        self.login_url = settings.CRM_LOGIN_URL or f"{self.base_url}/login"
-        self.leads_url = settings.CRM_LEADS_URL or f"{self.base_url}/crm-module/lead_data"
-        self.username = settings.CRM_USERNAME
-        self.password = settings.CRM_PASSWORD
-        self.auth_token = settings.CRM_AUTH_TOKEN
-        self.user_field = settings.CRM_USERNAME_FIELD or "email"
-        self.pass_field = settings.CRM_PASSWORD_FIELD or "password"
+        import os
+        from pathlib import Path
+        from dotenv import dotenv_values
+
+        # Dynamically load backend/.env on every request so changes take effect immediately
+        env_path = Path(__file__).resolve().parent.parent.parent / ".env"
+        env_vals = dotenv_values(str(env_path)) if env_path.exists() else {}
+
+        self.base_url = (env_vals.get("CRM_BASE_URL") or os.getenv("CRM_BASE_URL") or settings.CRM_BASE_URL).rstrip("/")
+        self.login_url = env_vals.get("CRM_LOGIN_URL") or os.getenv("CRM_LOGIN_URL") or settings.CRM_LOGIN_URL or f"{self.base_url}/login"
+        self.leads_url = env_vals.get("CRM_LEADS_URL") or os.getenv("CRM_LEADS_URL") or settings.CRM_LEADS_URL or f"{self.base_url}/crm-module/lead_data"
+        self.username = env_vals.get("CRM_USERNAME") or os.getenv("CRM_USERNAME") or settings.CRM_USERNAME
+        self.password = env_vals.get("CRM_PASSWORD") or os.getenv("CRM_PASSWORD") or settings.CRM_PASSWORD
+        self.auth_token = env_vals.get("CRM_AUTH_TOKEN") or os.getenv("CRM_AUTH_TOKEN") or settings.CRM_AUTH_TOKEN
+        self.user_field = env_vals.get("CRM_USERNAME_FIELD") or os.getenv("CRM_USERNAME_FIELD") or settings.CRM_USERNAME_FIELD or "email"
+        self.pass_field = env_vals.get("CRM_PASSWORD_FIELD") or os.getenv("CRM_PASSWORD_FIELD") or settings.CRM_PASSWORD_FIELD or "password"
 
     def is_configured(self) -> bool:
         """Check if CRM credentials or tokens are provided in settings."""
@@ -346,14 +354,42 @@ class CrmService:
                 try:
                     data = resp.json()
                 except Exception:
-                    snippet = resp.text[:400].strip()
-                    return {
-                        "success": False,
-                        "error": "CRM endpoint did not return valid JSON. (It may have returned an HTML login or error page).",
-                        "leads": [],
-                        "total": 0,
-                        "raw_snippet": snippet,
-                    }
+                    # If HTML page was returned (e.g. user pointed to an HTML view like add-lead-account),
+                    # attempt to auto-detect the real DataTables AJAX endpoint from the HTML script!
+                    html_text = resp.text
+                    ajax_m = re.search(r'ajax\s*:\s*(?:{\s*url\s*:\s*)?["\']([^"\']+)["\']', html_text, re.I)
+                    detected_url = None
+                    if ajax_m and ajax_m.group(1).strip():
+                        detected_url = urllib.parse.urljoin(str(resp.url), ajax_m.group(1).strip())
+                    else:
+                        crm_matches = re.findall(r'["\'](/crm-module/[^"\']+)["\']', html_text, re.I)
+                        clean_crm = [m for m in crm_matches if "logout" not in m and "login" not in m and "add-lead-account" not in m]
+                        if clean_crm:
+                            detected_url = urllib.parse.urljoin(str(resp.url), clean_crm[0])
+
+                    if detected_url and detected_url != str(resp.url):
+                        logger.info("Auto-detected DataTables AJAX endpoint from HTML page: %s", detected_url)
+                        resp = await client.get(detected_url, headers=req_headers, params=query_params or None)
+                        try:
+                            data = resp.json()
+                        except Exception:
+                            snippet = resp.text[:400].strip()
+                            return {
+                                "success": False,
+                                "error": f"Detected CRM AJAX URL ({detected_url}) returned non-JSON response.",
+                                "leads": [],
+                                "total": 0,
+                                "raw_snippet": snippet,
+                            }
+                    else:
+                        snippet = resp.text[:400].strip()
+                        return {
+                            "success": False,
+                            "error": f"CRM endpoint ({self.leads_url}) returned an HTML page rather than JSON, and no AJAX endpoint was detected.",
+                            "leads": [],
+                            "total": 0,
+                            "raw_snippet": snippet,
+                        }
 
                 # Extract recordsTotal and recordsFiltered from DataTables response
                 records_total = None

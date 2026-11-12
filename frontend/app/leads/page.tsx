@@ -674,7 +674,7 @@ export default function CrmLeadsPage() {
                       onClick={() => setSelectedLead(lead)}
                     >
                       <td className="py-3 px-3 text-center text-slate-400 font-mono text-[11px]">
-                        {idx + 1}
+                        {(page - 1) * perPage + idx + 1}
                       </td>
 
                       {/* Customer Name */}
@@ -808,6 +808,9 @@ export default function CrmLeadsPage() {
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                        #{(page - 1) * perPage + idx + 1}
+                      </span>
                       <h4 className="text-xs font-bold text-slate-900 truncate">{lead.name}</h4>
                       {lead.badge && (
                         <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
@@ -915,9 +918,24 @@ export default function CrmLeadsPage() {
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
               </Button>
-              <span className="px-2 font-semibold text-slate-700 text-xs">
-                Page {page} of {Math.max(1, totalPages)}
-              </span>
+              <div className="flex items-center gap-1 px-1 font-semibold text-slate-700 text-xs">
+                <span>Page</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={Math.max(1, totalPages)}
+                  value={page}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    if (val >= 1 && val <= totalPages) {
+                      setPage(val);
+                      loadLeads(false, val);
+                    }
+                  }}
+                  className="w-12 text-center py-0.5 border border-slate-200 rounded font-bold text-indigo-700 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600"
+                />
+                <span>of {Math.max(1, totalPages)}</span>
+              </div>
               <Button
                 variant="outline"
                 size="sm"

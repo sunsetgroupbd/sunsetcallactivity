@@ -1,7 +1,6 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
 import { Download, Share, PlusSquare, X, CheckCircle, Smartphone } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -26,8 +25,7 @@ const PwaContext = createContext<PwaContextType>({
 export const usePwa = () => useContext(PwaContext);
 
 export function PwaProvider({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const isLoginPage = pathname === "/login";
+  const [isLoginPage, setIsLoginPage] = useState<boolean>(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isInstalled, setIsInstalled] = useState<boolean>(false);
   const [canInstall, setCanInstall] = useState<boolean>(false);
@@ -36,6 +34,14 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
   const [bannerDismissed, setBannerDismissed] = useState<boolean>(false);
 
   useEffect(() => {
+    // Detect login page without blocking prerender hooks
+    const checkLogin = () => {
+      if (typeof window !== "undefined") {
+        setIsLoginPage(window.location.pathname === "/login");
+      }
+    };
+    checkLogin();
+    window.addEventListener("popstate", checkLogin);
     // 1. Register Service Worker
     if (typeof window !== "undefined" && "serviceWorker" in navigator) {
       window.addEventListener("load", () => {
@@ -103,6 +109,7 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
     }
 
     return () => {
+      window.removeEventListener("popstate", checkLogin);
       window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
       window.removeEventListener("appinstalled", handleAppInstalled);
     };

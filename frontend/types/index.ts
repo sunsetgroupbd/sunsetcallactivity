@@ -766,5 +766,241 @@ export interface CustomerDetailResponse {
   transactions: CustomerTransactionItem[];
 }
 
+// ─── Monthly Executive Scorecard Types ───────────────────────────────────────
+export interface ScorecardPeriodRow {
+  row_type: "previous_month" | "checkpoint";
+  label: string;
+  end_day?: number | null;
+  tg_sales: number;
+  new_sales: number;
+  tb: number;
+  emi: number;
+  total_collection: number;
+  total_lead: number;
+  current_fair_lead: number;
+  current_fb_lead: number;
+  hp: number;
+  p: number;
+  fup: number;
+  total_fair_lead: number;
+  total_fb_lead: number;
+  total_calls_dialed: number;
+  hold_amount: number;
+  cancel_amount: number;
+  in_done: number;
+  out_done: number;
+  sold_fair: number;
+  sold_fb: number;
+  sold_other: number;
+  sheet_score?: number | null;
+  call_score?: number | null;
+  marking?: number | null;
+  planned_leave: number;
+  unauthorized_leave: number;
+  prediction_amount: number;
+}
+
+export interface ScorecardCustomer {
+  id: number;
+  scorecard_id: number;
+  commitment_entry_id?: number | null;
+  customer_name: string;
+  paid_amount: number;
+  unpaid_amount: number;
+  collection_date?: string | null;
+  next_collection_date?: string | null;
+  next_collection_date_2?: string | null;
+  in_out_plan: string;
+  date_1?: string | null;
+  date_2?: string | null;
+  new_sales_amount: number;
+  tb_amount: number;
+  emi_amount: number;
+  total_collection: number;
+  new_lead_status: string;
+  collection_probability: number;
+  remarks?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScorecardHeader {
+  employee_id: number;
+  employee_formatted_id: string;
+  employee_name: string;
+  position?: string | null;
+  tl_name?: string | null;
+  co_name?: string | null;
+  team_name?: string | null;
+  month: string;
+}
+
+export interface PortfolioSnapshot {
+  emi_due_monthly: number;
+  emi_client_count: number;
+  emi_hold_count: number;
+  emi_cancel_count: number;
+  tb_due_amount: number;
+  tb_client_count: number;
+  tb_share_count: number;
+  tb_hold_count: number;
+  tb_cancel_count: number;
+}
+
+export interface MonthlyScorecardResponse {
+  id: number;
+  header: ScorecardHeader;
+  status: "draft" | "closed";
+  closed_at?: string | null;
+  closed_by_name?: string | null;
+  prediction_amount: number;
+  planned_leave: number;
+  unauthorized_leave: number;
+  sheet_score?: number | null;
+  call_score?: number | null;
+  marking?: number | null;
+  supervisor_notes?: string | null;
+  portfolio: PortfolioSnapshot;
+  periods: ScorecardPeriodRow[];
+  customers: ScorecardCustomer[];
+  can_edit_marking: boolean;
+  can_close: boolean;
+}
+
+export interface MonthlyScorecardUpdateRequest {
+  prediction_amount?: number;
+  planned_leave?: number;
+  unauthorized_leave?: number;
+  emi_due_monthly?: number;
+  emi_client_count?: number;
+  emi_hold_count?: number;
+  emi_cancel_count?: number;
+  tb_due_amount?: number;
+  tb_client_count?: number;
+  tb_share_count?: number;
+  tb_hold_count?: number;
+  tb_cancel_count?: number;
+  sheet_score?: number | null;
+  call_score?: number | null;
+  marking?: number | null;
+  supervisor_notes?: string | null;
+}
+
+export interface ScorecardCustomerCreateRequest {
+  customer_name: string;
+  paid_amount?: number;
+  unpaid_amount?: number;
+  collection_date?: string | null;
+  next_collection_date?: string | null;
+  next_collection_date_2?: string | null;
+  in_out_plan?: string;
+  date_1?: string | null;
+  date_2?: string | null;
+  new_sales_amount?: number;
+  tb_amount?: number;
+  emi_amount?: number;
+  new_lead_status?: string;
+  collection_probability?: number;
+  remarks?: string | null;
+  commitment_entry_id?: number | null;
+}
+
+export interface ScorecardCustomerUpdateRequest {
+  customer_name?: string;
+  paid_amount?: number;
+  unpaid_amount?: number;
+  collection_date?: string | null;
+  next_collection_date?: string | null;
+  next_collection_date_2?: string | null;
+  in_out_plan?: string;
+  date_1?: string | null;
+  date_2?: string | null;
+  new_sales_amount?: number;
+  tb_amount?: number;
+  emi_amount?: number;
+  new_lead_status?: string;
+  collection_probability?: number;
+  remarks?: string | null;
+  commitment_entry_id?: number | null;
+}
+
+export interface ScorecardTeamItem {
+  employee_id: number;
+  employee_formatted_id: string;
+  employee_name: string;
+  position?: string | null;
+  team_name?: string | null;
+  tl_name?: string | null;
+  co_name?: string | null;
+  status: string;
+  target_sales: number;
+  actual_new_sales: number;
+  actual_tb: number;
+  actual_emi: number;
+  total_collection: number;
+  total_calls: number;
+  marking?: number | null;
+  prediction_amount: number;
+  customer_plan_count: number;
+  customer_plan_expected_total: number;
+}
+
+export interface ScorecardTeamRollupResponse {
+  month: string;
+  total_executives: number;
+  total_target: number;
+  total_new_sales: number;
+  total_tb: number;
+  total_emi: number;
+  total_collection: number;
+  items: ScorecardTeamItem[];
+}
+
+export interface SqlQueryResult {
+  statement: string;
+  is_select: boolean;
+  columns: string[];
+  rows: (string | number | boolean | null)[][];
+  rows_count: number;
+  rows_affected: number;
+  message: string;
+}
+
+export interface SqlQueryExecuteResponse {
+  success: boolean;
+  execution_time_ms: number;
+  results: SqlQueryResult[];
+  error?: string | null;
+}
+
+export interface TableColumnInfo {
+  name: string;
+  type: string;
+  primary_key: boolean;
+  nullable: boolean;
+}
+
+export interface TableSchemaInfo {
+  name: string;
+  row_count: number;
+  columns: TableColumnInfo[];
+}
+
+export interface DatabaseSchemaResponse {
+  database_type: string;
+  tables: TableSchemaInfo[];
+}
+
+export interface SqlImportResponse {
+  success: boolean;
+  message: string;
+  statements_executed: number;
+  tables_imported: { table: string; rows: number }[];
+  execution_time_ms: number;
+  errors: string[];
+}
+
+
+
 
 

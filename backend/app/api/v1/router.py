@@ -15,6 +15,8 @@ from app.api.v1.endpoints import (
     reminders,
     notices,
     teams,
+    scorecard,
+    sql_console,
 )
 
 api_router = APIRouter()
@@ -30,3 +32,5 @@ api_router.include_router(settings.router)
 api_router.include_router(reminders.router)
 api_router.include_router(notices.router)
 api_router.include_router(teams.router)
+api_router.include_router(scorecard.router)
+api_router.include_router(sql_console.router)

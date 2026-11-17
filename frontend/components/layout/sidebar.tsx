@@ -11,9 +11,11 @@ import {
   Banknote,
   FileSpreadsheet,
   Target,
+  Award,
   UserCheck,
   Network,
   Settings,
+  Database,
   X,
   BellRing,
   LogOut,
@@ -47,6 +49,7 @@ export function Sidebar({
     { name: "Daily Call Activity", href: "/calls", icon: PhoneCall },
     { name: "Meeting Activity", href: "/meetings", icon: Users },
     { name: "Sales & Collection", href: "/sales", icon: Banknote },
+    { name: "Monthly Scorecard", href: "/scorecard", icon: Award },
     { name: "Reports", href: "/reports", icon: FileSpreadsheet },
     { name: "Notice Board", href: "/notices", icon: BellRing },
     ...(isAdmin || isSubAdmin
@@ -55,6 +58,7 @@ export function Sidebar({
           { name: "Executive Collection", href: "/reports/executive-collection", icon: FileSpreadsheet },
           { name: "Employees", href: "/employees", icon: UserCheck },
           { name: "Group & Team Hierarchy", href: "/teams", icon: Network },
+          { name: "SQL Console & Import", href: "/admin/sql-console", icon: Database },
           { name: "Settings", href: "/settings", icon: Settings },
         ]
       : []),

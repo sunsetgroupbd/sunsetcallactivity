@@ -11,6 +11,7 @@ from app.models.settings import AppSettings
 from app.models.notice import Notice, NoticeType, NoticeStatus, NoticePriority
 from app.models.milestone_checkpoint import MilestoneCheckpoint
 from app.models.team import Team
+from app.models.scorecard import MonthlyScorecard, ScorecardCustomer, ScorecardStatus
 
 __all__ = [
     "User",
@@ -28,4 +29,7 @@ __all__ = [
     "NoticePriority",
     "MilestoneCheckpoint",
     "Team",
+    "MonthlyScorecard",
+    "ScorecardCustomer",
+    "ScorecardStatus",
 ]

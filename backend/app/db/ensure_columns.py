@@ -21,6 +21,7 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
                     ("commitment_percentage", "INTEGER"),
                     ("reschedule_count", "INTEGER NOT NULL DEFAULT 0"),
                     ("reschedule_history", "JSON"),
+                    ("lead_source", "VARCHAR(50)"),
                 ]:
                     if col_name not in existing_cols:
                         try:
@@ -171,6 +172,7 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
             "ALTER TABLE sales_collection_entries ADD COLUMN IF NOT EXISTS commitment_percentage INTEGER",
             "ALTER TABLE sales_collection_entries ADD COLUMN IF NOT EXISTS reschedule_count INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE sales_collection_entries ADD COLUMN IF NOT EXISTS reschedule_history JSONB",
+            "ALTER TABLE sales_collection_entries ADD COLUMN IF NOT EXISTS lead_source VARCHAR(50)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS designation VARCHAR(150)",
             """

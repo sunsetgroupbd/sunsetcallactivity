@@ -64,6 +64,9 @@ class SalesCollectionEntry(Base):
     payment_method: Mapped[str | None] = mapped_column(String(50), nullable=True)
     reference: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
+    # Lead source origin: fair | facebook | other (defaults to None for legacy entries)
+    lead_source: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Future commitment date & reschedule audit trail

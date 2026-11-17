@@ -29,6 +29,15 @@ import {
   CustomerDetailResponse,
   ExecutiveCollectionReportResponse,
   Team,
+  MonthlyScorecardResponse,
+  MonthlyScorecardUpdateRequest,
+  ScorecardCustomer,
+  ScorecardCustomerCreateRequest,
+  ScorecardCustomerUpdateRequest,
+  ScorecardTeamRollupResponse,
+  SqlQueryExecuteResponse,
+  DatabaseSchemaResponse,
+  SqlImportResponse,
 } from "@/types";
 
 const API_BASE =
@@ -945,6 +954,107 @@ export const api = {
     delete: async (noticeId: number): Promise<void> => {
       return request<void>(`/notices/${noticeId}`, {
         method: "DELETE",
+      });
+    },
+  },
+
+  scorecard: {
+    get: async (
+      employeeId: number,
+      month?: string
+    ): Promise<MonthlyScorecardResponse> => {
+      const q = month ? `?month=${encodeURIComponent(month)}` : "";
+      return request<MonthlyScorecardResponse>(`/scorecards/${employeeId}${q}`);
+    },
+
+    update: async (
+      employeeId: number,
+      month: string,
+      data: MonthlyScorecardUpdateRequest
+    ): Promise<MonthlyScorecardResponse> => {
+      return request<MonthlyScorecardResponse>(
+        `/scorecards/${employeeId}/${encodeURIComponent(month)}`,
+        {
+          method: "PUT",
+          body: JSON.stringify(data),
+        }
+      );
+    },
+
+    close: async (
+      employeeId: number,
+      month: string
+    ): Promise<MonthlyScorecardResponse> => {
+      return request<MonthlyScorecardResponse>(
+        `/scorecards/${employeeId}/${encodeURIComponent(month)}/close`,
+        {
+          method: "POST",
+        }
+      );
+    },
+
+    addCustomer: async (
+      scorecardId: number,
+      data: ScorecardCustomerCreateRequest
+    ): Promise<ScorecardCustomer> => {
+      return request<ScorecardCustomer>(`/scorecards/${scorecardId}/customers`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+
+    updateCustomer: async (
+      customerId: number,
+      data: ScorecardCustomerUpdateRequest,
+      scorecardId?: number
+    ): Promise<ScorecardCustomer> => {
+      const path = scorecardId
+        ? `/scorecards/${scorecardId}/customers/${customerId}`
+        : `/scorecards/customers/${customerId}`;
+      return request<ScorecardCustomer>(path, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      });
+    },
+
+    deleteCustomer: async (
+      customerId: number,
+      scorecardId?: number
+    ): Promise<void> => {
+      const path = scorecardId
+        ? `/scorecards/${scorecardId}/customers/${customerId}`
+        : `/scorecards/customers/${customerId}`;
+      return request<void>(path, {
+        method: "DELETE",
+      });
+    },
+
+    getTeamScorecards: async (
+      month?: string
+    ): Promise<ScorecardTeamRollupResponse> => {
+      const q = month ? `?month=${encodeURIComponent(month)}` : "";
+      return request<ScorecardTeamRollupResponse>(`/scorecards/team${q}`);
+    },
+  },
+
+  sqlConsole: {
+    execute: async (query: string): Promise<SqlQueryExecuteResponse> => {
+      return request<SqlQueryExecuteResponse>("/sql-console/execute", {
+        method: "POST",
+        body: JSON.stringify({ query }),
+      });
+    },
+
+    getSchema: async (): Promise<DatabaseSchemaResponse> => {
+      return request<DatabaseSchemaResponse>("/sql-console/schema");
+    },
+
+    importFile: async (file: File): Promise<SqlImportResponse> => {
+      const formData = new FormData();
+      formData.append("file", file);
+      return request<SqlImportResponse>("/sql-console/import-file", {
+        method: "POST",
+        body: formData,
       });
     },
   },

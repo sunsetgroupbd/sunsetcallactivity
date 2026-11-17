@@ -17,7 +17,10 @@ class UserRepository:
     async def get_by_id(self, user_id: int) -> Optional[User]:
         result = await self.db.execute(
             select(User)
-            .options(selectinload(User.team), selectinload(User.reporting_manager))
+            .options(
+                selectinload(User.team),
+                selectinload(User.reporting_manager).selectinload(User.reporting_manager),
+            )
             .where(User.id == user_id)
         )
         return result.scalar_one_or_none()

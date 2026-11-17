@@ -58,8 +58,12 @@ export function Sidebar({
           { name: "Executive Collection", href: "/reports/executive-collection", icon: FileSpreadsheet },
           { name: "Employees", href: "/employees", icon: UserCheck },
           { name: "Group & Team Hierarchy", href: "/teams", icon: Network },
-          { name: "SQL Console & Import", href: "/admin/sql-console", icon: Database },
           { name: "Settings", href: "/settings", icon: Settings },
+        ]
+      : []),
+    ...(isAdmin
+      ? [
+          { name: "SQL Console & Import", href: "/admin/sql-console", icon: Database },
         ]
       : []),
   ];

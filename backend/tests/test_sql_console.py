@@ -60,7 +60,7 @@ async def test_admin_can_execute_query_and_inspect_schema(
 
 
 @pytest.mark.asyncio
-async def test_employee_cannot_access_sql_console(
+async def test_employee_and_sub_admin_cannot_access_sql_console(
     client: AsyncClient,
     employee_user: User,
     db: AsyncSession,
@@ -78,6 +78,24 @@ async def test_employee_cannot_access_sql_console(
         json={"query": "SELECT 1;"},
     )
     assert resp2.status_code == 403
+
+    # Also verify SUB_ADMIN is blocked
+    from app.core.security import hash_password
+    from app.models.user import UserRole
+    sub_admin = User(
+        full_name="Sub Admin User",
+        email="subadmin_test@sunsetgroup.com",
+        username="subadmin_test",
+        password_hash=hash_password("SubPass123!"),
+        role=UserRole.SUB_ADMIN,
+        is_active=True,
+    )
+    db.add(sub_admin)
+    await db.flush()
+    sub_token = await get_token(client, "subadmin_test", "SubPass123!")
+    sub_headers = {"Authorization": f"Bearer {sub_token}"}
+    sub_resp = await client.get("/api/v1/sql-console/schema", headers=sub_headers)
+    assert sub_resp.status_code == 403
 
     await db.execute(text("DELETE FROM users"))
     await db.commit()

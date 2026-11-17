@@ -81,6 +81,18 @@ async def require_admin(
     return user
 
 
+async def require_only_admin(
+    user: User = Depends(_get_current_user),
+) -> User:
+    """Raise 403 if the current user is not strictly ADMIN (excludes SUB_ADMIN)."""
+    if user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Strict Admin access required. Sub-admins and other roles cannot access this service.",
+        )
+    return user
+
+
 def require_report_access(report_employee_id: int, current_user: User) -> None:
     """
     Raise 403 if current_user is not an admin/sub-admin/TL and does not own the report.

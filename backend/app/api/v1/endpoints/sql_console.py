@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.permissions import require_admin
+from app.core.permissions import require_only_admin
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.sql_console import (
@@ -135,7 +135,7 @@ def parse_pg_copy_dump(sql_text: str) -> dict[str, tuple[list[str], list[list[An
 @router.post("/execute", response_model=QueryExecuteResponse)
 async def execute_query(
     body: QueryExecuteRequest,
-    _: User = Depends(require_admin),
+    _: User = Depends(require_only_admin),
     db: AsyncSession = Depends(get_db),
 ) -> QueryExecuteResponse:
     """Executes one or more SQL queries, returning results or affected rows."""
@@ -210,7 +210,7 @@ async def execute_query(
 
 @router.get("/schema", response_model=SchemaOverviewResponse)
 async def get_database_schema(
-    _: User = Depends(require_admin),
+    _: User = Depends(require_only_admin),
     db: AsyncSession = Depends(get_db),
 ) -> SchemaOverviewResponse:
     """Inspects all tables and column definitions in the active database."""
@@ -304,7 +304,7 @@ async def get_database_schema(
 @router.post("/import-file", response_model=SqlImportResponse)
 async def import_sql_file(
     file: UploadFile = File(...),
-    _: User = Depends(require_admin),
+    _: User = Depends(require_only_admin),
     db: AsyncSession = Depends(get_db),
 ) -> SqlImportResponse:
     """Imports a .sql file or PostgreSQL dump into the database."""

@@ -20,6 +20,13 @@ class ScorecardPeriodRow(BaseModel):
     # Target
     tg_sales: Decimal = Decimal("0.00")
 
+    # Planned Collections from Table 2 Customer Recovery Plans
+    planned_collection: Decimal = Decimal("0.00")
+    planned_new_sales: Decimal = Decimal("0.00")
+    planned_tb: Decimal = Decimal("0.00")
+    planned_emi: Decimal = Decimal("0.00")
+    customer_plan_count: int = 0
+
     # Actual Collections (Cash received physically)
     new_sales: Decimal = Decimal("0.00")
     tb: Decimal = Decimal("0.00")

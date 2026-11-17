@@ -336,6 +336,11 @@ class ScorecardService:
                             label=p_label,
                             end_day=p_days,
                             tg_sales=Decimal(str(matching.get("tg_sales", "0.00"))),
+                            planned_collection=Decimal(str(matching.get("planned_collection", "0.00"))),
+                            planned_new_sales=Decimal(str(matching.get("planned_new_sales", "0.00"))),
+                            planned_tb=Decimal(str(matching.get("planned_tb", "0.00"))),
+                            planned_emi=Decimal(str(matching.get("planned_emi", "0.00"))),
+                            customer_plan_count=matching.get("customer_plan_count", 0),
                             new_sales=Decimal(str(matching.get("new_sales", "0.00"))),
                             tb=Decimal(str(matching.get("tb", "0.00"))),
                             emi=Decimal(str(matching.get("emi", "0.00"))),
@@ -424,12 +429,39 @@ class ScorecardService:
             rep_subset = [r for r in curr_reports if r.report_date <= cutoff_date]
             c_metrics = self.aggregate_reports_metrics(rep_subset)
 
+            # Aggregate Table 2 Customer Recovery Plans cumulative up to cutoff_date
+            matching_custs = []
+            for cust in (scorecard.customers or []):
+                target_date = cust.collection_date or cust.next_collection_date
+                if target_date is not None:
+                    if target_date <= cutoff_date:
+                        matching_custs.append(cust)
+                else:
+                    # If undated, include in the final month checkpoint
+                    if c_day == num_days:
+                        matching_custs.append(cust)
+
+            p_new_sales = sum((c.new_sales_amount or Decimal("0.00")) for c in matching_custs)
+            p_tb = sum((c.tb_amount or Decimal("0.00")) for c in matching_custs)
+            p_emi = sum((c.emi_amount or Decimal("0.00")) for c in matching_custs)
+            p_tot = sum(
+                (c.total_collection if c.total_collection and c.total_collection > 0 else (c.new_sales_amount or 0) + (c.tb_amount or 0) + (c.emi_amount or 0))
+                for c in matching_custs
+            )
+            if p_tot == Decimal("0.00") and matching_custs:
+                p_tot = sum((c.paid_amount or Decimal("0.00")) for c in matching_custs)
+
             periods.append(
                 ScorecardPeriodRow(
                     row_type="checkpoint",
                     label=label,
                     end_day=c_day,
                     tg_sales=tg_sales,
+                    planned_collection=p_tot,
+                    planned_new_sales=p_new_sales,
+                    planned_tb=p_tb,
+                    planned_emi=p_emi,
+                    customer_plan_count=len(matching_custs),
                     new_sales=c_metrics["new_sales"],
                     tb=c_metrics["tb"],
                     emi=c_metrics["emi"],
@@ -668,6 +700,13 @@ class ScorecardService:
             remarks=data.remarks,
         )
         saved = await self.repo.add_customer(cust)
+        # Auto-initialize prediction_amount if it was unset/0
+        fresh_sc = await self.repo.get_by_id(sc.id)
+        if fresh_sc and fresh_sc.prediction_amount == Decimal("0.00"):
+            tot_plan = sum((c.total_collection or Decimal("0.00")) for c in (fresh_sc.customers or []))
+            if tot_plan > 0:
+                fresh_sc.prediction_amount = tot_plan
+                await self.repo.update_scorecard(fresh_sc)
         return ScorecardCustomerRead.model_validate(saved)
 
     async def update_customer_plan(

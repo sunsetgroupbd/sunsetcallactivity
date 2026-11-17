@@ -772,6 +772,11 @@ export interface ScorecardPeriodRow {
   label: string;
   end_day?: number | null;
   tg_sales: number;
+  planned_collection: number;
+  planned_new_sales: number;
+  planned_tb: number;
+  planned_emi: number;
+  customer_plan_count: number;
   new_sales: number;
   tb: number;
   emi: number;

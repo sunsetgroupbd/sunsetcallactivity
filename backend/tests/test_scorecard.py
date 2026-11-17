@@ -293,12 +293,14 @@ async def test_table_2_customer_plan_crud_and_probability_validation(
     bad_res = await client.post(f"/api/v1/scorecards/{sc_id}/customers", json=bad_cust, headers=headers)
     assert bad_res.status_code == 422
 
-    # Valid customer plan row
+    # Valid customer plan row with collection_date, date_1, and date_2
     good_cust = {
         "customer_name": "Mr. Rafiqul Islam",
         "paid_amount": "50000.00",
         "unpaid_amount": "225000.00",
         "collection_date": "2026-11-20",
+        "date_1": "2026-11-05",
+        "date_2": "2026-11-12",
         "in_out_plan": "Outdoor Visit",
         "new_sales_amount": "200000.00",
         "tb_amount": "50000.00",
@@ -313,6 +315,32 @@ async def test_table_2_customer_plan_crud_and_probability_validation(
     cust_id = created_cust["id"]
     # Total collection must be sum: 200k + 50k + 25k = 275k
     assert Decimal(created_cust["total_collection"]) == Decimal("275000.00")
+    assert created_cust["collection_date"] == "2026-11-20"
+    assert created_cust["date_1"] == "2026-11-05"
+    assert created_cust["date_2"] == "2026-11-12"
+
+    # Verify that Table 1 (Performance by Period) aggregates customer plan:
+    # Till 5th and Till 10th should NOT have this customer (since collection_date is 20th)
+    # Till 20th and Till 30th SHOULD have this customer!
+    sc_updated = await client.get(f"/api/v1/scorecards/{subordinate_employee.id}?month=2026-11", headers=headers)
+    assert sc_updated.status_code == 200
+    periods_by_label = {p["label"]: p for p in sc_updated.json()["periods"]}
+
+    till_5 = periods_by_label["Till 5th"]
+    assert Decimal(str(till_5["planned_collection"])) == Decimal("0.00")
+    assert till_5["customer_plan_count"] == 0
+
+    till_20 = periods_by_label["Till 20th"]
+    assert Decimal(str(till_20["planned_collection"])) == Decimal("275000.00")
+    assert Decimal(str(till_20["planned_new_sales"])) == Decimal("200000.00")
+    assert Decimal(str(till_20["planned_tb"])) == Decimal("50000.00")
+    assert Decimal(str(till_20["planned_emi"])) == Decimal("25000.00")
+    assert till_20["customer_plan_count"] == 1
+
+    till_30 = periods_by_label.get("Till 30th") or periods_by_label.get("Till 31st") or periods_by_label.get("Till 30th/31st")
+    assert till_30 is not None
+    assert Decimal(str(till_30["planned_collection"])) == Decimal("275000.00")
+    assert till_30["customer_plan_count"] == 1
 
     # Update customer row
     upd_res = await client.put(

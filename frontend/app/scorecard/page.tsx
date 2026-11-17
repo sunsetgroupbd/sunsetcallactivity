@@ -100,6 +100,8 @@ function ScorecardContent() {
 
   // Active view tab for mobile: "table1" | "table2" | "portfolio"
   const [mobileTab, setMobileTab] = useState<"table1" | "table2" | "portfolio">("table1");
+  // Mobile sub-view for Table 1: cards (app-like) vs table (spreadsheet)
+  const [t1MobileView, setT1MobileView] = useState<"cards" | "table">("cards");
 
   // Determine current effective employee ID
   const effectiveEmployeeId = useMemo(() => {
@@ -110,6 +112,39 @@ function ScorecardContent() {
     }
     return user?.id || null;
   }, [selectedEmployeeId, user, employeesList]);
+
+  // Derived Performance Summary Figures linking Table 1 & Table 2
+  const summaryMetrics = useMemo(() => {
+    if (!scorecard) return null;
+    const checkpointPeriods = scorecard.periods.filter((p) => p.row_type === "checkpoint");
+    const finalPeriod =
+      checkpointPeriods[checkpointPeriods.length - 1] ||
+      scorecard.periods[scorecard.periods.length - 1];
+
+    const totalCxPlan = scorecard.customers.reduce(
+      (acc, c) =>
+        acc +
+        (Number(c.total_collection) ||
+          (Number(c.new_sales_amount) || 0) +
+            (Number(c.tb_amount) || 0) +
+            (Number(c.emi_amount) || 0)),
+      0
+    );
+    const monthTarget = finalPeriod ? Number(finalPeriod.tg_sales) : 0;
+    const actualTotal = finalPeriod ? Number(finalPeriod.total_collection) : 0;
+    const planAchievement = totalCxPlan > 0 ? Math.round((actualTotal / totalCxPlan) * 100) : 0;
+    const tgAchievement = monthTarget > 0 ? Math.round((actualTotal / monthTarget) * 100) : 0;
+
+    return {
+      monthTarget,
+      totalCxPlan,
+      actualTotal,
+      planAchievement,
+      tgAchievement,
+      cxCount: scorecard.customers.length,
+      finalPeriod,
+    };
+  }, [scorecard]);
 
   // Load employee list for supervisor switcher
   useEffect(() => {
@@ -545,6 +580,76 @@ function ScorecardContent() {
           </div>
         )}
 
+        {/* ─── High-Level Monthly KPI Banner (Linking Table 1 & Table 2) ────── */}
+        {scorecard && summaryMetrics && (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="bg-white rounded-xl border border-slate-200/90 p-3.5 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+                  Monthly Target (TG)
+                </span>
+                <Target className="w-4 h-4 text-slate-400" />
+              </div>
+              <div className="text-lg font-black text-slate-900 font-mono">
+                {formatBDT(summaryMetrics.monthTarget)}
+              </div>
+              <span className="text-[10px] text-slate-400 block">
+                Official target for this month
+              </span>
+            </div>
+
+            <div className="bg-white rounded-xl border border-sky-200/90 bg-sky-50/25 p-3.5 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-sky-800 uppercase tracking-wide">
+                  Table 2 Customer Plan
+                </span>
+                <Users className="w-4 h-4 text-sky-600" />
+              </div>
+              <div className="text-lg font-black text-sky-900 font-mono">
+                {formatBDT(summaryMetrics.totalCxPlan)}
+              </div>
+              <div className="flex items-center justify-between text-[10px] text-sky-700 font-medium">
+                <span>{summaryMetrics.cxCount} customer commitments</span>
+                <span className="font-bold">Table 2 Expected</span>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-emerald-200/90 bg-emerald-50/25 p-3.5 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wide">
+                  Actual Collected
+                </span>
+                <TrendingUp className="w-4 h-4 text-emerald-600" />
+              </div>
+              <div className="text-lg font-black text-emerald-950 font-mono">
+                {formatBDT(summaryMetrics.actualTotal)}
+              </div>
+              <div className="flex items-center justify-between text-[10px] text-emerald-700 font-medium">
+                <span>{summaryMetrics.planAchievement}% of Cx Plan</span>
+                <span>{summaryMetrics.tgAchievement}% of TG</span>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-200/90 p-3.5 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+                  Forecast Prediction
+                </span>
+                <Sparkles className="w-4 h-4 text-amber-500" />
+              </div>
+              <div className="text-lg font-black text-slate-900 font-mono">
+                {formatBDT(scorecard.prediction_amount)}
+              </div>
+              <div className="flex items-center justify-between text-[10px] text-slate-500">
+                <span>Leaves: {scorecard.planned_leave}d / {scorecard.unauthorized_leave}d</span>
+                <span className="font-semibold text-amber-800">
+                  {scorecard.marking !== null ? `${scorecard.marking}/100` : "No marking"}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ─── Mobile View Tabs ─────────────────────────────────────────────── */}
         <div className="flex md:hidden border-b border-slate-200 bg-white rounded-t-xl overflow-x-auto text-xs font-semibold">
           <button
@@ -585,20 +690,51 @@ function ScorecardContent() {
           </button>
         </div>
 
-        {/* ─── Table 1: Performance by Period (Spreadsheet Style) ────────────── */}
+        {/* ─── Table 1: Performance by Period ──────────────────────────────── */}
         {scorecard && (
           <div className={cn("space-y-3", mobileTab !== "table1" && "hidden md:block")}>
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                <TrendingUp className="w-4 h-4 text-green-700" />
-                Table 1: Performance by Period
-              </h2>
-              <span className="text-[11px] text-slate-500">
-                Derived cumulative totals as of Dhaka cutoff days
-              </span>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <TrendingUp className="w-4 h-4 text-green-700" />
+                  Table 1: Performance by Period
+                </h2>
+                <span className="text-[11px] text-slate-500">
+                  Derived cumulative totals as of Dhaka cutoff days, comparing Targets vs Cx Plans vs Actuals
+                </span>
+              </div>
+
+              {/* Mobile Card / Table View Toggle */}
+              <div className="flex md:hidden items-center self-start sm:self-auto gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setT1MobileView("cards")}
+                  className={cn(
+                    "px-3 py-1 rounded-md font-semibold transition-all",
+                    t1MobileView === "cards"
+                      ? "bg-white text-green-800 shadow-2xs font-bold"
+                      : "text-slate-600 hover:text-slate-900"
+                  )}
+                >
+                  Cards View
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setT1MobileView("table")}
+                  className={cn(
+                    "px-3 py-1 rounded-md font-semibold transition-all",
+                    t1MobileView === "table"
+                      ? "bg-white text-green-800 shadow-2xs font-bold"
+                      : "text-slate-600 hover:text-slate-900"
+                  )}
+                >
+                  Table View
+                </button>
+              </div>
             </div>
 
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            {/* Desktop Table View */}
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden hidden md:block">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
@@ -607,10 +743,14 @@ function ScorecardContent() {
                         Period / Date
                       </th>
                       <th className="py-2.5 px-2.5 text-right font-bold min-w-[90px]">TG (Sales)</th>
+                      <th className="py-2.5 px-2.5 text-right font-bold text-sky-900 bg-sky-50/70 min-w-[100px]">
+                        Planned (Cx)
+                      </th>
                       <th className="py-2.5 px-2.5 text-right font-bold text-emerald-800 bg-emerald-50/50 min-w-[90px]">New Sales</th>
                       <th className="py-2.5 px-2.5 text-right font-bold text-emerald-800 bg-emerald-50/50 min-w-[85px]">TB</th>
                       <th className="py-2.5 px-2.5 text-right font-bold text-emerald-800 bg-emerald-50/50 min-w-[85px]">EMI</th>
                       <th className="py-2.5 px-2.5 text-right font-bold text-emerald-900 bg-emerald-100/60 min-w-[95px]">Total Collec</th>
+                      <th className="py-2.5 px-2 text-center font-bold text-emerald-800 bg-emerald-100/40 min-w-[65px]">Ach %</th>
                       <th className="py-2.5 px-2 text-center font-bold min-w-[60px]">Tot Lead</th>
                       <th className="py-2.5 px-2 text-center font-bold min-w-[60px]">Fair Lead</th>
                       <th className="py-2.5 px-2 text-center font-bold min-w-[60px]">FB Lead</th>
@@ -644,6 +784,14 @@ function ScorecardContent() {
                           <td className="py-2 px-2.5 text-right font-medium text-slate-600">
                             {formatBDT(row.tg_sales)}
                           </td>
+                          <td className="py-2 px-2.5 text-right font-bold text-sky-900 bg-sky-50/35">
+                            <div>{formatBDT(row.planned_collection)}</div>
+                            {row.customer_plan_count > 0 && (
+                              <div className="text-[10px] text-sky-600 font-sans font-medium">
+                                ({row.customer_plan_count} cx)
+                              </div>
+                            )}
+                          </td>
                           <td className="py-2 px-2.5 text-right font-bold text-emerald-700 bg-emerald-50/30">
                             {formatBDT(row.new_sales)}
                           </td>
@@ -655,6 +803,24 @@ function ScorecardContent() {
                           </td>
                           <td className="py-2 px-2.5 text-right font-extrabold text-emerald-900 bg-emerald-100/40">
                             {formatBDT(row.total_collection)}
+                          </td>
+                          <td className="py-2 px-2 text-center font-bold font-mono text-[11px] bg-emerald-50/30">
+                            {row.planned_collection > 0 ? (
+                              <span
+                                className={cn(
+                                  "px-1.5 py-0.5 rounded text-[10px] font-bold",
+                                  Number(row.total_collection) >= Number(row.planned_collection)
+                                    ? "bg-emerald-100 text-emerald-900"
+                                    : Number(row.total_collection) >= Number(row.planned_collection) * 0.5
+                                    ? "bg-amber-100 text-amber-900"
+                                    : "bg-rose-100 text-rose-800"
+                                )}
+                              >
+                                {Math.round((Number(row.total_collection) / Number(row.planned_collection)) * 100)}%
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 font-normal">—</span>
+                            )}
                           </td>
                           <td className="py-2 px-2 text-center font-semibold text-slate-700">
                             {row.total_lead}
@@ -704,6 +870,251 @@ function ScorecardContent() {
                   </tbody>
                 </table>
               </div>
+            </div>
+
+            {/* Mobile View: Native App-Like Cards OR Scrollable Spreadsheet */}
+            <div className="block md:hidden">
+              {t1MobileView === "cards" ? (
+                <div className="space-y-3">
+                  {scorecard.periods.map((row, idx) => {
+                    const isPrev = row.row_type === "previous_month";
+                    const planPct =
+                      row.planned_collection > 0
+                        ? Math.round((Number(row.total_collection) / Number(row.planned_collection)) * 100)
+                        : 0;
+
+                    return (
+                      <div
+                        key={idx}
+                        className={cn(
+                          "bg-white rounded-xl border p-4 space-y-3 shadow-2xs transition-all",
+                          isPrev
+                            ? "border-slate-200 bg-slate-50/50 opacity-90"
+                            : "border-slate-200/90"
+                        )}
+                      >
+                        {/* Header: Period & Actual Total */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-sm font-extrabold text-slate-900 font-sans tracking-tight">
+                                {row.label}
+                              </span>
+                              <Badge
+                                variant={isPrev ? "neutral" : "success"}
+                                className="text-[10px] px-2 py-0.5"
+                              >
+                                {isPrev ? "Prior Month" : `Checkpoint Day ${row.end_day}`}
+                              </Badge>
+                            </div>
+                            <span className="text-[10px] text-slate-400 font-medium block mt-0.5">
+                              {isPrev ? "Archived previous month totals" : "Dhaka cutoff cumulative total"}
+                            </span>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            <span className="text-[10px] text-slate-400 block font-medium">Actual Collected</span>
+                            <span className="text-base font-black text-emerald-900 font-mono">
+                              {formatBDT(row.total_collection)}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* TG vs Cx Plan vs Actual 3-Way Grid */}
+                        <div className="bg-slate-50/80 rounded-xl p-3 border border-slate-100 space-y-2.5">
+                          <div className="grid grid-cols-3 gap-2 text-center">
+                            <div className="bg-white p-2 rounded-lg border border-slate-200/70 shadow-2xs">
+                              <span className="text-[9px] font-bold text-slate-400 block uppercase">
+                                TG Sales
+                              </span>
+                              <span className="font-extrabold text-slate-800 font-mono text-xs block mt-0.5">
+                                {formatBDT(row.tg_sales)}
+                              </span>
+                            </div>
+
+                            <div className="bg-sky-50/70 p-2 rounded-lg border border-sky-200/60 shadow-2xs">
+                              <span className="text-[9px] font-bold text-sky-800 block uppercase">
+                                Cx Plan (T2)
+                              </span>
+                              <span className="font-extrabold text-sky-950 font-mono text-xs block mt-0.5">
+                                {formatBDT(row.planned_collection)}
+                              </span>
+                              {row.customer_plan_count > 0 && (
+                                <span className="text-[9px] text-sky-700 font-medium block">
+                                  ({row.customer_plan_count} cx)
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="bg-emerald-50/70 p-2 rounded-lg border border-emerald-200/60 shadow-2xs">
+                              <span className="text-[9px] font-bold text-emerald-800 block uppercase">
+                                Actual
+                              </span>
+                              <span className="font-extrabold text-emerald-950 font-mono text-xs block mt-0.5">
+                                {formatBDT(row.total_collection)}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Plan Achievement Progress Bar */}
+                          {row.planned_collection > 0 && (
+                            <div className="space-y-1 pt-1">
+                              <div className="flex items-center justify-between text-[10px]">
+                                <span className="text-slate-600 font-medium">
+                                  Achievement vs Table 2 Plan:
+                                </span>
+                                <span
+                                  className={cn(
+                                    "font-mono font-bold",
+                                    planPct >= 100
+                                      ? "text-emerald-700"
+                                      : planPct >= 50
+                                      ? "text-amber-700"
+                                      : "text-rose-700"
+                                  )}
+                                >
+                                  {planPct}%
+                                </span>
+                              </div>
+                              <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                                <div
+                                  className={cn(
+                                    "h-1.5 rounded-full transition-all duration-300",
+                                    planPct >= 100
+                                      ? "bg-emerald-600"
+                                      : planPct >= 50
+                                      ? "bg-amber-500"
+                                      : "bg-rose-500"
+                                  )}
+                                  style={{ width: `${Math.min(planPct, 100)}%` }}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Collection Category Chips */}
+                        <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                          <div className="bg-emerald-50/40 p-2 rounded-lg border border-emerald-100">
+                            <span className="text-[9px] font-bold text-emerald-800 uppercase block">New Sales</span>
+                            <span className="font-bold text-slate-800 font-mono text-[11.5px] block mt-0.5">
+                              {formatBDT(row.new_sales)}
+                            </span>
+                            {row.planned_new_sales > 0 && (
+                              <span className="text-[9px] text-slate-400 font-mono block">
+                                Plan: {formatBDT(row.planned_new_sales)}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="bg-emerald-50/40 p-2 rounded-lg border border-emerald-100">
+                            <span className="text-[9px] font-bold text-emerald-800 uppercase block">TB</span>
+                            <span className="font-bold text-slate-800 font-mono text-[11.5px] block mt-0.5">
+                              {formatBDT(row.tb)}
+                            </span>
+                            {row.planned_tb > 0 && (
+                              <span className="text-[9px] text-slate-400 font-mono block">
+                                Plan: {formatBDT(row.planned_tb)}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="bg-emerald-50/40 p-2 rounded-lg border border-emerald-100">
+                            <span className="text-[9px] font-bold text-emerald-800 uppercase block">EMI</span>
+                            <span className="font-bold text-slate-800 font-mono text-[11.5px] block mt-0.5">
+                              {formatBDT(row.emi)}
+                            </span>
+                            {row.planned_emi > 0 && (
+                              <span className="text-[9px] text-slate-400 font-mono block">
+                                Plan: {formatBDT(row.planned_emi)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Pipeline & Calls Metric Row */}
+                        <div className="grid grid-cols-4 gap-1.5 p-2 bg-slate-50/80 rounded-lg border border-slate-100 text-center text-xs">
+                          <div>
+                            <span className="text-[9px] text-slate-400 font-bold block uppercase">Dials</span>
+                            <span className="font-mono font-bold text-slate-800">{row.total_calls_dialed}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] text-emerald-600 font-bold block uppercase">HP</span>
+                            <span className="font-mono font-bold text-emerald-800">{row.hp}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] text-amber-600 font-bold block uppercase">P</span>
+                            <span className="font-mono font-bold text-amber-800">{row.p}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] text-sky-600 font-bold block uppercase">Fup</span>
+                            <span className="font-mono font-bold text-sky-800">{row.fup}</span>
+                          </div>
+                        </div>
+
+                        {/* Footer Info: Leads, Visits, Hold/Cancel */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-[10.5px] text-slate-500 pt-1 border-t border-slate-100">
+                          <span>
+                            Leads: Fair <strong className="text-slate-800 font-mono">{row.current_fair_lead}</strong> | FB <strong className="text-slate-800 font-mono">{row.current_fb_lead}</strong>
+                          </span>
+                          <span>
+                            Visits: In <strong className="text-slate-800 font-mono">{row.in_done}</strong> | Out <strong className="text-slate-800 font-mono">{row.out_done}</strong>
+                          </span>
+                          {(row.hold_amount > 0 || row.cancel_amount > 0) && (
+                            <span className="text-rose-600 font-medium">
+                              Hold: {formatBDT(row.hold_amount)} | Cancel: {formatBDT(row.cancel_amount)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                /* Mobile Spreadsheet Fallback when user selects Table View */
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
+                          <th className="py-2.5 px-3 sticky left-0 bg-slate-100 z-10 isolate font-bold border-r border-slate-200 min-w-[110px]">
+                            Period
+                          </th>
+                          <th className="py-2.5 px-2 text-right font-bold min-w-[85px]">TG</th>
+                          <th className="py-2.5 px-2 text-right font-bold text-sky-900 bg-sky-50 min-w-[90px]">Plan (Cx)</th>
+                          <th className="py-2.5 px-2 text-right font-bold text-emerald-800 min-w-[85px]">Total</th>
+                          <th className="py-2.5 px-1.5 text-center font-bold min-w-[55px]">Ach %</th>
+                          <th className="py-2.5 px-1.5 text-center font-bold text-emerald-700 min-w-[40px]">HP</th>
+                          <th className="py-2.5 px-1.5 text-center font-bold text-amber-700 min-w-[40px]">P</th>
+                          <th className="py-2.5 px-1.5 text-center font-bold text-sky-700 min-w-[40px]">Fup</th>
+                          <th className="py-2.5 px-1.5 text-center font-bold min-w-[55px]">Dialed</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-mono text-[11px]">
+                        {scorecard.periods.map((row, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50">
+                            <td className="py-2 px-3 sticky left-0 bg-white font-sans font-bold border-r border-slate-200 whitespace-nowrap z-10 isolate">
+                              {row.label}
+                            </td>
+                            <td className="py-2 px-2 text-right text-slate-600">{formatBDT(row.tg_sales)}</td>
+                            <td className="py-2 px-2 text-right font-bold text-sky-800 bg-sky-50/40">{formatBDT(row.planned_collection)}</td>
+                            <td className="py-2 px-2 text-right font-extrabold text-emerald-900">{formatBDT(row.total_collection)}</td>
+                            <td className="py-2 px-1.5 text-center">
+                              {row.planned_collection > 0
+                                ? `${Math.round((Number(row.total_collection) / Number(row.planned_collection)) * 100)}%`
+                                : "—"}
+                            </td>
+                            <td className="py-2 px-1.5 text-center font-bold text-emerald-700">{row.hp}</td>
+                            <td className="py-2 px-1.5 text-center font-bold text-amber-700">{row.p}</td>
+                            <td className="py-2 px-1.5 text-center font-bold text-sky-700">{row.fup}</td>
+                            <td className="py-2 px-1.5 text-center text-slate-700">{row.total_calls_dialed}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -845,58 +1256,157 @@ function ScorecardContent() {
               </div>
             </div>
 
-            {/* Mobile Cards for Table 2 */}
+            {/* Mobile View: Native App-Like Cards for Table 2 */}
             <div className="space-y-3 md:hidden">
               {scorecard.customers.length === 0 ? (
-                <div className="bg-white rounded-xl border border-slate-200 p-6 text-center text-xs text-slate-500 italic">
-                  No customer recovery plans logged for this month yet.
+                <div className="bg-white rounded-xl border border-dashed border-slate-200 p-8 text-center text-xs text-slate-400 italic space-y-2">
+                  <Users className="w-8 h-8 text-slate-300 mx-auto" />
+                  <p className="font-semibold text-slate-600">No customer recovery plans logged yet.</p>
+                  <p className="text-[11px] text-slate-400">
+                    Add customer commitments with collection dates to forecast recovery and feed into Table 1.
+                  </p>
+                  {!isClosed && (
+                    <div className="pt-2">
+                      <Button size="sm" onClick={openAddCustomerModal} className="text-xs">
+                        <Plus className="w-3.5 h-3.5 mr-1" />
+                        Add First Customer
+                      </Button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 scorecard.customers.map((c) => (
-                  <div key={c.id} className="bg-white rounded-xl border border-slate-200 p-4 space-y-3 shadow-xs">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h4 className="text-sm font-bold text-slate-900">{c.customer_name}</h4>
-                        <span className="text-[10px] text-slate-500 font-medium">Plan: {c.in_out_plan}</span>
+                  <div
+                    key={c.id}
+                    className="bg-white rounded-xl border border-slate-200/90 p-4 space-y-3 shadow-2xs transition-all"
+                  >
+                    {/* Header: Customer Name, Badges & Action Buttons */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-1">
+                        <h4 className="text-sm font-bold text-slate-900 leading-tight">
+                          {c.customer_name}
+                        </h4>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200">
+                            {c.in_out_plan || "Office / Call"}
+                          </span>
+                          <span className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-200">
+                            Status: {c.new_lead_status}
+                          </span>
+                          {renderCertaintyBadge(c.collection_probability)}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {renderCertaintyBadge(c.collection_probability)}
-                        {!isClosed && (
-                          <div className="flex items-center gap-1 ml-1">
-                            <button
-                              type="button"
-                              onClick={() => openEditCustomerModal(c)}
-                              className="p-1 text-slate-500 hover:text-green-700"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteCustomer(c)}
-                              className="p-1 text-slate-400 hover:text-rose-600"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        )}
+
+                      {!isClosed && (
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => openEditCustomerModal(c)}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-green-700 hover:bg-slate-100 active:bg-slate-200 transition-colors"
+                            title="Edit Customer Row"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteCustomer(c)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 active:bg-rose-100 transition-colors"
+                            title="Delete Customer Row"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Financial Expected Recovery Box */}
+                    <div className="bg-emerald-50/60 rounded-xl p-3 border border-emerald-100 space-y-2">
+                      <div className="flex items-baseline justify-between">
+                        <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">
+                          Expected Collection
+                        </span>
+                        <span className="text-base font-black text-emerald-950 font-mono">
+                          {formatBDT(c.total_collection)}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-emerald-200/60 text-center text-xs">
+                        <div className="bg-white/80 p-1.5 rounded border border-emerald-200/50">
+                          <span className="text-[9px] font-bold text-slate-400 block uppercase">New Sales</span>
+                          <span className="font-bold text-slate-800 font-mono text-[11px]">
+                            {formatBDT(c.new_sales_amount)}
+                          </span>
+                        </div>
+                        <div className="bg-white/80 p-1.5 rounded border border-emerald-200/50">
+                          <span className="text-[9px] font-bold text-slate-400 block uppercase">TB</span>
+                          <span className="font-bold text-slate-800 font-mono text-[11px]">
+                            {formatBDT(c.tb_amount)}
+                          </span>
+                        </div>
+                        <div className="bg-white/80 p-1.5 rounded border border-emerald-200/50">
+                          <span className="text-[9px] font-bold text-slate-400 block uppercase">EMI</span>
+                          <span className="font-bold text-slate-800 font-mono text-[11px]">
+                            {formatBDT(c.emi_amount)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[11px] pt-1 text-slate-600 font-mono">
+                        <span>Paid: <strong className="text-slate-800">{formatBDT(c.paid_amount)}</strong></span>
+                        <span>Unpaid: <strong className="text-rose-700">{formatBDT(c.unpaid_amount)}</strong></span>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 text-xs font-mono bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                      <div>
-                        <span className="text-[10px] text-slate-400 block font-sans">Expected Total</span>
-                        <span className="font-extrabold text-emerald-800 text-sm">{formatBDT(c.total_collection)}</span>
+                    {/* Timeline & Follow-Up Dates Grid */}
+                    <div className="bg-slate-50/80 rounded-xl p-3 border border-slate-100 space-y-2 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500 flex items-center gap-1.5 text-[11px]">
+                          <Calendar className="w-3.5 h-3.5 text-green-700" />
+                          Collection Date (Target):
+                        </span>
+                        <span className="font-bold font-mono text-emerald-900 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                          {c.collection_date ? formatReadableDate(c.collection_date) : "Not Specified"}
+                        </span>
                       </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 block font-sans">Next Collec Date</span>
-                        <span className="font-bold text-slate-800">{c.next_collection_date ? formatReadableDate(c.next_collection_date) : "—"}</span>
+
+                      <div className="grid grid-cols-2 gap-2 pt-1.5 border-t border-slate-200/60 text-[11px]">
+                        <div>
+                          <span className="text-slate-400 block text-[10px]">Date 1 (Follow-up)</span>
+                          <span className="font-medium text-slate-700 font-mono">
+                            {c.date_1 ? formatReadableDate(c.date_1) : "—"}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[10px]">Date 2 (Follow-up)</span>
+                          <span className="font-medium text-slate-700 font-mono">
+                            {c.date_2 ? formatReadableDate(c.date_2) : "—"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 pt-1.5 border-t border-slate-200/60 text-[11px]">
+                        <div>
+                          <span className="text-slate-400 block text-[10px]">Next Collec 1</span>
+                          <span className="font-bold text-emerald-800 font-mono">
+                            {c.next_collection_date ? formatReadableDate(c.next_collection_date) : "—"}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[10px]">Next Collec 2</span>
+                          <span className="font-medium text-slate-700 font-mono">
+                            {c.next_collection_date_2 ? formatReadableDate(c.next_collection_date_2) : "—"}
+                          </span>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="flex justify-between items-center text-[11px] text-slate-500">
-                      <span>Status: <strong className="text-slate-800">{c.new_lead_status}</strong></span>
-                      {c.remarks && <span className="truncate max-w-[180px]">{c.remarks}</span>}
-                    </div>
+                    {/* Remarks / Action Taken */}
+                    {c.remarks && (
+                      <div className="text-[11px] text-slate-600 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-100">
+                        <span className="text-[9.5px] font-bold text-slate-400 block uppercase">Remarks:</span>
+                        <span>{c.remarks}</span>
+                      </div>
+                    )}
                   </div>
                 ))
               )}
@@ -1155,22 +1665,24 @@ function ScorecardContent() {
 
         {/* ─── Customer Modal (Add / Edit Table 2) ──────────────────────────── */}
         {customerModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
-            <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-lg w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-              <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-slate-50">
-                <h3 className="text-sm font-bold text-slate-900">
-                  {editingCustomer ? "Edit Customer Plan Row" : "Add Customer Recovery Plan Row"}
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-3 sm:p-4">
+            <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-lg w-full max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-slate-50 shrink-0">
+                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+                  <Users className="w-4 h-4 text-green-700" />
+                  {editingCustomer ? "Edit Customer Recovery Plan Row" : "Add Customer Recovery Plan Row"}
                 </h3>
                 <button
                   type="button"
                   onClick={() => setCustomerModalOpen(false)}
-                  className="text-slate-400 hover:text-slate-600 transition"
+                  className="text-slate-400 hover:text-slate-600 transition p-1"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <form onSubmit={handleSaveCustomer} className="p-4 md:p-5 space-y-3.5 text-xs">
+              <form onSubmit={handleSaveCustomer} className="p-4 md:p-5 space-y-4 text-xs overflow-y-auto flex-1">
+                {/* Customer Name */}
                 <div>
                   <label className="text-[11px] font-bold text-slate-700 block mb-1">
                     Customer Name *
@@ -1185,6 +1697,60 @@ function ScorecardContent() {
                   />
                 </div>
 
+                {/* Target Collections Breakdown */}
+                <div className="bg-emerald-50/60 p-3 rounded-xl border border-emerald-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-emerald-900 uppercase">
+                      Target Collections (Breakdown)
+                    </span>
+                    <span className="text-[11px] font-extrabold text-emerald-900 font-mono">
+                      Expected: {formatBDT((Number(customerForm.new_sales_amount) || 0) + (Number(customerForm.tb_amount) || 0) + (Number(customerForm.emi_amount) || 0))}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="text-[10px] font-bold text-emerald-900 block mb-1">
+                        New Sales (BDT)
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={customerForm.new_sales_amount || ""}
+                        onChange={(e) => setCustomerForm({ ...customerForm, new_sales_amount: Number(e.target.value) })}
+                        placeholder="0"
+                        className="w-full bg-white border border-emerald-300 rounded px-2.5 py-1.5 font-mono text-xs text-slate-900 focus:ring-1 focus:ring-green-600 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-emerald-900 block mb-1">
+                        TB (BDT)
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={customerForm.tb_amount || ""}
+                        onChange={(e) => setCustomerForm({ ...customerForm, tb_amount: Number(e.target.value) })}
+                        placeholder="0"
+                        className="w-full bg-white border border-emerald-300 rounded px-2.5 py-1.5 font-mono text-xs text-slate-900 focus:ring-1 focus:ring-green-600 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-emerald-900 block mb-1">
+                        EMI (BDT)
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={customerForm.emi_amount || ""}
+                        onChange={(e) => setCustomerForm({ ...customerForm, emi_amount: Number(e.target.value) })}
+                        placeholder="0"
+                        className="w-full bg-white border border-emerald-300 rounded px-2.5 py-1.5 font-mono text-xs text-slate-900 focus:ring-1 focus:ring-green-600 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Paid & Unpaid */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-[11px] font-bold text-slate-700 block mb-1">
@@ -1195,6 +1761,7 @@ function ScorecardContent() {
                       step="any"
                       value={customerForm.paid_amount || ""}
                       onChange={(e) => setCustomerForm({ ...customerForm, paid_amount: Number(e.target.value) })}
+                      placeholder="0"
                       className="w-full border border-slate-300 rounded px-3 py-1.5 font-mono text-slate-900 focus:ring-1 focus:ring-green-600 focus:outline-none"
                     />
                   </div>
@@ -1207,75 +1774,89 @@ function ScorecardContent() {
                       step="any"
                       value={customerForm.unpaid_amount || ""}
                       onChange={(e) => setCustomerForm({ ...customerForm, unpaid_amount: Number(e.target.value) })}
+                      placeholder="0"
                       className="w-full border border-slate-300 rounded px-3 py-1.5 font-mono text-slate-900 focus:ring-1 focus:ring-green-600 focus:outline-none"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 bg-emerald-50/60 p-3 rounded-lg border border-emerald-200">
-                  <div>
-                    <label className="text-[10px] font-bold text-emerald-900 block mb-1">
-                      New Sales
-                    </label>
-                    <input
-                      type="number"
-                      step="any"
-                      value={customerForm.new_sales_amount || ""}
-                      onChange={(e) => setCustomerForm({ ...customerForm, new_sales_amount: Number(e.target.value) })}
-                      className="w-full bg-white border border-emerald-300 rounded px-2 py-1 font-mono text-xs text-slate-900 focus:ring-1 focus:ring-green-600 focus:outline-none"
-                    />
+                {/* ─── Collection Dates & Follow-Ups ──────────────────────────── */}
+                <div className="bg-slate-50/90 p-3 rounded-xl border border-slate-200/90 space-y-3">
+                  <div className="flex items-center gap-1.5 text-slate-800 font-bold text-[11px]">
+                    <Calendar className="w-3.5 h-3.5 text-green-700" />
+                    <span>Collection & Follow-up Dates</span>
                   </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-emerald-900 block mb-1">
-                      TB
-                    </label>
-                    <input
-                      type="number"
-                      step="any"
-                      value={customerForm.tb_amount || ""}
-                      onChange={(e) => setCustomerForm({ ...customerForm, tb_amount: Number(e.target.value) })}
-                      className="w-full bg-white border border-emerald-300 rounded px-2 py-1 font-mono text-xs text-slate-900 focus:ring-1 focus:ring-green-600 focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-emerald-900 block mb-1">
-                      EMI
-                    </label>
-                    <input
-                      type="number"
-                      step="any"
-                      value={customerForm.emi_amount || ""}
-                      onChange={(e) => setCustomerForm({ ...customerForm, emi_amount: Number(e.target.value) })}
-                      className="w-full bg-white border border-emerald-300 rounded px-2 py-1 font-mono text-xs text-slate-900 focus:ring-1 focus:ring-green-600 focus:outline-none"
-                    />
-                  </div>
-                </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                  {/* Primary Collection Date */}
                   <div>
-                    <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                      Next Collec Date (Primary)
+                    <label className="text-[11px] font-bold text-green-900 block mb-1">
+                      Collection Date (Planned Target) *
                     </label>
                     <input
                       type="date"
-                      value={customerForm.next_collection_date || ""}
-                      onChange={(e) => setCustomerForm({ ...customerForm, next_collection_date: e.target.value })}
-                      className="w-full border border-slate-300 rounded px-3 py-1.5 text-slate-900 text-xs focus:ring-1 focus:ring-green-600 focus:outline-none"
+                      value={customerForm.collection_date || ""}
+                      onChange={(e) => setCustomerForm({ ...customerForm, collection_date: e.target.value })}
+                      className="w-full bg-white border border-green-300 rounded px-3 py-1.5 text-slate-900 text-xs focus:ring-1 focus:ring-green-600 focus:outline-none font-medium"
                     />
+                    <span className="text-[10px] text-slate-500 mt-0.5 block">
+                      Determines which checkpoint period (Till 5th, 10th...) in Table 1 counts this customer.
+                    </span>
                   </div>
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                      Next Collec Date (Secondary)
-                    </label>
-                    <input
-                      type="date"
-                      value={customerForm.next_collection_date_2 || ""}
-                      onChange={(e) => setCustomerForm({ ...customerForm, next_collection_date_2: e.target.value })}
-                      className="w-full border border-slate-300 rounded px-3 py-1.5 text-slate-900 text-xs focus:ring-1 focus:ring-green-600 focus:outline-none"
-                    />
+
+                  {/* Date 1 & Date 2 */}
+                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200">
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                        Date 1 (Follow-up 1)
+                      </label>
+                      <input
+                        type="date"
+                        value={customerForm.date_1 || ""}
+                        onChange={(e) => setCustomerForm({ ...customerForm, date_1: e.target.value })}
+                        className="w-full bg-white border border-slate-300 rounded px-3 py-1.5 text-slate-900 text-xs focus:ring-1 focus:ring-green-600 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                        Date 2 (Follow-up 2)
+                      </label>
+                      <input
+                        type="date"
+                        value={customerForm.date_2 || ""}
+                        onChange={(e) => setCustomerForm({ ...customerForm, date_2: e.target.value })}
+                        className="w-full bg-white border border-slate-300 rounded px-3 py-1.5 text-slate-900 text-xs focus:ring-1 focus:ring-green-600 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Next Collection Dates */}
+                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200">
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                        Next Collec Date 1
+                      </label>
+                      <input
+                        type="date"
+                        value={customerForm.next_collection_date || ""}
+                        onChange={(e) => setCustomerForm({ ...customerForm, next_collection_date: e.target.value })}
+                        className="w-full bg-white border border-slate-300 rounded px-3 py-1.5 text-slate-900 text-xs focus:ring-1 focus:ring-green-600 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                        Next Collec Date 2
+                      </label>
+                      <input
+                        type="date"
+                        value={customerForm.next_collection_date_2 || ""}
+                        onChange={(e) => setCustomerForm({ ...customerForm, next_collection_date_2: e.target.value })}
+                        className="w-full bg-white border border-slate-300 rounded px-3 py-1.5 text-slate-900 text-xs focus:ring-1 focus:ring-green-600 focus:outline-none"
+                      />
+                    </div>
                   </div>
                 </div>
 
+                {/* Plan, Status & Probability */}
                 <div className="grid grid-cols-3 gap-2">
                   <div>
                     <label className="text-[10px] font-bold text-slate-700 block mb-1">
@@ -1309,7 +1890,7 @@ function ScorecardContent() {
                   </div>
                   <div>
                     <label className="text-[10px] font-bold text-slate-700 block mb-1">
-                      Certainty (10-100%)
+                      Certainty %
                     </label>
                     <select
                       value={customerForm.collection_probability}
@@ -1325,6 +1906,7 @@ function ScorecardContent() {
                   </div>
                 </div>
 
+                {/* Remarks */}
                 <div>
                   <label className="text-[11px] font-bold text-slate-700 block mb-1">
                     Remarks / Action Taken
@@ -1338,12 +1920,14 @@ function ScorecardContent() {
                   />
                 </div>
 
+                {/* Footer Buttons */}
                 <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
                     onClick={() => setCustomerModalOpen(false)}
+                    disabled={savingCustomer}
                   >
                     Cancel
                   </Button>

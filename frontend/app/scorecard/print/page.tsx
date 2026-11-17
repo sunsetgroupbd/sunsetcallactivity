@@ -146,6 +146,7 @@ function ScorecardPrintContent() {
                 <tr className="bg-slate-200 font-bold text-black">
                   <th className="border border-black px-1.5 py-1 text-left">Period</th>
                   <th className="border border-black px-1 py-1 text-right">TG Sales</th>
+                  <th className="border border-black px-1 py-1 text-right bg-sky-50 font-bold">Planned (Cx)</th>
                   <th className="border border-black px-1 py-1 text-right bg-emerald-50">New Sales</th>
                   <th className="border border-black px-1 py-1 text-right bg-emerald-50">TB</th>
                   <th className="border border-black px-1 py-1 text-right bg-emerald-50">EMI</th>
@@ -171,6 +172,7 @@ function ScorecardPrintContent() {
                   <tr key={i} className={r.row_type === "previous_month" ? "bg-slate-50 italic" : ""}>
                     <td className="border border-black px-1.5 py-0.5 text-left font-bold">{r.label}</td>
                     <td className="border border-black px-1 py-0.5 text-right font-mono">{formatBDT(r.tg_sales)}</td>
+                    <td className="border border-black px-1 py-0.5 text-right font-mono font-bold bg-sky-50/50">{formatBDT(r.planned_collection)}</td>
                     <td className="border border-black px-1 py-0.5 text-right font-mono bg-emerald-50/50">{formatBDT(r.new_sales)}</td>
                     <td className="border border-black px-1 py-0.5 text-right font-mono bg-emerald-50/50">{formatBDT(r.tb)}</td>
                     <td className="border border-black px-1 py-0.5 text-right font-mono bg-emerald-50/50">{formatBDT(r.emi)}</td>

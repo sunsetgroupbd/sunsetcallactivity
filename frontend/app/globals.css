@@ -56,9 +56,29 @@ input::placeholder, textarea::placeholder {
   background: #64748b;
 }
 
+/* Base Print Page Settings (Explicit Named Pages for Landscape & Portrait) */
 @page {
-  size: A4 portrait;
-  margin: 10mm 12mm 12mm 12mm;
+  margin: 6mm 5mm 6mm 5mm;
+}
+
+@page landscape-page {
+  size: 297mm 210mm !important;
+  size: A4 landscape !important;
+  margin: 6mm 5mm 6mm 5mm !important;
+}
+
+@page portrait-page {
+  size: 210mm 297mm !important;
+  size: A4 portrait !important;
+  margin: 8mm 6mm 8mm 6mm !important;
+}
+
+.print-landscape {
+  page: landscape-page !important;
+}
+
+.print-portrait {
+  page: portrait-page !important;
 }
 
 @media print {

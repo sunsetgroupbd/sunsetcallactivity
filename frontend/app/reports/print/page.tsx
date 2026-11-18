@@ -59,6 +59,53 @@ function PrintablePeriodSummaryContent() {
   const [error, setError] = useState<string | null>(null);
   const [orientation, setOrientation] = useState<"landscape" | "portrait">("landscape");
 
+  useEffect(() => {
+    let style = document.getElementById("sunset-print-orientation-style") as HTMLStyleElement | null;
+    if (!style) {
+      style = document.createElement("style");
+      style.id = "sunset-print-orientation-style";
+      document.head.appendChild(style);
+    }
+    const isLand = orientation === "landscape";
+    style.textContent = `
+      @page {
+        size: ${isLand ? "297mm 210mm" : "210mm 297mm"} !important;
+        size: ${isLand ? "A4 landscape" : "A4 portrait"} !important;
+        margin: ${isLand ? "6mm 5mm 6mm 5mm" : "8mm 6mm 8mm 6mm"} !important;
+      }
+      @page landscape-page {
+        size: 297mm 210mm !important;
+        size: A4 landscape !important;
+        margin: 6mm 5mm 6mm 5mm !important;
+      }
+      @page portrait-page {
+        size: 210mm 297mm !important;
+        size: A4 portrait !important;
+        margin: 8mm 6mm 8mm 6mm !important;
+      }
+      @media print {
+        @page {
+          size: ${isLand ? "297mm 210mm" : "210mm 297mm"} !important;
+          size: ${isLand ? "A4 landscape" : "A4 portrait"} !important;
+          margin: ${isLand ? "6mm 5mm 6mm 5mm" : "8mm 6mm 8mm 6mm"} !important;
+        }
+        html, body {
+          page: ${isLand ? "landscape-page" : "portrait-page"} !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+        .print-page-sheet {
+          page: ${isLand ? "landscape-page" : "portrait-page"} !important;
+        }
+      }
+    `;
+
+    return () => {
+      const el = document.getElementById("sunset-print-orientation-style");
+      if (el) el.remove();
+    };
+  }, [orientation]);
+
   const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -373,14 +420,34 @@ function PrintablePeriodSummaryContent() {
       <style
         dangerouslySetInnerHTML={{
           __html: `
+            @page {
+              size: ${orientation === "landscape" ? "297mm 210mm" : "210mm 297mm"} !important;
+              size: ${orientation === "landscape" ? "A4 landscape" : "A4 portrait"} !important;
+              margin: ${orientation === "landscape" ? "6mm 5mm 6mm 5mm" : "8mm 6mm 8mm 6mm"} !important;
+            }
+            @page landscape-page {
+              size: 297mm 210mm !important;
+              size: A4 landscape !important;
+              margin: 6mm 5mm 6mm 5mm !important;
+            }
+            @page portrait-page {
+              size: 210mm 297mm !important;
+              size: A4 portrait !important;
+              margin: 8mm 6mm 8mm 6mm !important;
+            }
             @media print {
               @page {
-                size: ${orientation === "landscape" ? "A4 landscape" : "A4 portrait"};
-                margin: ${orientation === "landscape" ? "6mm 5mm 6mm 5mm" : "8mm 6mm 8mm 6mm"};
+                size: ${orientation === "landscape" ? "297mm 210mm" : "210mm 297mm"} !important;
+                size: ${orientation === "landscape" ? "A4 landscape" : "A4 portrait"} !important;
+                margin: ${orientation === "landscape" ? "6mm 5mm 6mm 5mm" : "8mm 6mm 8mm 6mm"} !important;
               }
-              body {
+              html, body {
+                page: ${orientation === "landscape" ? "landscape-page" : "portrait-page"} !important;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
+              }
+              .print-page-sheet {
+                page: ${orientation === "landscape" ? "landscape-page" : "portrait-page"} !important;
               }
             }
           `,
@@ -388,7 +455,7 @@ function PrintablePeriodSummaryContent() {
       />
 
       {/* ── Official Printable Document Sheet (A4 Container) ───────────────────── */}
-      <div className={`print-page-sheet ${orientation === "landscape" ? "max-w-[1300px]" : "max-w-5xl"} mx-auto my-6 bg-white border border-slate-300 p-8 sm:p-10 shadow-sm print:border-none print:shadow-none print:p-0 print:m-0 print:max-w-none text-slate-900 text-xs transition-all`}>
+      <div className={`print-page-sheet ${orientation === "landscape" ? "print-landscape max-w-[1300px]" : "print-portrait max-w-5xl"} mx-auto my-6 bg-white border border-slate-300 p-8 sm:p-10 shadow-sm print:border-none print:shadow-none print:p-0 print:m-0 print:max-w-none text-slate-900 text-xs transition-all`}>
         {/* Document Letterhead */}
         <div className="border-b-2 border-emerald-800 pb-4 mb-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:flex-row print:items-center print:justify-between">

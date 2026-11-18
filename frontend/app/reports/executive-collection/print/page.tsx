@@ -17,6 +17,53 @@ function PrintContent() {
   const [loading, setLoading] = useState(true);
   const [orientation, setOrientation] = useState<"landscape" | "portrait">("landscape");
 
+  useEffect(() => {
+    let style = document.getElementById("sunset-print-orientation-style") as HTMLStyleElement | null;
+    if (!style) {
+      style = document.createElement("style");
+      style.id = "sunset-print-orientation-style";
+      document.head.appendChild(style);
+    }
+    const isLand = orientation === "landscape";
+    style.textContent = `
+      @page {
+        size: ${isLand ? "297mm 210mm" : "210mm 297mm"} !important;
+        size: ${isLand ? "A4 landscape" : "A4 portrait"} !important;
+        margin: ${isLand ? "6mm 5mm 6mm 5mm" : "8mm 6mm 8mm 6mm"} !important;
+      }
+      @page landscape-page {
+        size: 297mm 210mm !important;
+        size: A4 landscape !important;
+        margin: 6mm 5mm 6mm 5mm !important;
+      }
+      @page portrait-page {
+        size: 210mm 297mm !important;
+        size: A4 portrait !important;
+        margin: 8mm 6mm 8mm 6mm !important;
+      }
+      @media print {
+        @page {
+          size: ${isLand ? "297mm 210mm" : "210mm 297mm"} !important;
+          size: ${isLand ? "A4 landscape" : "A4 portrait"} !important;
+          margin: ${isLand ? "6mm 5mm 6mm 5mm" : "8mm 6mm 8mm 6mm"} !important;
+        }
+        html, body {
+          page: ${isLand ? "landscape-page" : "portrait-page"} !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+        .print-page-sheet {
+          page: ${isLand ? "landscape-page" : "portrait-page"} !important;
+        }
+      }
+    `;
+
+    return () => {
+      const el = document.getElementById("sunset-print-orientation-style");
+      if (el) el.remove();
+    };
+  }, [orientation]);
+
   const teamIdParam = searchParams.get("team_id")
     ? Number(searchParams.get("team_id"))
     : undefined;
@@ -98,14 +145,34 @@ function PrintContent() {
       <style
         dangerouslySetInnerHTML={{
           __html: `
+            @page {
+              size: ${orientation === "landscape" ? "297mm 210mm" : "210mm 297mm"} !important;
+              size: ${orientation === "landscape" ? "A4 landscape" : "A4 portrait"} !important;
+              margin: ${orientation === "landscape" ? "6mm 5mm 6mm 5mm" : "8mm 6mm 8mm 6mm"} !important;
+            }
+            @page landscape-page {
+              size: 297mm 210mm !important;
+              size: A4 landscape !important;
+              margin: 6mm 5mm 6mm 5mm !important;
+            }
+            @page portrait-page {
+              size: 210mm 297mm !important;
+              size: A4 portrait !important;
+              margin: 8mm 6mm 8mm 6mm !important;
+            }
             @media print {
               @page {
-                size: ${orientation === "landscape" ? "A4 landscape" : "A4 portrait"};
-                margin: ${orientation === "landscape" ? "6mm 5mm 6mm 5mm" : "8mm 6mm 8mm 6mm"};
+                size: ${orientation === "landscape" ? "297mm 210mm" : "210mm 297mm"} !important;
+                size: ${orientation === "landscape" ? "A4 landscape" : "A4 portrait"} !important;
+                margin: ${orientation === "landscape" ? "6mm 5mm 6mm 5mm" : "8mm 6mm 8mm 6mm"} !important;
               }
-              body {
+              html, body {
+                page: ${orientation === "landscape" ? "landscape-page" : "portrait-page"} !important;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
+              }
+              .print-page-sheet {
+                page: ${orientation === "landscape" ? "landscape-page" : "portrait-page"} !important;
               }
             }
           `,
@@ -121,7 +188,7 @@ function PrintContent() {
           Failed to load report data.
         </div>
       ) : (
-        <div className="w-full">
+        <div className={`print-page-sheet ${orientation === "landscape" ? "print-landscape max-w-[1300px]" : "print-portrait max-w-4xl"} mx-auto w-full`}>
           {/* Header matching paper layout */}
           <div className="text-center mb-3">
             <h1 className="text-xl font-bold uppercase tracking-wider text-black">

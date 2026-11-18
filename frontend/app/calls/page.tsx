@@ -888,7 +888,7 @@ function DailyCallActivityContent() {
             className={cn(
               "flex-1 flex items-center justify-center gap-2 py-2.5 px-3 sm:px-4 rounded-xl text-xs sm:text-sm font-bold transition-all",
               activeWorkflowTab === "lead_dialing"
-                ? "bg-gradient-to-r from-emerald-600 to-teal-700 text-white shadow-sm"
+                ? "bg-emerald-700 text-white shadow-sm"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
             )}
           >
@@ -905,7 +905,7 @@ function DailyCallActivityContent() {
             className={cn(
               "flex-1 flex items-center justify-center gap-2 py-2.5 px-3 sm:px-4 rounded-xl text-xs sm:text-sm font-bold transition-all",
               activeWorkflowTab === "daily_sheet"
-                ? "bg-gradient-to-r from-slate-800 to-slate-950 text-white shadow-sm"
+                ? "bg-slate-900 text-white shadow-sm"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
             )}
           >

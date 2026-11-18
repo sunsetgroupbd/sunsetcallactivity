@@ -25,6 +25,10 @@ import {
   ShieldAlert,
   Loader2,
   Sparkles,
+  Globe,
+  Building2,
+  Snowflake,
+  Handshake,
 } from "lucide-react";
 import {
   WorkflowLead,
@@ -43,11 +47,46 @@ interface LeadDialingDashboardProps {
   onCallLogged?: () => void;
 }
 
-const SOURCES: { key: WorkflowLeadSource; label: string; icon: string; color: string }[] = [
-  { key: "fb_lead", label: "FB Lead", icon: "📱", color: "from-blue-600 to-indigo-700" },
-  { key: "fair_lead", label: "Fair Lead", icon: "🏢", color: "from-purple-600 to-pink-700" },
-  { key: "cold_lead", label: "Cold Lead", icon: "❄️", color: "from-sky-600 to-cyan-700" },
-  { key: "reference", label: "Reference", icon: "🤝", color: "from-amber-600 to-orange-700" },
+const SOURCES: {
+  key: WorkflowLeadSource;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  activeBg: string;
+  badgeActiveBg: string;
+  iconColor: string;
+}[] = [
+  {
+    key: "fb_lead",
+    label: "FB Lead",
+    icon: Globe,
+    activeBg: "bg-blue-600 border-blue-600 text-white",
+    badgeActiveBg: "bg-blue-700 text-white border-blue-500",
+    iconColor: "text-blue-600",
+  },
+  {
+    key: "fair_lead",
+    label: "Fair Lead",
+    icon: Building2,
+    activeBg: "bg-purple-700 border-purple-700 text-white",
+    badgeActiveBg: "bg-purple-800 text-white border-purple-600",
+    iconColor: "text-purple-700",
+  },
+  {
+    key: "cold_lead",
+    label: "Cold Lead",
+    icon: Snowflake,
+    activeBg: "bg-sky-700 border-sky-700 text-white",
+    badgeActiveBg: "bg-sky-800 text-white border-sky-600",
+    iconColor: "text-sky-700",
+  },
+  {
+    key: "reference",
+    label: "Reference",
+    icon: Handshake,
+    activeBg: "bg-amber-600 border-amber-600 text-white",
+    badgeActiveBg: "bg-amber-700 text-white border-amber-500",
+    iconColor: "text-amber-600",
+  },
 ];
 
 const STATUSES: { key: WorkflowLeadStatus; label: string; fullLabel: string; badgeClass: string; chipBg: string }[] = [
@@ -417,6 +456,7 @@ export function LeadDialingDashboard({
           const isSelected = selectedSource === src.key;
           const counts = summary ? summary[src.key] : null;
           const total = counts ? counts.total : 0;
+          const Icon = src.icon;
 
           return (
             <button
@@ -427,19 +467,26 @@ export function LeadDialingDashboard({
                 setSelectedStatus("all"); // reset status filter when switching source
               }}
               className={cn(
-                "p-3 rounded-2xl border text-left transition-all relative overflow-hidden flex flex-col justify-between group",
+                "p-3.5 rounded-2xl border text-left transition-all relative overflow-hidden flex flex-col justify-between group",
                 isSelected
-                  ? "bg-gradient-to-br text-white shadow-md border-transparent " + src.color
-                  : "bg-white hover:bg-slate-50/80 text-slate-800 border-slate-200"
+                  ? src.activeBg + " shadow-md"
+                  : "bg-white hover:bg-slate-50 text-slate-800 border-slate-200"
               )}
             >
               <div className="flex items-center justify-between w-full">
-                <span className="text-xl">{src.icon}</span>
+                <div
+                  className={cn(
+                    "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
+                    isSelected ? "bg-white/20 text-white" : "bg-slate-100 " + src.iconColor
+                  )}
+                >
+                  <Icon className="w-4.5 h-4.5" />
+                </div>
                 <span
                   className={cn(
-                    "text-xs font-extrabold px-2 py-0.5 rounded-full border",
+                    "text-xs font-extrabold px-2.5 py-0.5 rounded-full border",
                     isSelected
-                      ? "bg-white/20 text-white border-white/30"
+                      ? src.badgeActiveBg
                       : "bg-slate-100 text-slate-700 border-slate-200"
                   )}
                 >
@@ -447,7 +494,7 @@ export function LeadDialingDashboard({
                 </span>
               </div>
 
-              <div className="mt-2.5">
+              <div className="mt-3">
                 <span
                   className={cn(
                     "text-xs sm:text-sm font-bold block",
@@ -458,8 +505,8 @@ export function LeadDialingDashboard({
                 </span>
                 <span
                   className={cn(
-                    "text-[10.5px] block truncate mt-0.5",
-                    isSelected ? "text-white/80" : "text-slate-500"
+                    "text-[11px] block truncate mt-0.5 font-medium",
+                    isSelected ? "text-white/85" : "text-slate-500"
                   )}
                 >
                   HP: {counts?.hp || 0} • P: {counts?.p || 0} • FUP: {counts?.fup || 0}

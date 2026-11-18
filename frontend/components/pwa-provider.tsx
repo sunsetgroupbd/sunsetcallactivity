@@ -30,6 +30,7 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
   const [isInstalled, setIsInstalled] = useState<boolean>(false);
   const [canInstall, setCanInstall] = useState<boolean>(false);
   const [isIos, setIsIos] = useState<boolean>(false);
+  const [isDesktop, setIsDesktop] = useState<boolean>(false);
   const [showIosGuide, setShowIosGuide] = useState<boolean>(false);
   const [bannerDismissed, setBannerDismissed] = useState<boolean>(false);
 
@@ -69,12 +70,17 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
 
     const standalone = checkStandalone();
 
-    // 3. Detect iOS Safari
+    // 3. Detect iOS Safari and Desktop / PC mode
     const userAgent = window.navigator.userAgent.toLowerCase();
     const isAppleIos =
       /iphone|ipad|ipod/.test(userAgent) &&
       !(window as any).MSStream;
     setIsIos(isAppleIos);
+
+    const isMobileDevice = /android|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(
+      userAgent
+    );
+    setIsDesktop(!isMobileDevice);
 
     if (isAppleIos && !standalone) {
       // iOS doesn't fire beforeinstallprompt, but users can add to home screen
@@ -96,13 +102,18 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
       setCanInstall(false);
       setDeferredPrompt(null);
       setBannerDismissed(true);
+      try {
+        localStorage.setItem("sunset_pwa_dismissed", "true");
+      } catch {
+        // ignore
+      }
     };
 
     window.addEventListener("appinstalled", handleAppInstalled);
 
-    // Check localStorage if banner was dismissed recently
+    // Check localStorage if banner was dismissed
     try {
-      const dismissed = sessionStorage.getItem("sunset_pwa_dismissed");
+      const dismissed = localStorage.getItem("sunset_pwa_dismissed");
       if (dismissed === "true") setBannerDismissed(true);
     } catch {
       // ignore
@@ -132,6 +143,12 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
       if (choiceResult.outcome === "accepted") {
         setIsInstalled(true);
         setCanInstall(false);
+        setBannerDismissed(true);
+        try {
+          localStorage.setItem("sunset_pwa_dismissed", "true");
+        } catch {
+          // ignore
+        }
       }
       setDeferredPrompt(null);
     } catch (err) {
@@ -142,7 +159,7 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
   const handleDismissBanner = () => {
     setBannerDismissed(true);
     try {
-      sessionStorage.setItem("sunset_pwa_dismissed", "true");
+      localStorage.setItem("sunset_pwa_dismissed", "true");
     } catch {
       // ignore
     }
@@ -161,14 +178,14 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
     >
       {children}
 
-      {/* ─── Dismissible Install Banner for Mobile Browsers ─────────────────── */}
-      {!isInstalled && canInstall && !bannerDismissed && (
+      {/* ─── Dismissible Install Banner for Mobile Browsers (Hidden in PC Mode) ─── */}
+      {!isDesktop && !isInstalled && canInstall && !bannerDismissed && (
         <div
           className={cn(
-            "fixed left-2.5 right-2.5 sm:left-auto sm:right-4 sm:max-w-sm z-50 animate-in fade-in slide-in-from-bottom duration-300",
+            "fixed left-2.5 right-2.5 sm:left-auto sm:right-4 sm:max-w-sm z-50 animate-in fade-in slide-in-from-bottom duration-300 md:hidden",
             isLoginPage
               ? "bottom-[max(0.75rem,env(safe-area-inset-bottom))]"
-              : "bottom-[calc(4.25rem+env(safe-area-inset-bottom,0px))] md:bottom-4"
+              : "bottom-[calc(4.25rem+env(safe-area-inset-bottom,0px))]"
           )}
         >
           <div className="bg-slate-900/95 backdrop-blur-md border border-slate-700/80 text-white rounded-2xl p-2.5 sm:p-3 shadow-2xl flex items-center justify-between gap-2.5">

@@ -571,6 +571,7 @@ export interface PerformanceIntervalSummary {
   label: string;
   end_day: number;
   new_sales: number;
+  actual_tb?: number;
   emi: number;
   total_collection: number;
   total_lead: number;
@@ -618,6 +619,28 @@ export interface EmployeeMonthlyPerformance {
   prediction_hold: number;
   prediction_cancel: number;
   total_lead_hp_p?: number;
+  outdoor_visits?: number;
+  indoor_cx?: number;
+  tl_name?: string | null;
+  co_name?: string | null;
+  team_name?: string | null;
+  total_fair_lead?: number;
+  total_fb_lead?: number;
+  marking_score?: number | null;
+  sheet_score?: number | null;
+  call_score?: number | null;
+  planned_leave?: number | null;
+  unauthorized_leave?: number | null;
+  prediction_amount?: number | null;
+  emi_due_monthly?: number | null;
+  emi_client_count?: number | null;
+  emi_hold_amount?: number | null;
+  emi_cancel_amount?: number | null;
+  tb_due_amount?: number | null;
+  tb_client_count?: number | null;
+  tb_share_count?: number | null;
+  tb_hold_amount?: number | null;
+  tb_cancel_amount?: number | null;
   intervals: PerformanceIntervalSummary[];
   history_months?: EmployeeMonthlyPerformance[];
 }
@@ -642,6 +665,7 @@ export interface CustomerCollectionItem {
   lead_source?: string | null;
   lead_source_date?: string | null;
   total_collection: number;
+  collection_probability?: number | null;
   remarks?: string | null;
   employee_id: number;
   employee_name: string;
@@ -677,6 +701,7 @@ export interface MilestoneCheckpointItem {
   checkpoint_day: number;
   label?: string;
   new_sales: number;
+  actual_tb?: number;
   emi: number;
   total_collection?: number;
   total_lead?: number;
@@ -710,6 +735,7 @@ export interface MilestoneCheckpointRead {
   checkpoint_day: number;
   label: string;
   new_sales: number;
+  actual_tb?: number;
   emi: number;
   total_collection: number;
   total_lead: number;

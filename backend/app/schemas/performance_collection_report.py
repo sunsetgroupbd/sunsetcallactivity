@@ -12,6 +12,7 @@ class PerformanceIntervalSummary(BaseModel):
     label: str  # "Till 5th", "Till 10th", "Till 15th", "Till 20th", "Till 25th", "Till 30th/31st"
     end_day: int
     new_sales: Decimal = Decimal("0")
+    actual_tb: Decimal = Decimal("0")  # Token to Booking (TB)
     emi: Decimal = Decimal("0")
     total_collection: Decimal = Decimal("0")
     total_lead: int = 0
@@ -66,6 +67,30 @@ class EmployeeMonthlyPerformance(BaseModel):
     prediction_hold: Decimal = Decimal("0")
     prediction_cancel: Decimal = Decimal("0")
     total_lead_hp_p: int = 0
+    outdoor_visits: int = 0
+    indoor_cx: int = 0
+    
+    # Employee Hierarchy & Portfolio Metadata
+    tl_name: Optional[str] = None
+    co_name: Optional[str] = None
+    team_name: Optional[str] = None
+    total_fair_lead: int = 0
+    total_fb_lead: int = 0
+    marking_score: Optional[int] = None
+    sheet_score: Optional[int] = None
+    call_score: Optional[int] = None
+    planned_leave: Optional[int] = None
+    unauthorized_leave: Optional[int] = None
+    prediction_amount: Optional[Decimal] = None
+    emi_due_monthly: Optional[Decimal] = None
+    emi_client_count: Optional[int] = None
+    emi_hold_amount: Optional[Decimal] = None
+    emi_cancel_amount: Optional[Decimal] = None
+    tb_due_amount: Optional[Decimal] = None
+    tb_client_count: Optional[int] = None
+    tb_share_count: Optional[int] = None
+    tb_hold_amount: Optional[Decimal] = None
+    tb_cancel_amount: Optional[Decimal] = None
     
     # Milestones (Till 5th, 10th, 15th, 20th, 25th, 30th/31st)
     intervals: List[PerformanceIntervalSummary] = Field(default_factory=list)
@@ -100,6 +125,7 @@ class CustomerCollectionItem(BaseModel):
     lead_source: Optional[str] = None  # Fair, FB, Referral, Direct, etc.
     lead_source_date: Optional[date] = None  # Original lead entry date
     total_collection: Decimal = Decimal("0")
+    collection_probability: Optional[int] = None  # Collection Probability % (e.g. 90, 75, 50)
     remarks: Optional[str] = None
     
     employee_id: int
@@ -136,6 +162,7 @@ class MilestoneCheckpointItem(BaseModel):
     checkpoint_day: int
     label: str
     new_sales: Decimal = Decimal("0")
+    actual_tb: Decimal = Decimal("0")  # Token to Booking (TB)
     emi: Decimal = Decimal("0")
     total_collection: Decimal = Decimal("0")
     total_lead: int = 0

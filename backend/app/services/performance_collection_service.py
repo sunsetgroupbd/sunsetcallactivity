@@ -314,6 +314,27 @@ class PerformanceCollectionService:
             m1_metrics = self._aggregate_reports_metrics(prev1_reports)
             m2_metrics = self._aggregate_reports_metrics(prev2_reports)
 
+            # Supervisor / TL / CO detection
+            tl_name_val = None
+            if emp.reporting_manager:
+                tl_name_val = emp.reporting_manager.full_name
+            elif emp.team and hasattr(emp.team, "members"):
+                for m in emp.team.members:
+                    if m.role == UserRole.TL and m.id != emp.id:
+                        tl_name_val = m.full_name
+                        break
+            
+            co_name_val = None
+            if emp.team:
+                if emp.team.director_name:
+                    co_name_val = emp.team.director_name
+                elif hasattr(emp.team, "members"):
+                    for m in emp.team.members:
+                        if m.role == UserRole.CO and m.id != emp.id:
+                            co_name_val = m.full_name
+                            break
+            team_name_val = emp.team.name if emp.team else None
+
             # Build previous 2 months history objects
             m2_label = f"{calendar.month_abbr[prev2_m]}-{str(prev2_y)[-2:]}"
             m1_label = f"{calendar.month_abbr[prev1_m]}-{str(prev1_y)[-2:]}"
@@ -336,6 +357,8 @@ class PerformanceCollectionService:
                 hp=m2_metrics["hp"],
                 p=m2_metrics["p"],
                 fup=m2_metrics["fup"],
+                outdoor_visits=m2_metrics["outdoor_visits"],
+                indoor_cx=m2_metrics["indoor_cx"],
                 total_calls=m2_metrics["total_calls"],
                 prediction_sold_fair=m2_metrics["prediction_sold_fair"],
                 prediction_sold_fb=m2_metrics["prediction_sold_fb"],
@@ -344,6 +367,11 @@ class PerformanceCollectionService:
                 prediction_hold=m2_metrics["prediction_hold"],
                 prediction_cancel=m2_metrics["prediction_cancel"],
                 total_lead_hp_p=m2_metrics["total_lead_hp_p"],
+                tl_name=tl_name_val,
+                co_name=co_name_val,
+                team_name=team_name_val,
+                total_fair_lead=m2_metrics["fair_lead"],
+                total_fb_lead=m2_metrics["fb_lead"],
                 intervals=[],
                 history_months=[],
             )
@@ -365,6 +393,8 @@ class PerformanceCollectionService:
                 hp=m1_metrics["hp"],
                 p=m1_metrics["p"],
                 fup=m1_metrics["fup"],
+                outdoor_visits=m1_metrics["outdoor_visits"],
+                indoor_cx=m1_metrics["indoor_cx"],
                 total_calls=m1_metrics["total_calls"],
                 prediction_sold_fair=m1_metrics["prediction_sold_fair"],
                 prediction_sold_fb=m1_metrics["prediction_sold_fb"],
@@ -373,6 +403,11 @@ class PerformanceCollectionService:
                 prediction_hold=m1_metrics["prediction_hold"],
                 prediction_cancel=m1_metrics["prediction_cancel"],
                 total_lead_hp_p=m1_metrics["total_lead_hp_p"],
+                tl_name=tl_name_val,
+                co_name=co_name_val,
+                team_name=team_name_val,
+                total_fair_lead=m1_metrics["fair_lead"],
+                total_fb_lead=m1_metrics["fb_lead"],
                 intervals=[],
                 history_months=[],
             )
@@ -391,6 +426,7 @@ class PerformanceCollectionService:
                             label=rec.label or label,
                             end_day=m_day,
                             new_sales=rec.new_sales,
+                            actual_tb=getattr(rec, "actual_tb", Decimal("0")) or sub_m["tb"],
                             emi=rec.emi,
                             total_collection=rec.total_collection,
                             total_lead=rec.total_lead,
@@ -419,6 +455,7 @@ class PerformanceCollectionService:
                             label=label,
                             end_day=m_day,
                             new_sales=sub_m["new_sales"],
+                            actual_tb=sub_m["tb"],
                             emi=sub_m["emi"],
                             total_collection=sub_m["total_collection"],
                             total_lead=sub_m["total_lead"],
@@ -467,6 +504,17 @@ class PerformanceCollectionService:
                     prediction_hold=curr_metrics["prediction_hold"],
                     prediction_cancel=curr_metrics["prediction_cancel"],
                     total_lead_hp_p=curr_metrics["total_lead_hp_p"],
+                    outdoor_visits=curr_metrics["outdoor_visits"],
+                    indoor_cx=curr_metrics["indoor_cx"],
+                    tl_name=tl_name_val,
+                    co_name=co_name_val,
+                    team_name=team_name_val,
+                    total_fair_lead=curr_metrics["fair_lead"],
+                    total_fb_lead=curr_metrics["fb_lead"],
+                    tb_client_count=getattr(emp, "client_count", 0),
+                    tb_share_count=getattr(emp, "client_share_count", 0),
+                    tb_due_amount=curr_metrics["tb"] if curr_metrics["tb"] > 0 else Decimal("0"),
+                    emi_due_monthly=curr_metrics["emi"] if curr_metrics["emi"] > 0 else Decimal("0"),
                     intervals=intervals,
                     history_months=[m2_perf, m1_perf],
                 )
@@ -496,6 +544,7 @@ class PerformanceCollectionService:
                         label=rec.label or label,
                         end_day=m_day,
                         new_sales=rec.new_sales,
+                        actual_tb=getattr(rec, "actual_tb", Decimal("0")),
                         emi=rec.emi,
                         total_collection=rec.total_collection,
                         total_lead=rec.total_lead,
@@ -521,6 +570,10 @@ class PerformanceCollectionService:
             else:
                 c_new_sales = sum(
                     (p.intervals[idx].new_sales for p in monthly_performances if len(p.intervals) > idx),
+                    Decimal("0"),
+                )
+                c_tb = sum(
+                    (p.intervals[idx].actual_tb for p in monthly_performances if len(p.intervals) > idx),
                     Decimal("0"),
                 )
                 c_emi = sum(
@@ -592,6 +645,7 @@ class PerformanceCollectionService:
                         label=label,
                         end_day=m_day,
                         new_sales=c_new_sales,
+                        actual_tb=c_tb,
                         emi=c_emi,
                         total_collection=c_tot_coll,
                         total_lead=c_leads,
@@ -754,6 +808,32 @@ class PerformanceCollectionService:
                     customer_code_map[cust_identity] = f"CX-{1001 + len(customer_code_map)}"
                 cust_code = customer_code_map[cust_identity]
 
+                # Collection Probability % calculation
+                prob_val: Optional[int] = None
+                pct_match = re.search(r"(\d{1,3})\s*%", notes_text)
+                if pct_match:
+                    try:
+                        val = int(pct_match.group(1))
+                        if 0 <= val <= 100:
+                            prob_val = val
+                    except Exception:
+                        pass
+
+                if prob_val is None:
+                    status_upper = lead_status.upper()
+                    if paid > 0 or status_upper in ["SOLD", "BOOKED", "PAID"]:
+                        prob_val = 100
+                    elif status_upper == "HP":
+                        prob_val = 90
+                    elif status_upper == "P":
+                        prob_val = 75
+                    elif status_upper in ["FUP", "FUB"]:
+                        prob_val = 50
+                    elif status_upper == "NI":
+                        prob_val = 20
+                    else:
+                        prob_val = 60
+
                 item = CustomerCollectionItem(
                     id=se.id or customer_item_id,
                     customer_code=cust_code,
@@ -774,6 +854,7 @@ class PerformanceCollectionService:
                     lead_source=lead_src,
                     lead_source_date=lead_src_date,
                     total_collection=tot_amt,
+                    collection_probability=prob_val,
                     remarks=se.notes or se.description,
                     employee_id=r.employee_id,
                     employee_name=r.employee.full_name if r.employee else "Employee",

@@ -90,12 +90,12 @@ function PerformanceCollectionReportContent() {
 
   const initialCheckpoints: MilestoneCheckpointItem[] = useMemo(
     () => [
-      { checkpoint_day: 5, label: "Till 5th", new_sales: 0, emi: 0, total_collection: 0, total_lead: 0, fair_lead: 0, fb_lead: 0, hp: 0, p: 0, fup: 0, outdoor_visits: 0, indoor_cx: 0, total_calls: 0, sold_fair: 0, sold_fb: 0, sold_other: 0, gl: "GL", hold: 0, cancel: 0, admin_notes: "" },
-      { checkpoint_day: 10, label: "Till 10th", new_sales: 0, emi: 0, total_collection: 0, total_lead: 0, fair_lead: 0, fb_lead: 0, hp: 0, p: 0, fup: 0, outdoor_visits: 0, indoor_cx: 0, total_calls: 0, sold_fair: 0, sold_fb: 0, sold_other: 0, gl: "GL", hold: 0, cancel: 0, admin_notes: "" },
-      { checkpoint_day: 15, label: "Till 15th", new_sales: 0, emi: 0, total_collection: 0, total_lead: 0, fair_lead: 0, fb_lead: 0, hp: 0, p: 0, fup: 0, outdoor_visits: 0, indoor_cx: 0, total_calls: 0, sold_fair: 0, sold_fb: 0, sold_other: 0, gl: "GL", hold: 0, cancel: 0, admin_notes: "" },
-      { checkpoint_day: 20, label: "Till 20th", new_sales: 0, emi: 0, total_collection: 0, total_lead: 0, fair_lead: 0, fb_lead: 0, hp: 0, p: 0, fup: 0, outdoor_visits: 0, indoor_cx: 0, total_calls: 0, sold_fair: 0, sold_fb: 0, sold_other: 0, gl: "GL", hold: 0, cancel: 0, admin_notes: "" },
-      { checkpoint_day: 25, label: "Till 25th", new_sales: 0, emi: 0, total_collection: 0, total_lead: 0, fair_lead: 0, fb_lead: 0, hp: 0, p: 0, fup: 0, outdoor_visits: 0, indoor_cx: 0, total_calls: 0, sold_fair: 0, sold_fb: 0, sold_other: 0, gl: "GL", hold: 0, cancel: 0, admin_notes: "" },
-      { checkpoint_day: 30, label: "Till 30/31th", new_sales: 0, emi: 0, total_collection: 0, total_lead: 0, fair_lead: 0, fb_lead: 0, hp: 0, p: 0, fup: 0, outdoor_visits: 0, indoor_cx: 0, total_calls: 0, sold_fair: 0, sold_fb: 0, sold_other: 0, gl: "GL", hold: 0, cancel: 0, admin_notes: "" },
+      { checkpoint_day: 5, label: "Till 5th", new_sales: 0, actual_tb: 0, emi: 0, total_collection: 0, total_lead: 0, fair_lead: 0, fb_lead: 0, hp: 0, p: 0, fup: 0, outdoor_visits: 0, indoor_cx: 0, total_calls: 0, sold_fair: 0, sold_fb: 0, sold_other: 0, gl: "GL", hold: 0, cancel: 0, admin_notes: "" },
+      { checkpoint_day: 10, label: "Till 10th", new_sales: 0, actual_tb: 0, emi: 0, total_collection: 0, total_lead: 0, fair_lead: 0, fb_lead: 0, hp: 0, p: 0, fup: 0, outdoor_visits: 0, indoor_cx: 0, total_calls: 0, sold_fair: 0, sold_fb: 0, sold_other: 0, gl: "GL", hold: 0, cancel: 0, admin_notes: "" },
+      { checkpoint_day: 15, label: "Till 15th", new_sales: 0, actual_tb: 0, emi: 0, total_collection: 0, total_lead: 0, fair_lead: 0, fb_lead: 0, hp: 0, p: 0, fup: 0, outdoor_visits: 0, indoor_cx: 0, total_calls: 0, sold_fair: 0, sold_fb: 0, sold_other: 0, gl: "GL", hold: 0, cancel: 0, admin_notes: "" },
+      { checkpoint_day: 20, label: "Till 20th", new_sales: 0, actual_tb: 0, emi: 0, total_collection: 0, total_lead: 0, fair_lead: 0, fb_lead: 0, hp: 0, p: 0, fup: 0, outdoor_visits: 0, indoor_cx: 0, total_calls: 0, sold_fair: 0, sold_fb: 0, sold_other: 0, gl: "GL", hold: 0, cancel: 0, admin_notes: "" },
+      { checkpoint_day: 25, label: "Till 25th", new_sales: 0, actual_tb: 0, emi: 0, total_collection: 0, total_lead: 0, fair_lead: 0, fb_lead: 0, hp: 0, p: 0, fup: 0, outdoor_visits: 0, indoor_cx: 0, total_calls: 0, sold_fair: 0, sold_fb: 0, sold_other: 0, gl: "GL", hold: 0, cancel: 0, admin_notes: "" },
+      { checkpoint_day: 30, label: "Till 30/31th", new_sales: 0, actual_tb: 0, emi: 0, total_collection: 0, total_lead: 0, fair_lead: 0, fb_lead: 0, hp: 0, p: 0, fup: 0, outdoor_visits: 0, indoor_cx: 0, total_calls: 0, sold_fair: 0, sold_fb: 0, sold_other: 0, gl: "GL", hold: 0, cancel: 0, admin_notes: "" },
     ],
     []
   );
@@ -183,8 +183,9 @@ function PerformanceCollectionReportContent() {
         return {
           ...row,
           new_sales: match.new_sales || 0,
+          actual_tb: match.actual_tb || 0,
           emi: match.emi || 0,
-          total_collection: match.total_collection || ((match.new_sales || 0) + (match.emi || 0)),
+          total_collection: match.total_collection || ((match.new_sales || 0) + (match.actual_tb || 0) + (match.emi || 0)),
           total_lead: match.total_lead || 0,
           fair_lead: match.fair_lead || 0,
           fb_lead: match.fb_lead || 0,
@@ -227,6 +228,7 @@ function PerformanceCollectionReportContent() {
               checkpoint_day: match.checkpoint_day,
               label: match.label,
               new_sales: match.new_sales,
+              actual_tb: match.actual_tb || 0,
               emi: match.emi,
               total_collection: match.total_collection,
               total_lead: match.total_lead,
@@ -861,40 +863,34 @@ function PerformanceCollectionReportContent() {
             >
               <table className="w-full text-left text-xs border-collapse min-w-[1250px]">
                 <thead className="sticky top-0 z-20 shadow-xs">
-                  <tr className="border-b border-slate-200 bg-slate-100 text-[11px] uppercase tracking-wider text-slate-700">
-                    <th rowSpan={2} className="py-2.5 px-3 font-bold sticky left-0 bg-slate-100 z-30 border-r border-b border-slate-200 whitespace-nowrap min-w-[100px]">
-                      Month / Period
+                  <tr className="border-b border-slate-200 bg-slate-100 text-[10.5px] uppercase tracking-wider text-slate-700">
+                    <th className="py-2.5 px-3 font-bold sticky left-0 bg-slate-100 z-30 border-r border-slate-200 whitespace-nowrap min-w-[95px]">
+                      Month
                     </th>
-                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-right border-b border-slate-200 whitespace-nowrap min-w-[70px]">TG</th>
-                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-right text-emerald-700 border-b border-slate-200 whitespace-nowrap min-w-[75px]">New Sales</th>
-                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-right text-sky-700 border-b border-slate-200 whitespace-nowrap min-w-[75px]">EMI</th>
-                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-right border-b border-slate-200 whitespace-nowrap min-w-[50px]">Total Lead</th>
-                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-right border-b border-slate-200 whitespace-nowrap min-w-[50px]">Fair Lead</th>
-                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-right border-b border-slate-200 whitespace-nowrap min-w-[50px]">FB Leads</th>
-                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-right text-rose-700 border-b border-slate-200 whitespace-nowrap min-w-[38px]">HP</th>
-                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-right text-amber-700 border-b border-slate-200 whitespace-nowrap min-w-[38px]">P</th>
-                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-right text-sky-700 border-b border-slate-200 whitespace-nowrap min-w-[38px]">Fup</th>
-                    <th colSpan={4} className="py-1.5 px-2 font-bold text-center bg-slate-200 border-x border-b border-slate-300 text-slate-800 whitespace-nowrap">
-                      Prediction from Emp
-                    </th>
-                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-center border-b border-slate-200 whitespace-nowrap min-w-[42px]">GL</th>
-                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-center text-amber-700 border-b border-slate-200 whitespace-nowrap min-w-[42px]">Hold</th>
-                    <th rowSpan={2} className="py-2.5 px-2 font-bold text-center text-rose-700 border-b border-slate-200 whitespace-nowrap min-w-[42px]">Cancel</th>
-                    <th rowSpan={2} className="py-2.5 px-2.5 font-bold text-center bg-slate-200 border-l border-b border-slate-300 text-slate-800 whitespace-nowrap min-w-[125px]">
-                      Total Lead (HP+P) / Coll
-                    </th>
-                  </tr>
-                  <tr className="border-b border-slate-200 bg-slate-50 text-[10px] text-slate-600 font-semibold">
-                    <th className="py-1 px-1.5 text-center text-slate-800 bg-slate-100 border-l border-slate-200 whitespace-nowrap min-w-[65px]">Total Calls</th>
-                    <th className="py-1 px-1 text-center text-emerald-700 bg-emerald-50 whitespace-nowrap min-w-[70px]">Sold Fair</th>
-                    <th className="py-1 px-1 text-center text-sky-700 bg-sky-50 whitespace-nowrap min-w-[70px]">Sold FB</th>
-                    <th className="py-1 px-1 text-center text-purple-700 bg-purple-50 border-r border-slate-200 whitespace-nowrap min-w-[70px]">Sold Other</th>
+                    <th className="py-2.5 px-2 font-bold text-right border-slate-200 whitespace-nowrap min-w-[70px]">TG</th>
+                    <th className="py-2.5 px-2 font-bold text-right text-emerald-700 whitespace-nowrap min-w-[75px]">New Sales</th>
+                    <th className="py-2.5 px-2 font-bold text-right text-purple-700 whitespace-nowrap min-w-[75px]">Token to Booking</th>
+                    <th className="py-2.5 px-2 font-bold text-right text-sky-700 whitespace-nowrap min-w-[75px]">EMI</th>
+                    <th className="py-2.5 px-2 font-bold text-right whitespace-nowrap min-w-[50px]">Total Lead</th>
+                    <th className="py-2.5 px-2 font-bold text-right whitespace-nowrap min-w-[60px]">Current Fair Lead</th>
+                    <th className="py-2.5 px-2 font-bold text-right whitespace-nowrap min-w-[60px]">Current FB Leads</th>
+                    <th className="py-2.5 px-2 font-bold text-right text-rose-700 whitespace-nowrap min-w-[38px]">HP</th>
+                    <th className="py-2.5 px-2 font-bold text-right text-amber-700 whitespace-nowrap min-w-[38px]">P</th>
+                    <th className="py-2.5 px-2 font-bold text-right text-sky-700 whitespace-nowrap min-w-[38px]">Fup</th>
+                    <th className="py-2.5 px-2 font-bold text-center whitespace-nowrap min-w-[65px]">Total Calls Dialed</th>
+                    <th className="py-2.5 px-2 font-bold text-center text-amber-700 whitespace-nowrap min-w-[42px]">Hold</th>
+                    <th className="py-2.5 px-2 font-bold text-center text-rose-700 whitespace-nowrap min-w-[42px]">Cancel</th>
+                    <th className="py-2.5 px-2 font-bold text-center text-indigo-700 whitespace-nowrap min-w-[45px]">In done</th>
+                    <th className="py-2.5 px-2 font-bold text-center text-teal-700 whitespace-nowrap min-w-[45px]">Out Done</th>
+                    <th className="py-2.5 px-2 font-bold text-right text-emerald-700 whitespace-nowrap min-w-[70px]">Sold from Fair Leads</th>
+                    <th className="py-2.5 px-2 font-bold text-right text-sky-700 whitespace-nowrap min-w-[70px]">Sold From FB Leads</th>
+                    <th className="py-2.5 px-2 font-bold text-right text-purple-700 whitespace-nowrap min-w-[70px]">Sold From Other Leads</th>
                   </tr>
                 </thead>
                 {report.monthly_performances.length === 0 ? (
                   <tbody className="divide-y divide-slate-100 text-slate-700">
                     <tr>
-                      <td colSpan={18} className="py-10 text-center text-slate-400 font-medium">
+                      <td colSpan={19} className="py-10 text-center text-slate-400 font-medium">
                         No employee performance records found for {selectedMonth}.
                       </td>
                     </tr>
@@ -907,24 +903,42 @@ function PerformanceCollectionReportContent() {
 
                     return (
                       <tbody key={emp.employee_id} className="border-b-2 border-slate-300 last:border-0 divide-y divide-slate-100 text-slate-700">
-                        {/* Employee Header Banner Row */}
+                        {/* Employee Header Banner Row (Matches printed sheet header) */}
                         <tr className="bg-slate-100/90 border-t-2 border-slate-300 text-xs">
-                          <td colSpan={18} className="py-2.5 px-3">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <div className="flex items-center gap-3">
+                          <td colSpan={19} className="py-2 px-3">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
                                 <div>
-                                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1.5">Name:</span>
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">Name:</span>
                                   <span className="font-extrabold text-slate-900 text-sm">{emp.employee_name}</span>
                                 </div>
-                                <span className="text-slate-300">•</span>
-                                <div>
-                                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1.5">Position:</span>
-                                  <span className="font-semibold text-slate-700">{emp.position || "Staff"}</span>
+                                <div className="border-l border-slate-300 pl-3">
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">TL:</span>
+                                  <span className="font-semibold text-slate-800">{emp.tl_name || "-"}</span>
                                 </div>
-                                <span className="text-slate-300">•</span>
-                                <div>
-                                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1.5">GL:</span>
-                                  <span className="font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">{emp.gl || "GL"}</span>
+                                <div className="border-l border-slate-300 pl-3">
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">CO:</span>
+                                  <span className="font-semibold text-slate-800">{emp.co_name || "-"}</span>
+                                </div>
+                                <div className="border-l border-slate-300 pl-3">
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">Position:</span>
+                                  <span className="font-semibold text-slate-800">{emp.position || "Executive"}</span>
+                                </div>
+                                <div className="border-l border-slate-300 pl-3">
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">Marking (Out of 100):</span>
+                                  <span className="font-bold text-emerald-800">{emp.marking_score ?? "-"}</span>
+                                </div>
+                                <div className="border-l border-slate-300 pl-3">
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">Planned Leave:</span>
+                                  <span className="font-semibold text-slate-800">{emp.planned_leave ?? "-"}</span>
+                                </div>
+                                <div className="border-l border-slate-300 pl-3">
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">Un-Authorize Leave:</span>
+                                  <span className="font-semibold text-rose-700">{emp.unauthorized_leave ?? "-"}</span>
+                                </div>
+                                <div className="border-l border-slate-300 pl-3">
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">Month Name:</span>
+                                  <span className="font-bold text-slate-900">{emp.month}</span>
                                 </div>
                               </div>
 
@@ -942,6 +956,70 @@ function PerformanceCollectionReportContent() {
                           </td>
                         </tr>
 
+                        {/* Row 2: Portfolio Overview Row (14 metrics matching row 2 of paper sheet) */}
+                        <tr className="bg-slate-50/90 border-b border-slate-200 text-[10px]">
+                          <td colSpan={19} className="p-2">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-1.5 text-center">
+                              <div className="bg-white p-1.5 rounded border border-slate-200">
+                                <span className="text-[9px] text-slate-500 font-semibold block">EMI Due Monthly</span>
+                                <span className="font-bold text-slate-900">৳{formatMoney(emp.emi_due_monthly || emp.actual_emi)}</span>
+                              </div>
+                              <div className="bg-white p-1.5 rounded border border-slate-200">
+                                <span className="text-[9px] text-slate-500 font-semibold block">EMI Client</span>
+                                <span className="font-bold text-slate-900">{emp.emi_client_count ?? "-"}</span>
+                              </div>
+                              <div className="bg-white p-1.5 rounded border border-slate-200">
+                                <span className="text-[9px] text-slate-500 font-semibold block">EMI Hold</span>
+                                <span className="font-bold text-amber-700">{emp.emi_hold_amount ? "৳" + formatMoney(emp.emi_hold_amount) : "-"}</span>
+                              </div>
+                              <div className="bg-white p-1.5 rounded border border-slate-200">
+                                <span className="text-[9px] text-slate-500 font-semibold block">EMI cancel</span>
+                                <span className="font-bold text-rose-700">{emp.emi_cancel_amount ? "৳" + formatMoney(emp.emi_cancel_amount) : "-"}</span>
+                              </div>
+                              <div className="bg-white p-1.5 rounded border border-slate-200">
+                                <span className="text-[9px] text-slate-500 font-semibold block">TB Due</span>
+                                <span className="font-bold text-purple-700">৳{formatMoney(emp.tb_due_amount || emp.actual_tb)}</span>
+                              </div>
+                              <div className="bg-white p-1.5 rounded border border-slate-200">
+                                <span className="text-[9px] text-slate-500 font-semibold block">TB Client</span>
+                                <span className="font-bold text-slate-900">{emp.tb_client_count ?? 0}</span>
+                              </div>
+                              <div className="bg-white p-1.5 rounded border border-slate-200">
+                                <span className="text-[9px] text-slate-500 font-semibold block">TB Share</span>
+                                <span className="font-bold text-slate-900">{emp.tb_share_count ?? 0}</span>
+                              </div>
+                              <div className="bg-white p-1.5 rounded border border-slate-200">
+                                <span className="text-[9px] text-slate-500 font-semibold block">TB Hold</span>
+                                <span className="font-bold text-amber-700">{emp.tb_hold_amount ? "৳" + formatMoney(emp.tb_hold_amount) : "-"}</span>
+                              </div>
+                              <div className="bg-white p-1.5 rounded border border-slate-200">
+                                <span className="text-[9px] text-slate-500 font-semibold block">TB cancel</span>
+                                <span className="font-bold text-rose-700">{emp.tb_cancel_amount ? "৳" + formatMoney(emp.tb_cancel_amount) : "-"}</span>
+                              </div>
+                              <div className="bg-white p-1.5 rounded border border-slate-200">
+                                <span className="text-[9px] text-slate-500 font-semibold block">Total Fair Lead</span>
+                                <span className="font-bold text-slate-900">{emp.total_fair_lead ?? emp.fair_lead}</span>
+                              </div>
+                              <div className="bg-white p-1.5 rounded border border-slate-200">
+                                <span className="text-[9px] text-slate-500 font-semibold block">Total FB Lead</span>
+                                <span className="font-bold text-slate-900">{emp.total_fb_lead ?? emp.fb_lead}</span>
+                              </div>
+                              <div className="bg-white p-1.5 rounded border border-slate-200">
+                                <span className="text-[9px] text-slate-500 font-semibold block">Sheet Score</span>
+                                <span className="font-bold text-emerald-700">{emp.sheet_score ?? "-"}</span>
+                              </div>
+                              <div className="bg-white p-1.5 rounded border border-slate-200">
+                                <span className="text-[9px] text-slate-500 font-semibold block">Call Score</span>
+                                <span className="font-bold text-emerald-700">{emp.call_score ?? "-"}</span>
+                              </div>
+                              <div className="bg-white p-1.5 rounded border border-slate-200">
+                                <span className="text-[9px] text-slate-500 font-semibold block">Prediction Amt from Emp</span>
+                                <span className="font-bold text-emerald-800">৳{formatMoney(emp.prediction_amount || emp.total_collection)}</span>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+
                         {/* 1. Historical Month Rows (e.g. Sep-26, Oct-26) */}
                         {historyRows.map((hm: EmployeeMonthlyPerformance, hIdx: number) => (
                           <tr key={`hist-${hIdx}`} className="bg-slate-50/50 hover:bg-slate-100/60 transition">
@@ -950,6 +1028,7 @@ function PerformanceCollectionReportContent() {
                             </td>
                             <td className="py-2.5 px-2 text-right font-medium text-slate-600">৳{formatMoney(hm.target_sales)}</td>
                             <td className="py-2.5 px-2 text-right font-bold text-emerald-700">৳{formatMoney(hm.actual_new_sales)}</td>
+                            <td className="py-2.5 px-2 text-right font-bold text-purple-700">৳{formatMoney(hm.actual_tb)}</td>
                             <td className="py-2.5 px-2 text-right font-bold text-sky-700">৳{formatMoney(hm.actual_emi)}</td>
                             <td className="py-2.5 px-2 text-right font-bold text-slate-800">{hm.total_lead}</td>
                             <td className="py-2.5 px-2 text-right font-medium text-slate-600">{hm.fair_lead}</td>
@@ -957,18 +1036,14 @@ function PerformanceCollectionReportContent() {
                             <td className="py-2.5 px-2 text-right text-rose-700 font-bold">{hm.hp}</td>
                             <td className="py-2.5 px-2 text-right text-amber-700 font-bold">{hm.p}</td>
                             <td className="py-2.5 px-2 text-right text-sky-700 font-bold">{hm.fup}</td>
-                            <td className="py-2.5 px-1.5 text-center font-bold text-slate-800 bg-slate-50/80 border-l border-slate-200">{hm.total_calls || 0}</td>
-                            <td className="py-2.5 px-1.5 text-center text-emerald-700 bg-emerald-50/20 font-bold">{hm.prediction_sold_fair}</td>
-                            <td className="py-2.5 px-1.5 text-center text-sky-700 bg-sky-50/20 font-bold">{hm.prediction_sold_fb}</td>
-                            <td className="py-2.5 px-1.5 text-center text-purple-700 bg-purple-50/20 font-bold border-r border-slate-200">{hm.prediction_sold_other}</td>
-                            <td className="py-2.5 px-1.5 text-center font-bold text-slate-700">{hm.gl || "GL"}</td>
-                            <td className="py-2.5 px-1.5 text-center text-amber-700 bg-amber-50/20 font-bold">{hm.prediction_hold}</td>
-                            <td className="py-2.5 px-1.5 text-center text-rose-700 bg-rose-50/20 font-bold">{hm.prediction_cancel}</td>
-                            <td className="py-2.5 px-2.5 text-center bg-slate-50/60 font-semibold border-l border-slate-200">
-                              <span className="font-bold text-slate-900">{hm.hp + hm.p}</span>
-                              <span className="text-slate-400 mx-1">/</span>
-                              <span className="font-bold text-emerald-700">৳{formatMoney(hm.total_collection)}</span>
-                            </td>
+                            <td className="py-2.5 px-2 text-center font-bold text-slate-800">{hm.total_calls || 0}</td>
+                            <td className="py-2.5 px-2 text-center text-amber-700 font-bold">{hm.prediction_hold ? "৳" + formatMoney(hm.prediction_hold) : 0}</td>
+                            <td className="py-2.5 px-2 text-center text-rose-700 font-bold">{hm.prediction_cancel ? "৳" + formatMoney(hm.prediction_cancel) : 0}</td>
+                            <td className="py-2.5 px-2 text-center font-bold text-indigo-700">{hm.indoor_cx || 0}</td>
+                            <td className="py-2.5 px-2 text-center font-bold text-teal-700">{hm.outdoor_visits || 0}</td>
+                            <td className="py-2.5 px-2 text-right text-emerald-700 font-bold">{hm.prediction_sold_fair ? "৳" + formatMoney(hm.prediction_sold_fair) : 0}</td>
+                            <td className="py-2.5 px-2 text-right text-sky-700 font-bold">{hm.prediction_sold_fb ? "৳" + formatMoney(hm.prediction_sold_fb) : 0}</td>
+                            <td className="py-2.5 px-2 text-right text-purple-700 font-bold">{hm.prediction_sold_other ? "৳" + formatMoney(hm.prediction_sold_other) : 0}</td>
                           </tr>
                         ))}
 
@@ -979,6 +1054,7 @@ function PerformanceCollectionReportContent() {
                           </td>
                           <td className="py-2.5 px-2 text-right font-semibold text-slate-900">৳{formatMoney(emp.target_sales || emp.target_collection)}</td>
                           <td className="py-2.5 px-2 text-right font-extrabold text-emerald-700">৳{formatMoney(emp.actual_new_sales)}</td>
+                          <td className="py-2.5 px-2 text-right font-extrabold text-purple-700">৳{formatMoney(emp.actual_tb)}</td>
                           <td className="py-2.5 px-2 text-right font-extrabold text-sky-700">৳{formatMoney(emp.actual_emi)}</td>
                           <td className="py-2.5 px-2 text-right font-extrabold text-slate-900">{emp.total_lead}</td>
                           <td className="py-2.5 px-2 text-right font-semibold text-slate-700">{emp.fair_lead}</td>
@@ -986,18 +1062,14 @@ function PerformanceCollectionReportContent() {
                           <td className="py-2.5 px-2 text-right text-rose-700 font-extrabold">{emp.hp}</td>
                           <td className="py-2.5 px-2 text-right text-amber-700 font-extrabold">{emp.p}</td>
                           <td className="py-2.5 px-2 text-right text-sky-700 font-extrabold">{emp.fup}</td>
-                          <td className="py-2.5 px-1.5 text-center font-extrabold text-slate-900 bg-slate-100/80 border-l border-slate-200">{emp.total_calls || 0}</td>
-                          <td className="py-2.5 px-1.5 text-center text-emerald-700 bg-emerald-50/30 font-bold">{emp.prediction_sold_fair}</td>
-                          <td className="py-2.5 px-1.5 text-center text-sky-700 bg-sky-50/30 font-bold">{emp.prediction_sold_fb}</td>
-                          <td className="py-2.5 px-1.5 text-center text-purple-700 bg-purple-50/30 font-bold border-r border-slate-200">{emp.prediction_sold_other}</td>
-                          <td className="py-2.5 px-1.5 text-center font-extrabold text-slate-800">{emp.gl || "GL"}</td>
-                          <td className="py-2.5 px-1.5 text-center text-amber-700 bg-amber-50/30 font-bold">{emp.prediction_hold}</td>
-                          <td className="py-2.5 px-1.5 text-center text-rose-700 bg-rose-50/30 font-bold">{emp.prediction_cancel}</td>
-                          <td className="py-2.5 px-2.5 text-center bg-emerald-100/40 font-bold border-l border-slate-200">
-                            <span className="font-extrabold text-slate-900">{emp.hp + emp.p}</span>
-                            <span className="text-slate-400 mx-1">/</span>
-                            <span className="font-extrabold text-emerald-800">৳{formatMoney(emp.total_collection)}</span>
-                          </td>
+                          <td className="py-2.5 px-2 text-center font-extrabold text-slate-900">{emp.total_calls || 0}</td>
+                          <td className="py-2.5 px-2 text-center text-amber-700 font-bold">{emp.prediction_hold ? "৳" + formatMoney(emp.prediction_hold) : 0}</td>
+                          <td className="py-2.5 px-2 text-center text-rose-700 font-bold">{emp.prediction_cancel ? "৳" + formatMoney(emp.prediction_cancel) : 0}</td>
+                          <td className="py-2.5 px-2 text-center font-extrabold text-indigo-700">{emp.indoor_cx || 0}</td>
+                          <td className="py-2.5 px-2 text-center font-extrabold text-teal-700">{emp.outdoor_visits || 0}</td>
+                          <td className="py-2.5 px-2 text-right text-emerald-700 font-extrabold">{emp.prediction_sold_fair ? "৳" + formatMoney(emp.prediction_sold_fair) : 0}</td>
+                          <td className="py-2.5 px-2 text-right text-sky-700 font-extrabold">{emp.prediction_sold_fb ? "৳" + formatMoney(emp.prediction_sold_fb) : 0}</td>
+                          <td className="py-2.5 px-2 text-right text-purple-700 font-extrabold">{emp.prediction_sold_other ? "৳" + formatMoney(emp.prediction_sold_other) : 0}</td>
                         </tr>
 
                         {/* 3. The 6 Milestone Rows: Till 5th, Till 10th, ..., Till 30/31th */}
@@ -1015,6 +1087,7 @@ function PerformanceCollectionReportContent() {
                             </td>
                             <td className="py-2 px-2 text-right text-slate-400">-</td>
                             <td className="py-2 px-2 text-right font-bold text-emerald-700">৳{formatMoney(inv.new_sales)}</td>
+                            <td className="py-2 px-2 text-right font-bold text-purple-700">৳{formatMoney(inv.actual_tb || 0)}</td>
                             <td className="py-2 px-2 text-right font-bold text-sky-700">৳{formatMoney(inv.emi)}</td>
                             <td className="py-2 px-2 text-right font-bold text-slate-900">{inv.total_lead}</td>
                             <td className="py-2 px-2 text-right text-slate-600">{inv.fair_lead}</td>
@@ -1022,18 +1095,14 @@ function PerformanceCollectionReportContent() {
                             <td className="py-2 px-2 text-right text-rose-700 font-bold">{inv.hp}</td>
                             <td className="py-2 px-2 text-right text-amber-700 font-bold">{inv.p}</td>
                             <td className="py-2 px-2 text-right text-sky-700 font-bold">{inv.fup}</td>
-                            <td className="py-2 px-1.5 text-center font-bold text-slate-800 bg-slate-50/70 border-l border-slate-200">{inv.total_calls || 0}</td>
-                            <td className="py-2 px-1.5 text-center text-emerald-700 bg-emerald-50/20">{inv.sold_fair || 0}</td>
-                            <td className="py-2 px-1.5 text-center text-sky-700 bg-sky-50/20">{inv.sold_fb || 0}</td>
-                            <td className="py-2 px-1.5 text-center text-purple-700 bg-purple-50/20 border-r border-slate-200">{inv.sold_other || 0}</td>
-                            <td className="py-2 px-1.5 text-center text-slate-600">{inv.gl || emp.gl || "GL"}</td>
-                            <td className="py-2 px-1.5 text-center text-amber-700 bg-amber-50/20">{inv.hold || 0}</td>
-                            <td className="py-2 px-1.5 text-center text-rose-700 bg-rose-50/20">{inv.cancel || 0}</td>
-                            <td className="py-2 px-2.5 text-center bg-slate-50/50 font-semibold border-l border-slate-200">
-                              <span className="font-bold text-slate-900">{inv.hp + inv.p}</span>
-                              <span className="text-slate-400 mx-1">/</span>
-                              <span className="font-bold text-emerald-700">৳{formatMoney(inv.total_collection)}</span>
-                            </td>
+                            <td className="py-2 px-2 text-center font-bold text-slate-800">{inv.total_calls || 0}</td>
+                            <td className="py-2 px-2 text-center text-amber-700">{inv.hold ? "৳" + formatMoney(inv.hold) : 0}</td>
+                            <td className="py-2 px-2 text-center text-rose-700">{inv.cancel ? "৳" + formatMoney(inv.cancel) : 0}</td>
+                            <td className="py-2 px-2 text-center text-indigo-700 font-medium">{inv.indoor_cx || 0}</td>
+                            <td className="py-2 px-2 text-center text-teal-700 font-medium">{inv.outdoor_visits || 0}</td>
+                            <td className="py-2 px-2 text-right text-emerald-700">{inv.sold_fair ? "৳" + formatMoney(inv.sold_fair) : 0}</td>
+                            <td className="py-2 px-2 text-right text-sky-700">{inv.sold_fb ? "৳" + formatMoney(inv.sold_fb) : 0}</td>
+                            <td className="py-2 px-2 text-right text-purple-700">{inv.sold_other ? "৳" + formatMoney(inv.sold_other) : 0}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1327,30 +1396,29 @@ function PerformanceCollectionReportContent() {
                 <thead className="sticky top-0 z-20 shadow-xs">
                   <tr className="border-b border-slate-200 bg-slate-100 text-[11px] uppercase tracking-wider text-slate-700">
                     <th className="py-3 px-3 font-bold sticky left-0 bg-slate-100 z-30 border-r border-slate-200">
-                      Customer ID & Name
+                      Cx Name
                     </th>
                     <th className="py-3 px-2.5 font-bold text-right text-emerald-700 whitespace-nowrap min-w-[75px]">Paid</th>
                     <th className="py-3 px-2.5 font-bold text-right text-rose-700 whitespace-nowrap min-w-[75px]">Unpaid</th>
                     <th className="py-3 px-2.5 font-bold whitespace-nowrap min-w-[95px]">Collection Date</th>
-                    <th className="py-3 px-2.5 font-bold whitespace-nowrap min-w-[85px]">IN/OUT Plan</th>
-                    <th className="py-3 px-2.5 font-bold whitespace-nowrap min-w-[85px]">Date-1</th>
-                    <th className="py-3 px-2.5 font-bold whitespace-nowrap min-w-[85px]">Date-2</th>
+                    <th className="py-3 px-2.5 font-bold text-amber-700 whitespace-nowrap min-w-[105px]">Next Collec Date</th>
+                    <th className="py-3 px-2.5 font-bold text-amber-700 whitespace-nowrap min-w-[105px]">Next Collec Date 2</th>
+                    <th className="py-3 px-2.5 font-bold whitespace-nowrap min-w-[85px]">IN / Out Plan</th>
+                    <th className="py-3 px-2.5 font-bold whitespace-nowrap min-w-[80px]">Date-1</th>
+                    <th className="py-3 px-2.5 font-bold whitespace-nowrap min-w-[80px]">Date 2</th>
                     <th className="py-3 px-2.5 font-bold text-right text-emerald-700 whitespace-nowrap min-w-[75px]">New Sales</th>
-                    <th className="py-3 px-2.5 font-bold text-right text-sky-700 whitespace-nowrap min-w-[70px]">TB</th>
+                    <th className="py-3 px-2.5 font-bold text-right text-purple-700 whitespace-nowrap min-w-[70px]">TB</th>
                     <th className="py-3 px-2.5 font-bold text-right text-sky-700 whitespace-nowrap min-w-[70px]">EMI</th>
-                    <th className="py-3 px-2.5 font-bold text-amber-700 whitespace-nowrap min-w-[110px]">Next Collec Date</th>
-                    <th className="py-3 px-2.5 font-bold text-amber-700 whitespace-nowrap min-w-[110px]">Next Collec Date 2</th>
-                    <th className="py-3 px-2.5 font-bold whitespace-nowrap min-w-[80px]">Lead Status</th>
-                    <th className="py-3 px-2.5 font-bold whitespace-nowrap min-w-[90px]">Lead Source</th>
-                    <th className="py-3 px-2.5 font-bold whitespace-nowrap min-w-[100px]">Lead Source Date</th>
+                    <th className="py-3 px-2.5 font-bold whitespace-nowrap min-w-[85px]">New Lead Status</th>
                     <th className="py-3 px-2.5 font-bold text-right text-emerald-800 whitespace-nowrap min-w-[95px]">Total Collection</th>
+                    <th className="py-3 px-2.5 font-bold text-center text-indigo-700 whitespace-nowrap min-w-[90px]">Collection Probability %</th>
                     <th className="py-3 px-3 font-bold whitespace-nowrap min-w-[120px]">Remarks</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
                   {filteredCustomers.length === 0 ? (
                     <tr>
-                      <td colSpan={17} className="py-10 text-center text-slate-400 font-medium">
+                      <td colSpan={16} className="py-10 text-center text-slate-400 font-medium">
                         No customer collection records found matching your filters.
                       </td>
                     </tr>
@@ -1404,26 +1472,6 @@ function PerformanceCollectionReportContent() {
                           {cust.collection_date || "-"}
                         </td>
                         <td className="py-3 px-2.5 whitespace-nowrap">
-                          <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[11px] font-semibold border border-slate-200">
-                            {cust.in_out_plan || "Indoor"}
-                          </span>
-                        </td>
-                        <td className="py-3 px-2.5 whitespace-nowrap text-slate-500 text-[11px]">
-                          {cust.date_1 || "-"}
-                        </td>
-                        <td className="py-3 px-2.5 whitespace-nowrap text-slate-500 text-[11px]">
-                          {cust.date_2 || "-"}
-                        </td>
-                        <td className="py-3 px-2.5 text-right font-semibold text-emerald-700">
-                          ৳{formatMoney(cust.new_sales_amount)}
-                        </td>
-                        <td className="py-3 px-2.5 text-right font-semibold text-sky-700">
-                          ৳{formatMoney(cust.tb_amount)}
-                        </td>
-                        <td className="py-3 px-2.5 text-right font-semibold text-sky-700">
-                          ৳{formatMoney(cust.emi_amount)}
-                        </td>
-                        <td className="py-3 px-2.5 whitespace-nowrap">
                           {cust.next_collection_date ? (
                             <span className="inline-flex items-center gap-1 font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200 text-[11px]">
                               <Calendar className="h-3 w-3 text-amber-700" />
@@ -1444,6 +1492,26 @@ function PerformanceCollectionReportContent() {
                           )}
                         </td>
                         <td className="py-3 px-2.5 whitespace-nowrap">
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[11px] font-semibold border border-slate-200">
+                            {cust.in_out_plan || "Indoor"}
+                          </span>
+                        </td>
+                        <td className="py-3 px-2.5 whitespace-nowrap text-slate-500 text-[11px]">
+                          {cust.date_1 || "-"}
+                        </td>
+                        <td className="py-3 px-2.5 whitespace-nowrap text-slate-500 text-[11px]">
+                          {cust.date_2 || "-"}
+                        </td>
+                        <td className="py-3 px-2.5 text-right font-semibold text-emerald-700">
+                          ৳{formatMoney(cust.new_sales_amount)}
+                        </td>
+                        <td className="py-3 px-2.5 text-right font-semibold text-purple-700">
+                          ৳{formatMoney(cust.tb_amount)}
+                        </td>
+                        <td className="py-3 px-2.5 text-right font-semibold text-sky-700">
+                          ৳{formatMoney(cust.emi_amount)}
+                        </td>
+                        <td className="py-3 px-2.5 whitespace-nowrap">
                           <span
                             className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${getStatusBadge(
                               cust.lead_status
@@ -1452,14 +1520,25 @@ function PerformanceCollectionReportContent() {
                             {cust.lead_status || "PENDING"}
                           </span>
                         </td>
-                        <td className="py-3 px-2.5 whitespace-nowrap font-medium text-slate-700 text-[11px]">
-                          {cust.lead_source || "-"}
-                        </td>
-                        <td className="py-3 px-2.5 whitespace-nowrap text-slate-500 text-[11px]">
-                          {cust.lead_source_date || "-"}
-                        </td>
                         <td className="py-3 px-2.5 text-right font-extrabold text-emerald-800">
                           ৳{formatMoney(cust.total_collection)}
+                        </td>
+                        <td className="py-3 px-2.5 text-center whitespace-nowrap">
+                          {cust.collection_probability !== undefined && cust.collection_probability !== null ? (
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-extrabold border ${
+                                cust.collection_probability >= 80
+                                  ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                  : cust.collection_probability >= 50
+                                  ? "bg-amber-50 text-amber-800 border-amber-200"
+                                  : "bg-rose-50 text-rose-800 border-rose-200"
+                              }`}
+                            >
+                              {cust.collection_probability}%
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
                         </td>
                         <td className="py-3 px-3 max-w-[200px] truncate text-slate-500 text-[11px]" title={cust.remarks || ""}>
                           {cust.remarks || "-"}
@@ -1529,20 +1608,42 @@ function PerformanceCollectionReportContent() {
                     </div>
 
                     {/* Financial Metrics Strip */}
-                    <div className="grid grid-cols-3 gap-2 py-3 border-b border-slate-100 text-center text-xs">
-                      <div className="bg-emerald-50 rounded-lg p-2 border border-emerald-100">
+                    <div className="grid grid-cols-4 gap-1.5 py-3 border-b border-slate-100 text-center text-xs">
+                      <div className="bg-emerald-50 rounded-lg p-1.5 border border-emerald-100">
                         <div className="text-[10px] font-semibold text-emerald-800">Paid</div>
-                        <div className="font-extrabold text-emerald-700">৳{formatMoney(cust.paid_amount)}</div>
+                        <div className="font-extrabold text-emerald-700 text-xs">৳{formatMoney(cust.paid_amount)}</div>
                       </div>
-                      <div className="bg-rose-50 rounded-lg p-2 border border-rose-100">
+                      <div className="bg-purple-50 rounded-lg p-1.5 border border-purple-100">
+                        <div className="text-[10px] font-semibold text-purple-800">TB</div>
+                        <div className="font-extrabold text-purple-700 text-xs">৳{formatMoney(cust.tb_amount)}</div>
+                      </div>
+                      <div className="bg-rose-50 rounded-lg p-1.5 border border-rose-100">
                         <div className="text-[10px] font-semibold text-rose-800">Unpaid</div>
-                        <div className="font-extrabold text-rose-700">৳{formatMoney(cust.unpaid_amount)}</div>
+                        <div className="font-extrabold text-rose-700 text-xs">৳{formatMoney(cust.unpaid_amount)}</div>
                       </div>
-                      <div className="bg-slate-50 rounded-lg p-2 border border-slate-200">
+                      <div className="bg-slate-50 rounded-lg p-1.5 border border-slate-200">
                         <div className="text-[10px] font-semibold text-slate-700">Total</div>
-                        <div className="font-extrabold text-slate-900">৳{formatMoney(cust.total_collection)}</div>
+                        <div className="font-extrabold text-slate-900 text-xs">৳{formatMoney(cust.total_collection)}</div>
                       </div>
                     </div>
+
+                    {/* Probability % Badge row */}
+                    {cust.collection_probability !== undefined && cust.collection_probability !== null && (
+                      <div className="flex items-center justify-between text-xs py-1.5 border-b border-slate-100">
+                        <span className="text-slate-500 font-medium text-[11px]">Collection Probability:</span>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[11px] font-extrabold border ${
+                            cust.collection_probability >= 80
+                              ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                              : cust.collection_probability >= 50
+                              ? "bg-amber-50 text-amber-800 border-amber-200"
+                              : "bg-rose-50 text-rose-800 border-rose-200"
+                          }`}
+                        >
+                          {cust.collection_probability}%
+                        </span>
+                      </div>
+                    )}
 
                     {/* Breakdown & Dates */}
                     <div className="py-2.5 text-xs space-y-2 border-b border-slate-100">
@@ -1768,8 +1869,8 @@ function PerformanceCollectionReportContent() {
                           </span>
                         </div>
 
-                        {/* Financials: Sales, EMI, Total */}
-                        <div className="grid grid-cols-3 gap-2">
+                        {/* Financials: Sales, TB, EMI, Total */}
+                        <div className="grid grid-cols-4 gap-2">
                           <div>
                             <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
                               Sales (৳)
@@ -1780,6 +1881,18 @@ function PerformanceCollectionReportContent() {
                               value={cp.new_sales}
                               onChange={(e) => updateCheckpointField(idx, "new_sales", Number(e.target.value) || 0)}
                               className="w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-bold text-emerald-700 focus:border-emerald-600 focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-purple-700 uppercase mb-1">
+                              TB (৳)
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={cp.actual_tb || 0}
+                              onChange={(e) => updateCheckpointField(idx, "actual_tb", Number(e.target.value) || 0)}
+                              className="w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-bold text-purple-700 focus:border-emerald-600 focus:outline-none"
                             />
                           </div>
                           <div>

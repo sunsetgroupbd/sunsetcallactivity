@@ -230,15 +230,14 @@ class CrmService:
         now = time.time()
         today_str = datetime.now().strftime("%Y-%m-%d")
 
-        effective_from = from_date if from_date is not None else "1971-01-01"
-        effective_to = to_date if to_date is not None else today_str
+        effective_from = from_date if from_date is not None else "2010-01-01"
+        effective_to = to_date if to_date is not None else "2030-12-31"
         effective_status = "Active" if (active_status is None or active_status == "Active") else ("" if str(active_status).lower() == "all" else active_status)
         effective_order_dir = order_dir or "desc"
 
         # Cache key based on start, length, search, dates, status, order
         is_default_query = (
             start == 0 and length == 100 and not search_query and
-            effective_from == "1971-01-01" and
             effective_status == "Active" and
             effective_order_dir == "desc"
         )
@@ -306,46 +305,22 @@ class CrmService:
             elif CrmService._cookies and "XSRF-TOKEN" in CrmService._cookies:
                 req_headers["X-XSRF-TOKEN"] = urllib.parse.unquote(CrmService._cookies["XSRF-TOKEN"])
 
-            # Build full DataTables query parameters exactly as Somikoron CRM expects
+            # Build query parameters exactly as Somikoron CRM expects
+            clean_search = (search_query or "").strip()
             query_params: Dict[str, Any] = {
                 "draw": 1,
                 "start": start or 0,
                 "length": length if length is not None else 100,
-                "search[value]": search_query or "",
-                "search[regex]": "false",
-                "order[0][column]": str(order_column if order_column is not None else 0),
-                "order[0][dir]": effective_order_dir,
                 "team_id": team_id or "",
                 "lead_cat_id": lead_cat_id or "",
                 "converted_customer": "",
-                "keyword": search_query or "",
+                "keyword": clean_search,
                 "special_date": "",
                 "active_status": effective_status,
                 "from_date": effective_from,
                 "to_date": effective_to,
                 "_": int(time.time() * 1000),
             }
-
-            # Exact DataTables column mapping matching Somikoron CRM
-            columns_spec = [
-                ("id", "id", "true", "true"),
-                ("checkbox", "checkbox", "false", "false"),
-                ("name", "leads.name", "true", "true"),
-                ("mobile", "mobile", "true", "true"),
-                ("user_id", "user_id", "true", "true"),
-                ("cr_name", "cr_name", "true", "true"),
-                ("last_Activity", "last_Activity", "true", "true"),
-                ("next_Activity", "next_Activity", "true", "true"),
-                ("action", "action", "true", "true"),
-            ]
-            for idx, (col_data, col_name, col_searchable, col_orderable) in enumerate(columns_spec):
-                pfx = f"columns[{idx}]"
-                query_params[f"{pfx}[data]"] = col_data
-                query_params[f"{pfx}[name]"] = col_name
-                query_params[f"{pfx}[searchable]"] = col_searchable
-                query_params[f"{pfx}[orderable]"] = col_orderable
-                query_params[f"{pfx}[search][value]"] = ""
-                query_params[f"{pfx}[search][regex]"] = "false"
 
             # Fetch the actual lead data endpoint
             try:

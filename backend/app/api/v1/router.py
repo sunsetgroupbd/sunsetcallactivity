@@ -16,6 +16,7 @@ from app.api.v1.endpoints import (
     notices,
     teams,
     crm,
+    lead_workflow,
 )
 
 api_router = APIRouter()
@@ -32,3 +33,4 @@ api_router.include_router(reminders.router)
 api_router.include_router(notices.router)
 api_router.include_router(teams.router)
 api_router.include_router(crm.router)
+api_router.include_router(lead_workflow.router, prefix="/leads-workflow")

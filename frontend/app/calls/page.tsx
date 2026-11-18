@@ -45,6 +45,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { api, ApiError } from "@/lib/api";
 import { SupervisorBar } from "@/components/supervisor-bar";
+import { LeadDialingDashboard } from "@/components/leads/lead-dialing-dashboard";
 import {
   LEAD_CATEGORIES,
   LeadCategory,
@@ -53,7 +54,7 @@ import {
   Report,
   ClientContactEntry,
 } from "@/types";
-import { getDhakaToday, formatReadableDate, formatEmployeeId } from "@/lib/utils";
+import { getDhakaToday, formatReadableDate, formatEmployeeId, cn } from "@/lib/utils";
 import { exportFullReportToCSV } from "@/lib/export-report-csv";
 
 /**
@@ -180,6 +181,9 @@ function DailyCallActivityContent() {
     setSelectedEmpId(empId);
     router.replace(`/calls?date=${reportDate}&employee_id=${empId}`);
   }, [reportDate, router]);
+
+  // Lead Dialing Workflow vs Daily Activity Sheet Tab
+  const [activeWorkflowTab, setActiveWorkflowTab] = useState<"lead_dialing" | "daily_sheet">("lead_dialing");
 
   // Report state
   const [report, setReport] = useState<Report | null>(null);
@@ -875,8 +879,53 @@ function DailyCallActivityContent() {
             currentPage="calls"
           />
         )}
-        {/* ── Header Controls Card ────────────────────────────────────────── */}
-        <Card>
+
+        {/* ── Main View Mode Switcher: Lead Dialing Workflow vs Daily Sheet ── */}
+        <div className="flex items-center gap-2 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-2xs">
+          <button
+            type="button"
+            onClick={() => setActiveWorkflowTab("lead_dialing")}
+            className={cn(
+              "flex-1 flex items-center justify-center gap-2 py-2.5 px-3 sm:px-4 rounded-xl text-xs sm:text-sm font-bold transition-all",
+              activeWorkflowTab === "lead_dialing"
+                ? "bg-gradient-to-r from-emerald-600 to-teal-700 text-white shadow-sm"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+            )}
+          >
+            <PhoneCall className="w-4 h-4" />
+            <span>Lead Dialing Workflow</span>
+            <span className="hidden sm:inline-block text-[10px] uppercase tracking-wider bg-white/20 text-white px-2 py-0.5 rounded-full font-semibold">
+              Live Calling
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveWorkflowTab("daily_sheet")}
+            className={cn(
+              "flex-1 flex items-center justify-center gap-2 py-2.5 px-3 sm:px-4 rounded-xl text-xs sm:text-sm font-bold transition-all",
+              activeWorkflowTab === "daily_sheet"
+                ? "bg-gradient-to-r from-slate-800 to-slate-950 text-white shadow-sm"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+            )}
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Daily Call Activity Sheet</span>
+            <span className="hidden sm:inline-block text-[10px] uppercase tracking-wider bg-white/20 text-white px-2 py-0.5 rounded-full font-semibold">
+              Slots &amp; Report
+            </span>
+          </button>
+        </div>
+
+        {activeWorkflowTab === "lead_dialing" ? (
+          <LeadDialingDashboard
+            selectedEmployeeId={isSupervisor ? selectedEmpId : undefined}
+            onCallLogged={() => loadReport(reportDate, isSupervisor ? selectedEmpId : undefined)}
+          />
+        ) : (
+          <>
+            {/* ── Header Controls Card ────────────────────────────────────────── */}
+            <Card>
           <CardContent className="p-4 sm:p-5">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               {/* Left: Date selector & Status */}
@@ -2059,6 +2108,8 @@ function DailyCallActivityContent() {
             )}
           </div>
         </div>
+        </>
+        )}
 
         {/* ── Submit Confirmation Modal ────────────────────────────────────── */}
         <Modal

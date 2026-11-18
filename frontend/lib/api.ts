@@ -29,6 +29,10 @@ import {
   CustomerDetailResponse,
   ExecutiveCollectionReportResponse,
   Team,
+  WorkflowLead,
+  LeadSummaryResponse,
+  LeadCallOutcomePayload,
+  CreateLeadPayload,
 } from "@/types";
 
 const API_BASE =
@@ -1038,6 +1042,51 @@ export const api = {
       }>;
     }> => {
       return request("/crm/debug");
+    },
+  },
+
+  leadWorkflow: {
+    getSummary: async (employeeId?: number): Promise<LeadSummaryResponse> => {
+      const q = employeeId ? `?employee_id=${employeeId}` : "";
+      return request(`/leads-workflow/summary${q}`);
+    },
+    getLeads: async (params?: {
+      source?: string;
+      status?: string;
+      search?: string;
+      employee_id?: number;
+      limit?: number;
+      offset?: number;
+    }): Promise<{
+      items: WorkflowLead[];
+      total: number;
+      limit: number;
+      offset: number;
+    }> => {
+      const q = new URLSearchParams();
+      if (params?.source && params.source !== "all") q.set("source", params.source);
+      if (params?.status && params.status !== "all") q.set("status", params.status);
+      if (params?.search) q.set("search", params.search);
+      if (params?.employee_id) q.set("employee_id", params.employee_id.toString());
+      if (params?.limit) q.set("limit", params.limit.toString());
+      if (params?.offset) q.set("offset", params.offset.toString());
+      const queryStr = q.toString() ? `?${q.toString()}` : "";
+      return request(`/leads-workflow${queryStr}`);
+    },
+    createLead: async (payload: CreateLeadPayload): Promise<WorkflowLead> => {
+      return request("/leads-workflow", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    },
+    recordCallOutcome: async (
+      leadId: number,
+      payload: LeadCallOutcomePayload
+    ): Promise<WorkflowLead> => {
+      return request(`/leads-workflow/${leadId}/call-outcome`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
     },
   },
 };

@@ -317,3 +317,85 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
                     logger.info("Initialized default KPI rule: %s = %s", key, val)
     except Exception as e:
         logger.warning("Could not seed app_settings kpi_rules: %s", e)
+
+    # ── Ensure leads and lead_call_logs tables exist ──────────────────────────
+    try:
+        async with engine.begin() as conn:
+            if is_sqlite:
+                await conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS leads (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name VARCHAR(200) NOT NULL,
+                        phone VARCHAR(50) NOT NULL,
+                        source VARCHAR(50) NOT NULL DEFAULT 'cold_lead',
+                        status VARCHAR(20) NOT NULL DEFAULT 'fup',
+                        assigned_to_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        created_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                        lead_date DATE NOT NULL,
+                        last_called_at TIMESTAMP,
+                        total_calls_count INTEGER NOT NULL DEFAULT 0,
+                        notes TEXT,
+                        is_active BOOLEAN NOT NULL DEFAULT 1,
+                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    );
+                """))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_leads_assigned_to_id ON leads(assigned_to_id);"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_leads_source ON leads(source);"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_leads_status ON leads(status);"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_leads_lead_date ON leads(lead_date);"))
+
+                await conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS lead_call_logs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        lead_id INTEGER NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+                        caller_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        from_status VARCHAR(20),
+                        to_status VARCHAR(20) NOT NULL,
+                        called_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        call_duration_seconds INTEGER,
+                        notes TEXT
+                    );
+                """))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_lead_call_logs_lead_id ON lead_call_logs(lead_id);"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_lead_call_logs_caller_id ON lead_call_logs(caller_id);"))
+            else:
+                await conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS leads (
+                        id SERIAL PRIMARY KEY,
+                        name VARCHAR(200) NOT NULL,
+                        phone VARCHAR(50) NOT NULL,
+                        source VARCHAR(50) NOT NULL DEFAULT 'cold_lead',
+                        status VARCHAR(20) NOT NULL DEFAULT 'fup',
+                        assigned_to_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        created_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                        lead_date DATE NOT NULL,
+                        last_called_at TIMESTAMP WITH TIME ZONE,
+                        total_calls_count INTEGER NOT NULL DEFAULT 0,
+                        notes TEXT,
+                        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+                    );
+                """))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_leads_assigned_to_id ON leads(assigned_to_id);"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_leads_source ON leads(source);"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_leads_status ON leads(status);"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_leads_lead_date ON leads(lead_date);"))
+
+                await conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS lead_call_logs (
+                        id SERIAL PRIMARY KEY,
+                        lead_id INTEGER NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+                        caller_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        from_status VARCHAR(20),
+                        to_status VARCHAR(20) NOT NULL,
+                        called_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                        call_duration_seconds INTEGER,
+                        notes TEXT
+                    );
+                """))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_lead_call_logs_lead_id ON lead_call_logs(lead_id);"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_lead_call_logs_caller_id ON lead_call_logs(caller_id);"))
+    except Exception as e:
+        logger.warning("Could not ensure leads tables: %s", e)

@@ -766,5 +766,75 @@ export interface CustomerDetailResponse {
   transactions: CustomerTransactionItem[];
 }
 
+// ─── Lead-wise Calling Workflow Types ──────────────────────────────────────────
+
+export type WorkflowLeadSource = "fb_lead" | "fair_lead" | "cold_lead" | "reference";
+export type WorkflowLeadStatus = "hp" | "p" | "fup" | "ni" | "nr";
+
+export interface LeadCallLog {
+  id: number;
+  lead_id: number;
+  caller_id: number;
+  caller_name?: string | null;
+  from_status?: string | null;
+  to_status: string;
+  called_at: string;
+  call_duration_seconds?: number | null;
+  notes?: string | null;
+}
+
+export interface WorkflowLead {
+  id: number;
+  name: string;
+  phone: string;
+  source: WorkflowLeadSource;
+  status: WorkflowLeadStatus;
+  assigned_to_id: number;
+  assigned_to_name?: string | null;
+  created_by_id?: number | null;
+  lead_date: string;
+  last_called_at?: string | null;
+  total_calls_count: number;
+  notes?: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  latest_call?: LeadCallLog | null;
+}
+
+export interface LeadStatusCounts {
+  hp: number;
+  p: number;
+  fup: number;
+  ni: number;
+  nr: number;
+  total: number;
+}
+
+export interface LeadSummaryResponse {
+  fb_lead: LeadStatusCounts;
+  fair_lead: LeadStatusCounts;
+  cold_lead: LeadStatusCounts;
+  reference: LeadStatusCounts;
+  total_active_leads: number;
+  today_calls_made: number;
+}
+
+export interface LeadCallOutcomePayload {
+  new_status: WorkflowLeadStatus;
+  call_duration_seconds?: number;
+  notes?: string;
+}
+
+export interface CreateLeadPayload {
+  name: string;
+  phone: string;
+  source: WorkflowLeadSource;
+  status?: WorkflowLeadStatus;
+  assigned_to_id?: number;
+  notes?: string;
+}
+
+
 
 

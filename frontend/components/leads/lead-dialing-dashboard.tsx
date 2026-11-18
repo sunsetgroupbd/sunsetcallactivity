@@ -227,6 +227,7 @@ export function LeadDialingDashboard({
   const [bulkDelegateModalOpen, setBulkDelegateModalOpen] = useState(false);
   const [bulkDelegating, setBulkDelegating] = useState(false);
   const [bulkRevoking, setBulkRevoking] = useState(false);
+  const [dialedLeadIds, setDialedLeadIds] = useState<Set<number>>(new Set());
 
   // Track pending native phone call
   const pendingCallRef = useRef<{
@@ -343,6 +344,9 @@ export function LeadDialingDashboard({
   const handleDial = (lead: WorkflowLead) => {
     // Clean phone number: remove spaces and dashes
     const cleanPhone = lead.phone.replace(/[^0-9+]/g, "");
+
+    // Immediately mark as dialed in local state so UI updates instantly
+    setDialedLeadIds((prev) => new Set(prev).add(lead.id));
 
     // Record pending call context for visibility return trigger
     pendingCallRef.current = {
@@ -860,6 +864,9 @@ export function LeadDialingDashboard({
                   badgeClass: "bg-slate-100 text-slate-700 border-slate-200",
                 };
 
+              const isDialed = (lead.total_calls_count || 0) > 0 || dialedLeadIds.has(lead.id);
+              const callsCount = Math.max(lead.total_calls_count || 0, dialedLeadIds.has(lead.id) ? 1 : 0);
+
               return (
                 <div
                   key={lead.id}
@@ -1036,15 +1043,28 @@ export function LeadDialingDashboard({
                       Lead Stage Update
                     </button>
 
-                    {/* Dial Button */}
-                    <button
-                      type="button"
-                      onClick={() => handleDial(lead)}
-                      className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-3.5 py-1.5 rounded-xl transition text-xs font-bold flex items-center gap-1.5 shadow-sm"
-                    >
-                      <Phone className="w-3.5 h-3.5 fill-current" />
-                      <span>Dial</span>
-                    </button>
+                    {/* Dial / Dialed Button */}
+                    {isDialed ? (
+                      <button
+                        type="button"
+                        onClick={() => handleDial(lead)}
+                        className="bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white px-3 py-1.5 rounded-xl transition text-xs font-bold flex items-center gap-1.5 shadow-sm border border-emerald-600/30"
+                        title={`Dialed ${callsCount} time${callsCount > 1 ? "s" : ""}. Click to dial again.`}
+                      >
+                        <PhoneCall className="w-3.5 h-3.5" />
+                        <span>{callsCount > 1 ? `Dialed (${callsCount})` : "Dialed"}</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleDial(lead)}
+                        className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-3.5 py-1.5 rounded-xl transition text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                        title="Call this lead"
+                      >
+                        <Phone className="w-3.5 h-3.5 fill-current" />
+                        <span>Dial</span>
+                      </button>
+                    )}
 
                     {/* Admin Delete Lead button */}
                     {isSupervisor && (

@@ -28,6 +28,7 @@ import {
   Building2,
   Snowflake,
   Handshake,
+  Trash2,
 } from "lucide-react";
 import {
   WorkflowLead,
@@ -197,6 +198,10 @@ export function LeadDialingDashboard({
   });
   const [creatingLead, setCreatingLead] = useState(false);
   const [executivesList, setExecutivesList] = useState<UserType[]>([]);
+
+  // Delete Lead state (Admin / Sub-Admin only)
+  const [leadToDelete, setLeadToDelete] = useState<WorkflowLead | null>(null);
+  const [deletingLead, setDeletingLead] = useState(false);
 
   // Track pending native phone call
   const pendingCallRef = useRef<{
@@ -386,6 +391,23 @@ export function LeadDialingDashboard({
       alert(`Failed to create lead: ${err?.message || "Unknown error"}`);
     } finally {
       setCreatingLead(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!leadToDelete) return;
+    try {
+      setDeletingLead(true);
+      await api.leadWorkflow.deleteLead(leadToDelete.id);
+      setSuccessToast(`✓ Lead "${leadToDelete.name}" deleted successfully.`);
+      setTimeout(() => setSuccessToast(null), 3500);
+      setLeadToDelete(null);
+      await Promise.all([fetchSummary(), fetchLeads()]);
+      onCallLogged?.();
+    } catch (err: any) {
+      alert(`Failed to delete lead: ${err?.message || "Unknown error"}`);
+    } finally {
+      setDeletingLead(false);
     }
   };
 
@@ -689,6 +711,18 @@ export function LeadDialingDashboard({
                       <Phone className="w-3.5 h-3.5 fill-current" />
                       <span>Dial</span>
                     </button>
+
+                    {/* Admin Delete Lead button */}
+                    {isSupervisor && (
+                      <button
+                        type="button"
+                        onClick={() => setLeadToDelete(lead)}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition text-xs"
+                        title="Delete Lead (Admin Only)"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -989,6 +1023,56 @@ export function LeadDialingDashboard({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── 6. Admin Delete Confirmation Modal ────────────────────────────── */}
+      {leadToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-slate-200 space-y-4 text-slate-900">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Delete Lead</h3>
+                <p className="text-xs text-slate-500">Admin Action</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Are you sure you want to delete lead <strong className="text-slate-900">{leadToDelete.name}</strong> (<span className="font-mono">{leadToDelete.phone}</span>)? This will permanently remove this lead from the calling workflow.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setLeadToDelete(null)}
+                disabled={deletingLead}
+                className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={deletingLead}
+                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 active:scale-95 rounded-xl transition flex items-center gap-1.5 shadow-sm disabled:opacity-60"
+              >
+                {deletingLead ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete Permanently</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -38,6 +38,10 @@ class LeadRepository:
         await self.db.refresh(lead)
         return lead
 
+    async def delete(self, lead: Lead) -> None:
+        await self.db.delete(lead)
+        await self.db.flush()
+
     async def list_leads(
         self,
         assigned_to_id: Optional[int] = None,

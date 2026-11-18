@@ -1088,6 +1088,11 @@ export const api = {
         body: JSON.stringify(payload),
       });
     },
+    deleteLead: async (leadId: number): Promise<{ success: boolean; message: string }> => {
+      return request(`/leads-workflow/${leadId}`, {
+        method: "DELETE",
+      });
+    },
   },
 };
 

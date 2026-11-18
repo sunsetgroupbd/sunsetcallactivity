@@ -341,3 +341,24 @@ class LeadService:
             entry.lead_status_ni = (entry.lead_status_ni or 0) + 1
 
         await self.db.flush()
+
+    async def delete_lead(self, lead_id: int, current_user: User) -> bool:
+        """
+        Delete a lead permanently.
+        Restricted to Administrators and Sub-Administrators.
+        """
+        if current_user.role not in (UserRole.ADMIN, UserRole.SUB_ADMIN):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied. Only Administrators and Sub-Administrators can delete leads.",
+            )
+
+        lead = await self.lead_repo.get_by_id(lead_id)
+        if not lead:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Lead with ID {lead_id} not found.",
+            )
+
+        await self.lead_repo.delete(lead)
+        return True

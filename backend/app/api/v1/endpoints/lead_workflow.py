@@ -78,3 +78,15 @@ async def record_call_outcome(
 ):
     svc = LeadService(db)
     return await svc.record_call_outcome(lead_id, outcome, current_user)
+
+
+@router.delete("/{lead_id}", response_model=dict)
+async def delete_lead(
+    lead_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a lead permanently. Admin and Sub-Admin only."""
+    svc = LeadService(db)
+    await svc.delete_lead(lead_id, current_user)
+    return {"success": True, "message": "Lead deleted successfully"}

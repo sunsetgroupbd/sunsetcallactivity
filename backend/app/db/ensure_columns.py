@@ -276,6 +276,19 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
                 WHEN OTHERS THEN NULL;
             END $$;
             """,
+            """
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'leads') THEN
+                    ALTER TABLE leads ADD COLUMN IF NOT EXISTS delegated_to_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+                    ALTER TABLE leads ADD COLUMN IF NOT EXISTS delegated_at TIMESTAMP WITH TIME ZONE;
+                    ALTER TABLE leads ADD COLUMN IF NOT EXISTS delegation_notes VARCHAR(255);
+                    CREATE INDEX IF NOT EXISTS ix_leads_delegated_to_id ON leads(delegated_to_id);
+                END IF;
+            EXCEPTION
+                WHEN OTHERS THEN NULL;
+            END $$;
+            """,
         ]
 
         for stmt_str in pg_statements:
@@ -393,16 +406,16 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
                         updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
                     );
                 """))
+                # Ensure delegation columns exist on already-created leads table (Postgres) FIRST before creating indexes
+                await conn.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS delegated_to_id INTEGER REFERENCES users(id) ON DELETE SET NULL;"))
+                await conn.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS delegated_at TIMESTAMP WITH TIME ZONE;"))
+                await conn.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS delegation_notes VARCHAR(255);"))
+
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_leads_assigned_to_id ON leads(assigned_to_id);"))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_leads_source ON leads(source);"))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_leads_status ON leads(status);"))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_leads_lead_date ON leads(lead_date);"))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_leads_delegated_to_id ON leads(delegated_to_id);"))
-
-                # Ensure delegation columns exist on already-created leads table (Postgres)
-                await conn.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS delegated_to_id INTEGER REFERENCES users(id) ON DELETE SET NULL;"))
-                await conn.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS delegated_at TIMESTAMP WITH TIME ZONE;"))
-                await conn.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS delegation_notes VARCHAR(255);"))
 
                 await conn.execute(text("""
                     CREATE TABLE IF NOT EXISTS lead_call_logs (

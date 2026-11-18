@@ -857,265 +857,260 @@ function PerformanceCollectionReportContent() {
             </div>
 
             {/* Desktop Table */}
+            {/* Desktop View */}
             <div
               ref={section1TableRef}
-              className={`${mobileViewMode === "cards" ? "hidden sm:block" : "block"} overflow-x-auto custom-table-scrollbar`}
+              className={`${mobileViewMode === "cards" ? "hidden sm:block" : "block"} space-y-6`}
             >
-              <table className="w-full text-left text-xs border-collapse min-w-[1250px]">
-                <thead className="sticky top-0 z-20 shadow-xs">
-                  <tr className="border-b border-slate-200 bg-slate-100 text-[10.5px] uppercase tracking-wider text-slate-700">
-                    <th className="py-2.5 px-3 font-bold sticky left-0 bg-slate-100 z-30 border-r border-slate-200 whitespace-nowrap min-w-[95px]">
-                      Month
-                    </th>
-                    <th className="py-2.5 px-2 font-bold text-right border-slate-200 whitespace-nowrap min-w-[70px]">TG</th>
-                    <th className="py-2.5 px-2 font-bold text-right text-emerald-700 whitespace-nowrap min-w-[75px]">New Sales</th>
-                    <th className="py-2.5 px-2 font-bold text-right text-purple-700 whitespace-nowrap min-w-[75px]">Token to Booking</th>
-                    <th className="py-2.5 px-2 font-bold text-right text-sky-700 whitespace-nowrap min-w-[75px]">EMI</th>
-                    <th className="py-2.5 px-2 font-bold text-right whitespace-nowrap min-w-[50px]">Total Lead</th>
-                    <th className="py-2.5 px-2 font-bold text-right whitespace-nowrap min-w-[60px]">Current Fair Lead</th>
-                    <th className="py-2.5 px-2 font-bold text-right whitespace-nowrap min-w-[60px]">Current FB Leads</th>
-                    <th className="py-2.5 px-2 font-bold text-right text-rose-700 whitespace-nowrap min-w-[38px]">HP</th>
-                    <th className="py-2.5 px-2 font-bold text-right text-amber-700 whitespace-nowrap min-w-[38px]">P</th>
-                    <th className="py-2.5 px-2 font-bold text-right text-sky-700 whitespace-nowrap min-w-[38px]">Fup</th>
-                    <th className="py-2.5 px-2 font-bold text-center whitespace-nowrap min-w-[65px]">Total Calls Dialed</th>
-                    <th className="py-2.5 px-2 font-bold text-center text-amber-700 whitespace-nowrap min-w-[42px]">Hold</th>
-                    <th className="py-2.5 px-2 font-bold text-center text-rose-700 whitespace-nowrap min-w-[42px]">Cancel</th>
-                    <th className="py-2.5 px-2 font-bold text-center text-indigo-700 whitespace-nowrap min-w-[45px]">In done</th>
-                    <th className="py-2.5 px-2 font-bold text-center text-teal-700 whitespace-nowrap min-w-[45px]">Out Done</th>
-                    <th className="py-2.5 px-2 font-bold text-right text-emerald-700 whitespace-nowrap min-w-[70px]">Sold from Fair Leads</th>
-                    <th className="py-2.5 px-2 font-bold text-right text-sky-700 whitespace-nowrap min-w-[70px]">Sold From FB Leads</th>
-                    <th className="py-2.5 px-2 font-bold text-right text-purple-700 whitespace-nowrap min-w-[70px]">Sold From Other Leads</th>
-                  </tr>
-                </thead>
-                {report.monthly_performances.length === 0 ? (
-                  <tbody className="divide-y divide-slate-100 text-slate-700">
-                    <tr>
-                      <td colSpan={19} className="py-10 text-center text-slate-400 font-medium">
-                        No employee performance records found for {selectedMonth}.
-                      </td>
-                    </tr>
-                  </tbody>
-                ) : (
-                  report.monthly_performances.map((emp: EmployeeMonthlyPerformance) => {
-                    // Combined rows: Historical months + Active Month + 6 Milestone Checkpoints
-                    const historyRows = emp.history_months || [];
-                    const intervalRows = emp.intervals || [];
+              {report.monthly_performances.length === 0 ? (
+                <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-slate-400 font-medium">
+                  No employee performance records found for {selectedMonth}.
+                </div>
+              ) : (
+                report.monthly_performances.map((emp: EmployeeMonthlyPerformance) => {
+                  const historyRows = emp.history_months || [];
+                  const intervalRows = emp.intervals || [];
 
-                    return (
-                      <tbody key={emp.employee_id} className="border-b-2 border-slate-300 last:border-0 divide-y divide-slate-100 text-slate-700">
-                        {/* Employee Header Banner Row (Matches printed sheet header) */}
-                        <tr className="bg-slate-100/90 border-t-2 border-slate-300 text-xs">
-                          <td colSpan={19} className="py-2 px-3">
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-                                <div>
-                                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">Name:</span>
-                                  <span className="font-extrabold text-slate-900 text-sm">{emp.employee_name}</span>
-                                </div>
-                                <div className="border-l border-slate-300 pl-3">
-                                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">TL:</span>
-                                  <span className="font-semibold text-slate-800">{emp.tl_name || "-"}</span>
-                                </div>
-                                <div className="border-l border-slate-300 pl-3">
-                                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">CO:</span>
-                                  <span className="font-semibold text-slate-800">{emp.co_name || "-"}</span>
-                                </div>
-                                <div className="border-l border-slate-300 pl-3">
-                                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">Position:</span>
-                                  <span className="font-semibold text-slate-800">{emp.position || "Executive"}</span>
-                                </div>
-                                {emp.team_name && (
-                                  <div className="border-l border-slate-300 pl-3">
-                                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">Group:</span>
-                                    <span className="font-semibold text-slate-800">{emp.team_name}</span>
+                  return (
+                    <div key={emp.employee_id} className="rounded-xl border border-slate-300 bg-white shadow-xs overflow-hidden">
+                      {/* 1. ROW 1: EMPLOYEE REVIEW HEADER GRID */}
+                      <div className="bg-slate-100/90 border-b border-slate-300 py-2.5 px-3">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                            <div>
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">Name:</span>
+                              <span className="font-extrabold text-slate-900 text-sm">{emp.employee_name}</span>
+                            </div>
+                            <div className="border-l border-slate-300 pl-3">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">TL:</span>
+                              <span className="font-semibold text-slate-800">{emp.tl_name || "-"}</span>
+                            </div>
+                            <div className="border-l border-slate-300 pl-3">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">CO:</span>
+                              <span className="font-semibold text-slate-800">{emp.co_name || "-"}</span>
+                            </div>
+                            <div className="border-l border-slate-300 pl-3">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">Position:</span>
+                              <span className="font-semibold text-slate-800">{emp.position || "Executive"}</span>
+                            </div>
+                            {emp.team_name && (
+                              <div className="border-l border-slate-300 pl-3">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">Group:</span>
+                                <span className="font-semibold text-slate-800">{emp.team_name}</span>
+                              </div>
+                            )}
+                            <div className="border-l border-slate-300 pl-3">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">Month Name:</span>
+                              <span className="font-bold text-slate-900">{emp.month}</span>
+                            </div>
+                          </div>
+
+                          {canAccess && (
+                            <button
+                              onClick={() => handleOpenMilestoneModal(emp.employee_id)}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold text-emerald-800 bg-white hover:bg-emerald-50 border border-emerald-300 shadow-2xs transition"
+                              title={`Log review session checkpoints for ${emp.employee_name}`}
+                            >
+                              <Edit3 className="h-3 w-3 text-emerald-700" />
+                              <span>Review Session Entry</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 2. ROW 2: PORTFOLIO & PREDICTION OVERVIEW BOXES (Before Month Table Header!) */}
+                      <div className="bg-slate-50/90 border-b border-slate-300 p-2 text-[10px]">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 xl:grid-cols-14 gap-1.5 text-center">
+                          <div className="bg-white p-1.5 rounded border border-slate-200">
+                            <span className="text-[9px] text-slate-500 font-semibold block">EMI Due Monthly</span>
+                            <span className="font-bold text-slate-900">৳{formatMoney(emp.emi_due_monthly || emp.actual_emi)}</span>
+                          </div>
+                          <div className="bg-white p-1.5 rounded border border-slate-200">
+                            <span className="text-[9px] text-slate-500 font-semibold block">EMI Client</span>
+                            <span className="font-bold text-slate-900">{emp.emi_client_count ?? "-"}</span>
+                          </div>
+                          <div className="bg-white p-1.5 rounded border border-slate-200">
+                            <span className="text-[9px] text-slate-500 font-semibold block">EMI Hold</span>
+                            <span className="font-bold text-amber-700">{emp.emi_hold_amount ? "৳" + formatMoney(emp.emi_hold_amount) : "-"}</span>
+                          </div>
+                          <div className="bg-white p-1.5 rounded border border-slate-200">
+                            <span className="text-[9px] text-slate-500 font-semibold block">EMI cancel</span>
+                            <span className="font-bold text-rose-700">{emp.emi_cancel_amount ? "৳" + formatMoney(emp.emi_cancel_amount) : "-"}</span>
+                          </div>
+                          <div className="bg-white p-1.5 rounded border border-slate-200">
+                            <span className="text-[9px] text-slate-500 font-semibold block">TB Due</span>
+                            <span className="font-bold text-purple-700">৳{formatMoney(emp.tb_due_amount || emp.actual_tb)}</span>
+                          </div>
+                          <div className="bg-white p-1.5 rounded border border-slate-200">
+                            <span className="text-[9px] text-slate-500 font-semibold block">TB Client</span>
+                            <span className="font-bold text-slate-900">{emp.tb_client_count ?? 0}</span>
+                          </div>
+                          <div className="bg-white p-1.5 rounded border border-slate-200">
+                            <span className="text-[9px] text-slate-500 font-semibold block">TB Share</span>
+                            <span className="font-bold text-slate-900">{emp.tb_share_count ?? 0}</span>
+                          </div>
+                          <div className="bg-white p-1.5 rounded border border-slate-200">
+                            <span className="text-[9px] text-slate-500 font-semibold block">TB Hold</span>
+                            <span className="font-bold text-amber-700">{emp.tb_hold_amount ? "৳" + formatMoney(emp.tb_hold_amount) : "-"}</span>
+                          </div>
+                          <div className="bg-white p-1.5 rounded border border-slate-200">
+                            <span className="text-[9px] text-slate-500 font-semibold block">TB cancel</span>
+                            <span className="font-bold text-rose-700">{emp.tb_cancel_amount ? "৳" + formatMoney(emp.tb_cancel_amount) : "-"}</span>
+                          </div>
+                          <div className="bg-white p-1.5 rounded border border-slate-200">
+                            <span className="text-[9px] text-slate-500 font-semibold block">Total Fair Lead</span>
+                            <span className="font-bold text-slate-900">{emp.total_fair_lead ?? emp.fair_lead}</span>
+                          </div>
+                          <div className="bg-white p-1.5 rounded border border-slate-200">
+                            <span className="text-[9px] text-slate-500 font-semibold block">Total FB Lead</span>
+                            <span className="font-bold text-slate-900">{emp.total_fb_lead ?? emp.fb_lead}</span>
+                          </div>
+                          <div className="bg-white p-1.5 rounded border border-slate-200">
+                            <span className="text-[9px] text-slate-500 font-semibold block">Marking (100)</span>
+                            <span className="font-bold text-emerald-700">{emp.marking_score ?? "-"}</span>
+                          </div>
+                          <div className="bg-white p-1.5 rounded border border-slate-200">
+                            <span className="text-[9px] text-slate-500 font-semibold block">Sheet Score</span>
+                            <span className="font-bold text-emerald-700">{emp.sheet_score ?? "-"}</span>
+                          </div>
+                          <div className="bg-white p-1.5 rounded border border-slate-200">
+                            <span className="text-[9px] text-slate-500 font-semibold block">Call Score</span>
+                            <span className="font-bold text-emerald-700">{emp.call_score ?? "-"}</span>
+                          </div>
+                          <div className="bg-white p-1.5 rounded border border-slate-200">
+                            <span className="text-[9px] text-slate-500 font-semibold block">Planned Leave</span>
+                            <span className="font-bold text-slate-900">{emp.planned_leave ?? "-"}</span>
+                          </div>
+                          <div className="bg-white p-1.5 rounded border border-slate-200">
+                            <span className="text-[9px] text-slate-500 font-semibold block">Un-Auth Leave</span>
+                            <span className="font-bold text-rose-700">{emp.unauthorized_leave ?? "-"}</span>
+                          </div>
+                          <div className="bg-white p-1.5 rounded border border-slate-200">
+                            <span className="text-[9px] text-slate-500 font-semibold block">Prediction Amt from Emp</span>
+                            <span className="font-bold text-emerald-800">৳{formatMoney(emp.prediction_amount || emp.total_collection)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 3. ROW 3: SECTION 1 TABLE WITH MONTH COLUMN HEADER ON TOP! */}
+                      <div className="overflow-x-auto custom-table-scrollbar">
+                        <table className="w-full text-left text-xs border-collapse min-w-[1250px]">
+                          <thead>
+                            <tr className="border-b border-slate-200 bg-slate-100 text-[10.5px] uppercase tracking-wider text-slate-700">
+                              <th className="py-2.5 px-3 font-bold sticky left-0 bg-slate-100 z-10 border-r border-slate-200 whitespace-nowrap min-w-[95px]">Month</th>
+                              <th className="py-2.5 px-2 font-bold text-right border-slate-200 whitespace-nowrap min-w-[70px]">TG</th>
+                              <th className="py-2.5 px-2 font-bold text-right text-emerald-700 whitespace-nowrap min-w-[75px]">New Sales</th>
+                              <th className="py-2.5 px-2 font-bold text-right text-purple-700 whitespace-nowrap min-w-[75px]">Token to Booking</th>
+                              <th className="py-2.5 px-2 font-bold text-right text-sky-700 whitespace-nowrap min-w-[75px]">EMI</th>
+                              <th className="py-2.5 px-2 font-bold text-right whitespace-nowrap min-w-[50px]">Total Lead</th>
+                              <th className="py-2.5 px-2 font-bold text-right whitespace-nowrap min-w-[60px]">Current Fair Lead</th>
+                              <th className="py-2.5 px-2 font-bold text-right whitespace-nowrap min-w-[60px]">Current FB Leads</th>
+                              <th className="py-2.5 px-2 font-bold text-right text-rose-700 whitespace-nowrap min-w-[38px]">HP</th>
+                              <th className="py-2.5 px-2 font-bold text-right text-amber-700 whitespace-nowrap min-w-[38px]">P</th>
+                              <th className="py-2.5 px-2 font-bold text-right text-sky-700 whitespace-nowrap min-w-[38px]">Fup</th>
+                              <th className="py-2.5 px-2 font-bold text-center whitespace-nowrap min-w-[65px]">Total Calls Dialed</th>
+                              <th className="py-2.5 px-2 font-bold text-center text-amber-700 whitespace-nowrap min-w-[42px]">Hold</th>
+                              <th className="py-2.5 px-2 font-bold text-center text-rose-700 whitespace-nowrap min-w-[42px]">Cancel</th>
+                              <th className="py-2.5 px-2 font-bold text-center text-indigo-700 whitespace-nowrap min-w-[45px]">In done</th>
+                              <th className="py-2.5 px-2 font-bold text-center text-teal-700 whitespace-nowrap min-w-[45px]">Out Done</th>
+                              <th className="py-2.5 px-2 font-bold text-right text-emerald-700 whitespace-nowrap min-w-[70px]">Sold from Fair Leads</th>
+                              <th className="py-2.5 px-2 font-bold text-right text-sky-700 whitespace-nowrap min-w-[70px]">Sold From FB Leads</th>
+                              <th className="py-2.5 px-2 font-bold text-right text-purple-700 whitespace-nowrap min-w-[70px]">Sold From Other Leads</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 text-slate-700">
+                            {/* 1. Historical Month Rows (e.g. Sep-26, Oct-26) */}
+                            {historyRows.map((hm: EmployeeMonthlyPerformance, hIdx: number) => (
+                              <tr key={`hist-${hIdx}`} className="bg-slate-50/50 hover:bg-slate-100/60 transition">
+                                <td className="py-2.5 px-3 font-bold text-slate-700 sticky left-0 bg-slate-50 border-r border-slate-200 z-10">
+                                  {hm.month}
+                                </td>
+                                <td className="py-2.5 px-2 text-right font-medium text-slate-600">৳{formatMoney(hm.target_sales)}</td>
+                                <td className="py-2.5 px-2 text-right font-bold text-emerald-700">৳{formatMoney(hm.actual_new_sales)}</td>
+                                <td className="py-2.5 px-2 text-right font-bold text-purple-700">৳{formatMoney(hm.actual_tb)}</td>
+                                <td className="py-2.5 px-2 text-right font-bold text-sky-700">৳{formatMoney(hm.actual_emi)}</td>
+                                <td className="py-2.5 px-2 text-right font-bold text-slate-800">{hm.total_lead}</td>
+                                <td className="py-2.5 px-2 text-right font-medium text-slate-600">{hm.fair_lead}</td>
+                                <td className="py-2.5 px-2 text-right font-medium text-slate-600">{hm.fb_lead}</td>
+                                <td className="py-2.5 px-2 text-right text-rose-700 font-bold">{hm.hp}</td>
+                                <td className="py-2.5 px-2 text-right text-amber-700 font-bold">{hm.p}</td>
+                                <td className="py-2.5 px-2 text-right text-sky-700 font-bold">{hm.fup}</td>
+                                <td className="py-2.5 px-2 text-center font-bold text-slate-800">{hm.total_calls || 0}</td>
+                                <td className="py-2.5 px-2 text-center text-amber-700 font-bold">{hm.prediction_hold ? "৳" + formatMoney(hm.prediction_hold) : 0}</td>
+                                <td className="py-2.5 px-2 text-center text-rose-700 font-bold">{hm.prediction_cancel ? "৳" + formatMoney(hm.prediction_cancel) : 0}</td>
+                                <td className="py-2.5 px-2 text-center font-bold text-indigo-700">{hm.indoor_cx || 0}</td>
+                                <td className="py-2.5 px-2 text-center font-bold text-teal-700">{hm.outdoor_visits || 0}</td>
+                                <td className="py-2.5 px-2 text-right text-emerald-700 font-bold">{hm.prediction_sold_fair ? "৳" + formatMoney(hm.prediction_sold_fair) : 0}</td>
+                                <td className="py-2.5 px-2 text-right text-sky-700 font-bold">{hm.prediction_sold_fb ? "৳" + formatMoney(hm.prediction_sold_fb) : 0}</td>
+                                <td className="py-2.5 px-2 text-right text-purple-700 font-bold">{hm.prediction_sold_other ? "৳" + formatMoney(hm.prediction_sold_other) : 0}</td>
+                              </tr>
+                            ))}
+
+                            {/* 2. Active Month Summary Row (e.g. Nov-26) */}
+                            <tr className="bg-emerald-50/30 hover:bg-emerald-50/50 font-medium transition border-y border-emerald-200/50">
+                              <td className="py-2.5 px-3 font-extrabold text-emerald-900 sticky left-0 bg-emerald-50 border-r border-slate-200 z-10">
+                                {emp.month}
+                              </td>
+                              <td className="py-2.5 px-2 text-right font-semibold text-slate-900">৳{formatMoney(emp.target_sales || emp.target_collection)}</td>
+                              <td className="py-2.5 px-2 text-right font-extrabold text-emerald-700">৳{formatMoney(emp.actual_new_sales)}</td>
+                              <td className="py-2.5 px-2 text-right font-extrabold text-purple-700">৳{formatMoney(emp.actual_tb)}</td>
+                              <td className="py-2.5 px-2 text-right font-extrabold text-sky-700">৳{formatMoney(emp.actual_emi)}</td>
+                              <td className="py-2.5 px-2 text-right font-extrabold text-slate-900">{emp.total_lead}</td>
+                              <td className="py-2.5 px-2 text-right font-semibold text-slate-700">{emp.fair_lead}</td>
+                              <td className="py-2.5 px-2 text-right font-semibold text-slate-700">{emp.fb_lead}</td>
+                              <td className="py-2.5 px-2 text-right text-rose-700 font-extrabold">{emp.hp}</td>
+                              <td className="py-2.5 px-2 text-right text-amber-700 font-extrabold">{emp.p}</td>
+                              <td className="py-2.5 px-2 text-right text-sky-700 font-extrabold">{emp.fup}</td>
+                              <td className="py-2.5 px-2 text-center font-extrabold text-slate-900">{emp.total_calls || 0}</td>
+                              <td className="py-2.5 px-2 text-center text-amber-700 font-bold">{emp.prediction_hold ? "৳" + formatMoney(emp.prediction_hold) : 0}</td>
+                              <td className="py-2.5 px-2 text-center text-rose-700 font-bold">{emp.prediction_cancel ? "৳" + formatMoney(emp.prediction_cancel) : 0}</td>
+                              <td className="py-2.5 px-2 text-center font-extrabold text-indigo-700">{emp.indoor_cx || 0}</td>
+                              <td className="py-2.5 px-2 text-center font-extrabold text-teal-700">{emp.outdoor_visits || 0}</td>
+                              <td className="py-2.5 px-2 text-right text-emerald-700 font-extrabold">{emp.prediction_sold_fair ? "৳" + formatMoney(emp.prediction_sold_fair) : 0}</td>
+                              <td className="py-2.5 px-2 text-right text-sky-700 font-extrabold">{emp.prediction_sold_fb ? "৳" + formatMoney(emp.prediction_sold_fb) : 0}</td>
+                              <td className="py-2.5 px-2 text-right text-purple-700 font-extrabold">{emp.prediction_sold_other ? "৳" + formatMoney(emp.prediction_sold_other) : 0}</td>
+                            </tr>
+
+                            {/* 3. The 6 Milestone Rows: Till 5th, Till 10th, ..., Till 30/31th */}
+                            {intervalRows.map((inv: PerformanceIntervalSummary, iIdx: number) => (
+                              <tr key={`inv-${iIdx}`} className={`hover:bg-slate-50 transition ${inv.is_manual ? "bg-amber-50/20" : "bg-white"}`}>
+                                <td className="py-2 px-3 font-semibold text-slate-800 sticky left-0 bg-white border-r border-slate-200 z-10">
+                                  <div className="flex items-center justify-between gap-1">
+                                    <span>{inv.label}</span>
+                                    {inv.is_manual && (
+                                      <span className="text-[8px] font-extrabold text-amber-800 bg-amber-100 px-1 py-0.2 rounded border border-amber-300">
+                                        Verified
+                                      </span>
+                                    )}
                                   </div>
-                                )}
-                                <div className="border-l border-slate-300 pl-3">
-                                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">Marking (Out of 100):</span>
-                                  <span className="font-bold text-emerald-800">{emp.marking_score ?? "-"}</span>
-                                </div>
-                                <div className="border-l border-slate-300 pl-3">
-                                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">Planned Leave:</span>
-                                  <span className="font-semibold text-slate-800">{emp.planned_leave ?? "-"}</span>
-                                </div>
-                                <div className="border-l border-slate-300 pl-3">
-                                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">Un-Authorize Leave:</span>
-                                  <span className="font-semibold text-rose-700">{emp.unauthorized_leave ?? "-"}</span>
-                                </div>
-                                <div className="border-l border-slate-300 pl-3">
-                                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">Month Name:</span>
-                                  <span className="font-bold text-slate-900">{emp.month}</span>
-                                </div>
-                              </div>
-
-                              {canAccess && (
-                                <button
-                                  onClick={() => handleOpenMilestoneModal(emp.employee_id)}
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold text-emerald-800 bg-white hover:bg-emerald-50 border border-emerald-300 shadow-2xs transition"
-                                  title={`Log review session checkpoints for ${emp.employee_name}`}
-                                >
-                                  <Edit3 className="h-3 w-3 text-emerald-700" />
-                                  <span>Review Session Entry</span>
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-
-                        {/* Row 2: Portfolio Overview Row (14 metrics matching row 2 of paper sheet) */}
-                        <tr className="bg-slate-50/90 border-b border-slate-200 text-[10px]">
-                          <td colSpan={19} className="p-2">
-                            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-1.5 text-center">
-                              <div className="bg-white p-1.5 rounded border border-slate-200">
-                                <span className="text-[9px] text-slate-500 font-semibold block">EMI Due Monthly</span>
-                                <span className="font-bold text-slate-900">৳{formatMoney(emp.emi_due_monthly || emp.actual_emi)}</span>
-                              </div>
-                              <div className="bg-white p-1.5 rounded border border-slate-200">
-                                <span className="text-[9px] text-slate-500 font-semibold block">EMI Client</span>
-                                <span className="font-bold text-slate-900">{emp.emi_client_count ?? "-"}</span>
-                              </div>
-                              <div className="bg-white p-1.5 rounded border border-slate-200">
-                                <span className="text-[9px] text-slate-500 font-semibold block">EMI Hold</span>
-                                <span className="font-bold text-amber-700">{emp.emi_hold_amount ? "৳" + formatMoney(emp.emi_hold_amount) : "-"}</span>
-                              </div>
-                              <div className="bg-white p-1.5 rounded border border-slate-200">
-                                <span className="text-[9px] text-slate-500 font-semibold block">EMI cancel</span>
-                                <span className="font-bold text-rose-700">{emp.emi_cancel_amount ? "৳" + formatMoney(emp.emi_cancel_amount) : "-"}</span>
-                              </div>
-                              <div className="bg-white p-1.5 rounded border border-slate-200">
-                                <span className="text-[9px] text-slate-500 font-semibold block">TB Due</span>
-                                <span className="font-bold text-purple-700">৳{formatMoney(emp.tb_due_amount || emp.actual_tb)}</span>
-                              </div>
-                              <div className="bg-white p-1.5 rounded border border-slate-200">
-                                <span className="text-[9px] text-slate-500 font-semibold block">TB Client</span>
-                                <span className="font-bold text-slate-900">{emp.tb_client_count ?? 0}</span>
-                              </div>
-                              <div className="bg-white p-1.5 rounded border border-slate-200">
-                                <span className="text-[9px] text-slate-500 font-semibold block">TB Share</span>
-                                <span className="font-bold text-slate-900">{emp.tb_share_count ?? 0}</span>
-                              </div>
-                              <div className="bg-white p-1.5 rounded border border-slate-200">
-                                <span className="text-[9px] text-slate-500 font-semibold block">TB Hold</span>
-                                <span className="font-bold text-amber-700">{emp.tb_hold_amount ? "৳" + formatMoney(emp.tb_hold_amount) : "-"}</span>
-                              </div>
-                              <div className="bg-white p-1.5 rounded border border-slate-200">
-                                <span className="text-[9px] text-slate-500 font-semibold block">TB cancel</span>
-                                <span className="font-bold text-rose-700">{emp.tb_cancel_amount ? "৳" + formatMoney(emp.tb_cancel_amount) : "-"}</span>
-                              </div>
-                              <div className="bg-white p-1.5 rounded border border-slate-200">
-                                <span className="text-[9px] text-slate-500 font-semibold block">Total Fair Lead</span>
-                                <span className="font-bold text-slate-900">{emp.total_fair_lead ?? emp.fair_lead}</span>
-                              </div>
-                              <div className="bg-white p-1.5 rounded border border-slate-200">
-                                <span className="text-[9px] text-slate-500 font-semibold block">Total FB Lead</span>
-                                <span className="font-bold text-slate-900">{emp.total_fb_lead ?? emp.fb_lead}</span>
-                              </div>
-                              <div className="bg-white p-1.5 rounded border border-slate-200">
-                                <span className="text-[9px] text-slate-500 font-semibold block">Sheet Score</span>
-                                <span className="font-bold text-emerald-700">{emp.sheet_score ?? "-"}</span>
-                              </div>
-                              <div className="bg-white p-1.5 rounded border border-slate-200">
-                                <span className="text-[9px] text-slate-500 font-semibold block">Call Score</span>
-                                <span className="font-bold text-emerald-700">{emp.call_score ?? "-"}</span>
-                              </div>
-                              <div className="bg-white p-1.5 rounded border border-slate-200">
-                                <span className="text-[9px] text-slate-500 font-semibold block">Prediction Amt from Emp</span>
-                                <span className="font-bold text-emerald-800">৳{formatMoney(emp.prediction_amount || emp.total_collection)}</span>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-
-                        {/* 1. Historical Month Rows (e.g. Sep-26, Oct-26) */}
-                        {historyRows.map((hm: EmployeeMonthlyPerformance, hIdx: number) => (
-                          <tr key={`hist-${hIdx}`} className="bg-slate-50/50 hover:bg-slate-100/60 transition">
-                            <td className="py-2.5 px-3 font-bold text-slate-700 sticky left-0 bg-slate-50 border-r border-slate-200 z-10">
-                              {hm.month}
-                            </td>
-                            <td className="py-2.5 px-2 text-right font-medium text-slate-600">৳{formatMoney(hm.target_sales)}</td>
-                            <td className="py-2.5 px-2 text-right font-bold text-emerald-700">৳{formatMoney(hm.actual_new_sales)}</td>
-                            <td className="py-2.5 px-2 text-right font-bold text-purple-700">৳{formatMoney(hm.actual_tb)}</td>
-                            <td className="py-2.5 px-2 text-right font-bold text-sky-700">৳{formatMoney(hm.actual_emi)}</td>
-                            <td className="py-2.5 px-2 text-right font-bold text-slate-800">{hm.total_lead}</td>
-                            <td className="py-2.5 px-2 text-right font-medium text-slate-600">{hm.fair_lead}</td>
-                            <td className="py-2.5 px-2 text-right font-medium text-slate-600">{hm.fb_lead}</td>
-                            <td className="py-2.5 px-2 text-right text-rose-700 font-bold">{hm.hp}</td>
-                            <td className="py-2.5 px-2 text-right text-amber-700 font-bold">{hm.p}</td>
-                            <td className="py-2.5 px-2 text-right text-sky-700 font-bold">{hm.fup}</td>
-                            <td className="py-2.5 px-2 text-center font-bold text-slate-800">{hm.total_calls || 0}</td>
-                            <td className="py-2.5 px-2 text-center text-amber-700 font-bold">{hm.prediction_hold ? "৳" + formatMoney(hm.prediction_hold) : 0}</td>
-                            <td className="py-2.5 px-2 text-center text-rose-700 font-bold">{hm.prediction_cancel ? "৳" + formatMoney(hm.prediction_cancel) : 0}</td>
-                            <td className="py-2.5 px-2 text-center font-bold text-indigo-700">{hm.indoor_cx || 0}</td>
-                            <td className="py-2.5 px-2 text-center font-bold text-teal-700">{hm.outdoor_visits || 0}</td>
-                            <td className="py-2.5 px-2 text-right text-emerald-700 font-bold">{hm.prediction_sold_fair ? "৳" + formatMoney(hm.prediction_sold_fair) : 0}</td>
-                            <td className="py-2.5 px-2 text-right text-sky-700 font-bold">{hm.prediction_sold_fb ? "৳" + formatMoney(hm.prediction_sold_fb) : 0}</td>
-                            <td className="py-2.5 px-2 text-right text-purple-700 font-bold">{hm.prediction_sold_other ? "৳" + formatMoney(hm.prediction_sold_other) : 0}</td>
-                          </tr>
-                        ))}
-
-                        {/* 2. Active Month Summary Row (e.g. Nov-26) */}
-                        <tr className="bg-emerald-50/30 hover:bg-emerald-50/50 font-medium transition border-y border-emerald-200/50">
-                          <td className="py-2.5 px-3 font-extrabold text-emerald-900 sticky left-0 bg-emerald-50 border-r border-slate-200 z-10">
-                            {emp.month}
-                          </td>
-                          <td className="py-2.5 px-2 text-right font-semibold text-slate-900">৳{formatMoney(emp.target_sales || emp.target_collection)}</td>
-                          <td className="py-2.5 px-2 text-right font-extrabold text-emerald-700">৳{formatMoney(emp.actual_new_sales)}</td>
-                          <td className="py-2.5 px-2 text-right font-extrabold text-purple-700">৳{formatMoney(emp.actual_tb)}</td>
-                          <td className="py-2.5 px-2 text-right font-extrabold text-sky-700">৳{formatMoney(emp.actual_emi)}</td>
-                          <td className="py-2.5 px-2 text-right font-extrabold text-slate-900">{emp.total_lead}</td>
-                          <td className="py-2.5 px-2 text-right font-semibold text-slate-700">{emp.fair_lead}</td>
-                          <td className="py-2.5 px-2 text-right font-semibold text-slate-700">{emp.fb_lead}</td>
-                          <td className="py-2.5 px-2 text-right text-rose-700 font-extrabold">{emp.hp}</td>
-                          <td className="py-2.5 px-2 text-right text-amber-700 font-extrabold">{emp.p}</td>
-                          <td className="py-2.5 px-2 text-right text-sky-700 font-extrabold">{emp.fup}</td>
-                          <td className="py-2.5 px-2 text-center font-extrabold text-slate-900">{emp.total_calls || 0}</td>
-                          <td className="py-2.5 px-2 text-center text-amber-700 font-bold">{emp.prediction_hold ? "৳" + formatMoney(emp.prediction_hold) : 0}</td>
-                          <td className="py-2.5 px-2 text-center text-rose-700 font-bold">{emp.prediction_cancel ? "৳" + formatMoney(emp.prediction_cancel) : 0}</td>
-                          <td className="py-2.5 px-2 text-center font-extrabold text-indigo-700">{emp.indoor_cx || 0}</td>
-                          <td className="py-2.5 px-2 text-center font-extrabold text-teal-700">{emp.outdoor_visits || 0}</td>
-                          <td className="py-2.5 px-2 text-right text-emerald-700 font-extrabold">{emp.prediction_sold_fair ? "৳" + formatMoney(emp.prediction_sold_fair) : 0}</td>
-                          <td className="py-2.5 px-2 text-right text-sky-700 font-extrabold">{emp.prediction_sold_fb ? "৳" + formatMoney(emp.prediction_sold_fb) : 0}</td>
-                          <td className="py-2.5 px-2 text-right text-purple-700 font-extrabold">{emp.prediction_sold_other ? "৳" + formatMoney(emp.prediction_sold_other) : 0}</td>
-                        </tr>
-
-                        {/* 3. The 6 Milestone Rows: Till 5th, Till 10th, ..., Till 30/31th */}
-                        {intervalRows.map((inv: PerformanceIntervalSummary, iIdx: number) => (
-                          <tr key={`inv-${iIdx}`} className={`hover:bg-slate-50 transition ${inv.is_manual ? "bg-amber-50/20" : "bg-white"}`}>
-                            <td className="py-2 px-3 font-semibold text-slate-800 sticky left-0 bg-white border-r border-slate-200 z-10">
-                              <div className="flex items-center justify-between gap-1">
-                                <span>{inv.label}</span>
-                                {inv.is_manual && (
-                                  <span className="text-[8px] font-extrabold text-amber-800 bg-amber-100 px-1 py-0.2 rounded border border-amber-300">
-                                    Verified
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="py-2 px-2 text-right text-slate-400">-</td>
-                            <td className="py-2 px-2 text-right font-bold text-emerald-700">৳{formatMoney(inv.new_sales)}</td>
-                            <td className="py-2 px-2 text-right font-bold text-purple-700">৳{formatMoney(inv.actual_tb || 0)}</td>
-                            <td className="py-2 px-2 text-right font-bold text-sky-700">৳{formatMoney(inv.emi)}</td>
-                            <td className="py-2 px-2 text-right font-bold text-slate-900">{inv.total_lead}</td>
-                            <td className="py-2 px-2 text-right text-slate-600">{inv.fair_lead}</td>
-                            <td className="py-2 px-2 text-right text-slate-600">{inv.fb_lead}</td>
-                            <td className="py-2 px-2 text-right text-rose-700 font-bold">{inv.hp}</td>
-                            <td className="py-2 px-2 text-right text-amber-700 font-bold">{inv.p}</td>
-                            <td className="py-2 px-2 text-right text-sky-700 font-bold">{inv.fup}</td>
-                            <td className="py-2 px-2 text-center font-bold text-slate-800">{inv.total_calls || 0}</td>
-                            <td className="py-2 px-2 text-center text-amber-700">{inv.hold ? "৳" + formatMoney(inv.hold) : 0}</td>
-                            <td className="py-2 px-2 text-center text-rose-700">{inv.cancel ? "৳" + formatMoney(inv.cancel) : 0}</td>
-                            <td className="py-2 px-2 text-center text-indigo-700 font-medium">{inv.indoor_cx || 0}</td>
-                            <td className="py-2 px-2 text-center text-teal-700 font-medium">{inv.outdoor_visits || 0}</td>
-                            <td className="py-2 px-2 text-right text-emerald-700">{inv.sold_fair ? "৳" + formatMoney(inv.sold_fair) : 0}</td>
-                            <td className="py-2 px-2 text-right text-sky-700">{inv.sold_fb ? "৳" + formatMoney(inv.sold_fb) : 0}</td>
-                            <td className="py-2 px-2 text-right text-purple-700">{inv.sold_other ? "৳" + formatMoney(inv.sold_other) : 0}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    );
-                  })
-                )}
-              </table>
+                                </td>
+                                <td className="py-2 px-2 text-right text-slate-400">-</td>
+                                <td className="py-2 px-2 text-right font-bold text-emerald-700">৳{formatMoney(inv.new_sales)}</td>
+                                <td className="py-2 px-2 text-right font-bold text-purple-700">৳{formatMoney(inv.actual_tb || 0)}</td>
+                                <td className="py-2 px-2 text-right font-bold text-sky-700">৳{formatMoney(inv.emi)}</td>
+                                <td className="py-2 px-2 text-right font-bold text-slate-900">{inv.total_lead}</td>
+                                <td className="py-2 px-2 text-right text-slate-600">{inv.fair_lead}</td>
+                                <td className="py-2 px-2 text-right text-slate-600">{inv.fb_lead}</td>
+                                <td className="py-2 px-2 text-right text-rose-700 font-bold">{inv.hp}</td>
+                                <td className="py-2 px-2 text-right text-amber-700 font-bold">{inv.p}</td>
+                                <td className="py-2 px-2 text-right text-sky-700 font-bold">{inv.fup}</td>
+                                <td className="py-2 px-2 text-center font-bold text-slate-800">{inv.total_calls || 0}</td>
+                                <td className="py-2 px-2 text-center text-amber-700">{inv.hold ? "৳" + formatMoney(inv.hold) : 0}</td>
+                                <td className="py-2 px-2 text-center text-rose-700">{inv.cancel ? "৳" + formatMoney(inv.cancel) : 0}</td>
+                                <td className="py-2 px-2 text-center text-indigo-700 font-medium">{inv.indoor_cx || 0}</td>
+                                <td className="py-2 px-2 text-center text-teal-700 font-medium">{inv.outdoor_visits || 0}</td>
+                                <td className="py-2 px-2 text-right text-emerald-700">{inv.sold_fair ? "৳" + formatMoney(inv.sold_fair) : 0}</td>
+                                <td className="py-2 px-2 text-right text-sky-700">{inv.sold_fb ? "৳" + formatMoney(inv.sold_fb) : 0}</td>
+                                <td className="py-2 px-2 text-right text-purple-700">{inv.sold_other ? "৳" + formatMoney(inv.sold_other) : 0}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
 
             {/* Mobile Card View for Section 1 */}

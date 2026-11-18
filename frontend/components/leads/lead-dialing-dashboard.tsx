@@ -633,8 +633,7 @@ export function LeadDialingDashboard({
             title="Share your leads with a colleague while on leave or absent"
           >
             <Share2 className="w-3.5 h-3.5 text-amber-700" />
-            <span className="hidden sm:inline">Share Leads (Leave)</span>
-            <span className="sm:hidden">Share (Leave)</span>
+            <span>Share Leads (Leave)</span>
           </button>
 
           <button
@@ -1007,8 +1006,7 @@ export function LeadDialingDashboard({
                         title="Share this lead with a colleague while you are away"
                       >
                         <Share2 className="w-3.5 h-3.5 text-slate-500" />
-                        <span className="hidden sm:inline">Share Lead</span>
-                        <span className="sm:hidden">Share</span>
+                        <span>Share Lead</span>
                       </button>
                     )}
 
@@ -1020,8 +1018,7 @@ export function LeadDialingDashboard({
                       title="View all remarks & call history"
                     >
                       <History className="w-3.5 h-3.5 text-slate-500" />
-                      <span className="hidden sm:inline">Remarks</span>
-                      <span className="sm:hidden">Notes</span>
+                      <span>Remarks</span>
                       {lead.call_logs && lead.call_logs.length > 0 && (
                         <span className="text-[10px] bg-slate-200 text-slate-800 font-extrabold px-1.5 py-0.2 rounded-full">
                           {lead.call_logs.length}
@@ -1071,7 +1068,7 @@ export function LeadDialingDashboard({
       {/* ── 4. After-Call Outcome Modal ──────────────────────────────────────── */}
       {callOutcomeModalOpen && activeCallLead && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-200 space-y-4 text-slate-900">
+          <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto p-5 shadow-2xl border border-slate-200 space-y-4 text-slate-900">
             {/* Modal Header */}
             <div className="border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2 text-emerald-700 font-bold text-xs uppercase tracking-wider mb-1">
@@ -1164,7 +1161,7 @@ export function LeadDialingDashboard({
                 onChange={(e) => setCallNotes(e.target.value)}
                 placeholder={
                   selectedOutcomeStatus === "nr"
-                    ? "Optional notes for Not Reached (e.g. Ringing, phone switched off, line busy)..."
+                    ? "Optional remarks for Not Reached (e.g. Ringing, phone switched off, line busy)..."
                     : "Mandatory: Enter client feedback, discussion points, budget, next steps..."
                 }
                 rows={3}
@@ -1345,7 +1342,7 @@ export function LeadDialingDashboard({
               {/* Initial Remarks */}
               <div>
                 <label className="text-xs font-bold text-slate-700 block mb-1">
-                  Initial Notes (Optional)
+                  Initial Remarks (Optional)
                 </label>
                 <textarea
                   value={createForm.notes}
@@ -1519,7 +1516,7 @@ export function LeadDialingDashboard({
                   </p>
                   {historyModalLead.notes && (
                     <div className="text-left mt-3 pt-3 border-t border-slate-200 text-xs">
-                      <p className="text-[11px] font-bold text-slate-500 uppercase">Initial Note on Creation:</p>
+                      <p className="text-[11px] font-bold text-slate-500 uppercase">Initial Remark on Creation:</p>
                       <p className="text-slate-700 italic bg-white p-2 rounded-lg border border-slate-200 mt-1">
                         &quot;{historyModalLead.notes}&quot;
                       </p>
@@ -1695,7 +1692,7 @@ export function LeadDialingDashboard({
                 <span className="font-mono text-slate-500">{leadToDelegate.phone}</span>
               </div>
               <p className="text-[11px] text-slate-500">
-                Lead stays under original owner ({leadToDelegate.assigned_to_name || "You"}). Your colleague can call and update notes until you take it back.
+                Lead stays under original owner ({leadToDelegate.assigned_to_name || "You"}). Your colleague can call and update remarks until you take it back.
               </p>
             </div>
 
@@ -1734,7 +1731,7 @@ export function LeadDialingDashboard({
 
               <div>
                 <label className="text-xs font-bold text-slate-700 block mb-1">
-                  Short Note for Colleague (Optional)
+                  Short Remark for Colleague (Optional)
                 </label>
                 <input
                   type="text"
@@ -1845,7 +1842,7 @@ export function LeadDialingDashboard({
 
               <div>
                 <label className="text-xs font-bold text-slate-700 block mb-1">
-                  Leave Dates / Note (Optional)
+                  Leave Dates / Remark (Optional)
                 </label>
                 <input
                   type="text"

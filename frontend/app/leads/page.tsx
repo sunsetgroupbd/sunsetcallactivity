@@ -1388,7 +1388,7 @@ export default function CrmLeadsPage() {
               {selectedLead.notes && selectedLead.notes !== "—" && (
                 <div>
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
-                    Remarks / Notes
+                    Remarks
                   </label>
                   <p className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 whitespace-pre-wrap">
                     {selectedLead.notes}

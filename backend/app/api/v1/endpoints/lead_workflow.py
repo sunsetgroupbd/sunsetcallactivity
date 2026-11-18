@@ -9,6 +9,7 @@ from app.core.permissions import get_current_user
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.lead import (
+    LeadCallLogRead,
     LeadCallOutcome,
     LeadCreate,
     LeadRead,
@@ -78,6 +79,17 @@ async def record_call_outcome(
 ):
     svc = LeadService(db)
     return await svc.record_call_outcome(lead_id, outcome, current_user)
+
+
+@router.get("/{lead_id}/call-logs", response_model=List[LeadCallLogRead])
+async def get_lead_call_logs(
+    lead_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Retrieve all call logs and customer feedback remarks for a lead."""
+    svc = LeadService(db)
+    return await svc.get_call_logs(lead_id, current_user)
 
 
 @router.delete("/{lead_id}", response_model=dict)

@@ -800,6 +800,7 @@ export interface WorkflowLead {
   created_at: string;
   updated_at: string;
   latest_call?: LeadCallLog | null;
+  call_logs?: LeadCallLog[];
 }
 
 export interface LeadStatusCounts {

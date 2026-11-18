@@ -30,6 +30,7 @@ import {
   ExecutiveCollectionReportResponse,
   Team,
   WorkflowLead,
+  LeadCallLog,
   LeadSummaryResponse,
   LeadCallOutcomePayload,
   CreateLeadPayload,
@@ -1092,6 +1093,9 @@ export const api = {
       return request(`/leads-workflow/${leadId}`, {
         method: "DELETE",
       });
+    },
+    getCallLogs: async (leadId: number): Promise<LeadCallLog[]> => {
+      return request(`/leads-workflow/${leadId}/call-logs`);
     },
   },
 };

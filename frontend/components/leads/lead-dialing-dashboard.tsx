@@ -29,11 +29,15 @@ import {
   Snowflake,
   Handshake,
   Trash2,
+  History,
+  AlertCircle,
+  X,
 } from "lucide-react";
 import {
   WorkflowLead,
   WorkflowLeadSource,
   WorkflowLeadStatus,
+  LeadCallLog,
   LeadSummaryResponse,
   CreateLeadPayload,
   User as UserType,
@@ -203,6 +207,11 @@ export function LeadDialingDashboard({
   const [leadToDelete, setLeadToDelete] = useState<WorkflowLead | null>(null);
   const [deletingLead, setDeletingLead] = useState(false);
 
+  // Remarks & Call History Modal state
+  const [historyModalLead, setHistoryModalLead] = useState<WorkflowLead | null>(null);
+  const [historyLogs, setHistoryLogs] = useState<LeadCallLog[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
   // Track pending native phone call
   const pendingCallRef = useRef<{
     lead: WorkflowLead;
@@ -308,6 +317,21 @@ export function LeadDialingDashboard({
     window.location.href = `tel:${cleanPhone}`;
   };
 
+  // Remarks & Activity History viewer
+  const handleOpenHistory = async (lead: WorkflowLead) => {
+    setHistoryModalLead(lead);
+    setHistoryLogs(lead.call_logs || []);
+    try {
+      setHistoryLoading(true);
+      const logs = await api.leadWorkflow.getCallLogs(lead.id);
+      setHistoryLogs(logs);
+    } catch (err: any) {
+      console.error("Failed to load call logs:", err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
   // Manual Trigger in case auto-return is missed
   const handleOpenOutcomeManually = (lead: WorkflowLead) => {
     setActiveCallLead(lead);
@@ -320,6 +344,12 @@ export function LeadDialingDashboard({
   // ─── 5. Submit Call Outcome & Move Status ──────────────────────────────────
   const handleConfirmOutcome = async () => {
     if (!activeCallLead) return;
+
+    // Call Remarks / Customer Feedback is mandatory for all statuses except NR
+    if (selectedOutcomeStatus !== "nr" && !callNotes.trim()) {
+      alert("Call Remarks / Customer Feedback is required for this status.");
+      return;
+    }
 
     try {
       setSubmittingOutcome(true);
@@ -683,15 +713,52 @@ export function LeadDialingDashboard({
                       )}
                     </div>
 
-                    {lead.notes && (
-                      <p className="text-[11px] text-slate-600 italic bg-amber-50/60 p-1.5 rounded-lg border border-amber-100/60">
+                    {/* Latest Remark Preview */}
+                    {lead.call_logs && lead.call_logs.length > 0 && lead.call_logs[0]?.notes ? (
+                      <div className="text-[11px] text-slate-700 bg-slate-50 p-2 rounded-xl border border-slate-200 flex items-start gap-1.5 mt-1">
+                        <MessageSquare className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                        <div className="min-w-0 flex-1">
+                          <span className="font-bold text-slate-800">Latest Remark: </span>
+                          <span className="italic text-slate-700">&quot;{lead.call_logs[0].notes}&quot;</span>
+                          {lead.call_logs[0].called_at && (
+                            <span className="text-[10px] text-slate-400 block mt-0.5">
+                              by {lead.call_logs[0].caller_name || "Executive"} •{" "}
+                              {new Date(lead.call_logs[0].called_at).toLocaleString([], {
+                                month: "short",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ) : lead.notes ? (
+                      <p className="text-[11px] text-slate-600 italic bg-amber-50/60 p-1.5 rounded-lg border border-amber-100/60 mt-1">
                         &quot;{lead.notes}&quot;
                       </p>
-                    )}
+                    ) : null}
                   </div>
 
-                  {/* Actions: Dial Button & Log Status */}
-                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                  {/* Actions: Remarks History, Log Status, Dial Button */}
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center flex-wrap">
+                    {/* View Remarks Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleOpenHistory(lead)}
+                      className="px-2.5 py-1.5 text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition text-xs font-semibold flex items-center gap-1.5"
+                      title="View all remarks & call history"
+                    >
+                      <History className="w-3.5 h-3.5 text-slate-500" />
+                      <span className="hidden sm:inline">Remarks</span>
+                      <span className="sm:hidden">Notes</span>
+                      {lead.call_logs && lead.call_logs.length > 0 && (
+                        <span className="text-[10px] bg-slate-200 text-slate-800 font-extrabold px-1.5 py-0.2 rounded-full">
+                          {lead.call_logs.length}
+                        </span>
+                      )}
+                    </button>
+
                     {/* Log Status Fallback button */}
                     <button
                       type="button"
@@ -811,16 +878,40 @@ export function LeadDialingDashboard({
 
             {/* Quick Call Note */}
             <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">
-                Call Remarks / Customer Feedback:
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <MessageSquare className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Call Remarks / Customer Feedback</span>
+                  {selectedOutcomeStatus === "nr" ? (
+                    <span className="text-slate-400 font-normal text-[11px]">(Optional for NR)</span>
+                  ) : (
+                    <span className="text-rose-600 font-bold text-xs">* (Required)</span>
+                  )}
+                </label>
+              </div>
               <textarea
                 value={callNotes}
                 onChange={(e) => setCallNotes(e.target.value)}
-                placeholder="e.g. Budget 45L, requested site visit this Friday afternoon..."
-                rows={2}
-                className="w-full p-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900"
+                placeholder={
+                  selectedOutcomeStatus === "nr"
+                    ? "Optional notes for Not Reached (e.g. Ringing, phone switched off, line busy)..."
+                    : "Mandatory: Enter client feedback, discussion points, budget, next steps..."
+                }
+                rows={3}
+                required={selectedOutcomeStatus !== "nr"}
+                className={cn(
+                  "w-full p-2.5 text-xs bg-slate-50 border rounded-xl focus:outline-none focus:ring-2 text-slate-900 transition",
+                  selectedOutcomeStatus !== "nr" && !callNotes.trim()
+                    ? "border-rose-300 focus:ring-rose-400 bg-rose-50/20"
+                    : "border-slate-200 focus:ring-emerald-500"
+                )}
               />
+              {selectedOutcomeStatus !== "nr" && !callNotes.trim() && (
+                <p className="text-[11px] text-rose-600 mt-1 flex items-center gap-1 font-medium">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>Remarks are mandatory for {selectedOutcomeStatus.toUpperCase()} status.</span>
+                </p>
+              )}
             </div>
 
             {/* Action Buttons */}
@@ -839,7 +930,7 @@ export function LeadDialingDashboard({
               <button
                 type="button"
                 onClick={handleConfirmOutcome}
-                disabled={submittingOutcome}
+                disabled={submittingOutcome || (selectedOutcomeStatus !== "nr" && !callNotes.trim())}
                 className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-4 py-2 rounded-xl transition text-xs font-bold flex items-center gap-1.5 shadow-sm disabled:opacity-50"
               >
                 {submittingOutcome ? (
@@ -1072,6 +1163,234 @@ export function LeadDialingDashboard({
                   </>
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 7. Lead Remarks & Activity History Modal (Mobile & Desktop) ────── */}
+      {historyModalLead && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 text-slate-900 overflow-hidden">
+            {/* Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-100 flex items-start justify-between gap-3 bg-slate-50/70 shrink-0">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap mb-1">
+                  <span className="text-base font-bold text-slate-900 truncate">
+                    {historyModalLead.name}
+                  </span>
+                  {(() => {
+                    const st = STATUSES.find((s) => s.key === historyModalLead.status);
+                    return (
+                      <span
+                        className={cn(
+                          "text-[10px] font-extrabold px-2 py-0.5 rounded-full border",
+                          st ? st.badgeClass : "bg-slate-100 text-slate-700 border-slate-200"
+                        )}
+                      >
+                        {st?.label || historyModalLead.status.toUpperCase()}
+                      </span>
+                    );
+                  })()}
+                </div>
+
+                <div className="flex items-center gap-2 text-xs text-slate-600 font-mono">
+                  <span>{historyModalLead.phone}</span>
+                  <a
+                    href={`tel:${historyModalLead.phone}`}
+                    className="inline-flex items-center gap-1 text-[11px] font-sans font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200"
+                  >
+                    <Phone className="w-3 h-3 fill-current" />
+                    <span>Call Now</span>
+                  </a>
+                </div>
+
+                <div className="flex items-center gap-3 text-[11px] text-slate-500 mt-2 flex-wrap">
+                  {historyModalLead.assigned_to_name && (
+                    <span className="flex items-center gap-1">
+                      <UserCheck className="w-3 h-3 text-slate-400" />
+                      <span>
+                        Executive: <strong className="text-slate-700">{historyModalLead.assigned_to_name}</strong>
+                      </span>
+                    </span>
+                  )}
+                  <span className="flex items-center gap-1">
+                    <Calendar className="w-3 h-3 text-slate-400" />
+                    <span>Added: {historyModalLead.lead_date}</span>
+                  </span>
+                  <span>
+                    Dials: <strong className="text-slate-700">{historyModalLead.total_calls_count}</strong>
+                  </span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setHistoryModalLead(null)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Scrollable Remarks Timeline */}
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-3 flex-1 min-h-[180px]">
+              {historyLoading ? (
+                <div className="py-8 text-center text-slate-500 space-y-2">
+                  <Loader2 className="w-5 h-5 animate-spin text-emerald-600 mx-auto" />
+                  <p className="text-xs">Loading remarks history...</p>
+                </div>
+              ) : historyLogs.length === 0 ? (
+                <div className="py-8 text-center text-slate-500 bg-slate-50 rounded-xl border border-dashed border-slate-200 p-4 space-y-2">
+                  <MessageSquare className="w-6 h-6 text-slate-300 mx-auto" />
+                  <p className="text-xs font-semibold text-slate-700">No call remarks recorded yet</p>
+                  <p className="text-[11px] text-slate-400">
+                    When calls are placed and status is logged, detailed customer feedback and timestamps will appear here.
+                  </p>
+                  {historyModalLead.notes && (
+                    <div className="text-left mt-3 pt-3 border-t border-slate-200 text-xs">
+                      <p className="text-[11px] font-bold text-slate-500 uppercase">Initial Note on Creation:</p>
+                      <p className="text-slate-700 italic bg-white p-2 rounded-lg border border-slate-200 mt-1">
+                        &quot;{historyModalLead.notes}&quot;
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-xs text-slate-500 pb-1 border-b border-slate-100">
+                    <span className="font-bold text-slate-700">
+                      All Customer Remarks &amp; Updates ({historyLogs.length})
+                    </span>
+                    <span className="text-[11px]">Newest first</span>
+                  </div>
+
+                  {historyLogs.map((log) => {
+                    const toStatusObj = ALL_OUTCOME_STATUSES.find((s) => s.key === log.to_status);
+                    const fromStatusObj = ALL_OUTCOME_STATUSES.find((s) => s.key === log.from_status);
+
+                    return (
+                      <div
+                        key={log.id}
+                        className="p-3 bg-slate-50/80 rounded-xl border border-slate-200 space-y-2 hover:bg-slate-50 transition"
+                      >
+                        {/* Top line: Date, Time & Caller */}
+                        <div className="flex items-center justify-between gap-2 flex-wrap text-xs">
+                          <div className="flex items-center gap-1.5 text-slate-700 font-semibold">
+                            <Clock className="w-3.5 h-3.5 text-slate-400" />
+                            <span>
+                              {log.called_at
+                                ? new Date(log.called_at).toLocaleString([], {
+                                    year: "numeric",
+                                    month: "short",
+                                    day: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })
+                                : "N/A"}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1 text-[11px] text-slate-600 font-medium">
+                            <UserCheck className="w-3 h-3 text-slate-400" />
+                            <span>{log.caller_name || "Sales Executive"}</span>
+                          </div>
+                        </div>
+
+                        {/* Middle line: Status Transition & Duration */}
+                        <div className="flex items-center gap-2 flex-wrap text-[11px]">
+                          <span className="text-slate-500">Status:</span>
+                          {log.from_status && (
+                            <>
+                              <span className="font-bold text-slate-600 bg-slate-200 px-1.5 py-0.5 rounded">
+                                {fromStatusObj?.badge || log.from_status.toUpperCase()}
+                              </span>
+                              <ArrowRight className="w-3 h-3 text-slate-400" />
+                            </>
+                          )}
+                          <span
+                            className={cn(
+                              "font-bold px-2 py-0.5 rounded text-white text-[11px]",
+                              toStatusObj?.key === "hp"
+                                ? "bg-emerald-600"
+                                : toStatusObj?.key === "p"
+                                ? "bg-blue-600"
+                                : toStatusObj?.key === "fup"
+                                ? "bg-amber-600"
+                                : toStatusObj?.key === "ni"
+                                ? "bg-rose-600"
+                                : "bg-slate-600"
+                            )}
+                          >
+                            {toStatusObj?.badge || log.to_status.toUpperCase()} - {toStatusObj?.label || ""}
+                          </span>
+
+                          {log.call_duration_seconds !== null &&
+                            log.call_duration_seconds !== undefined &&
+                            log.call_duration_seconds > 0 && (
+                              <span className="text-slate-400 font-mono text-[10.5px]">
+                                ({log.call_duration_seconds}s)
+                              </span>
+                            )}
+                        </div>
+
+                        {/* Bottom: Remarks text */}
+                        {log.notes ? (
+                          <div className="bg-white p-2.5 rounded-lg border border-slate-200 text-xs text-slate-800 leading-relaxed font-sans">
+                            <span className="font-bold text-slate-500 text-[10.5px] uppercase block mb-0.5">
+                              Remarks / Feedback:
+                            </span>
+                            &quot;{log.notes}&quot;
+                          </div>
+                        ) : (
+                          <p className="text-[11px] text-slate-400 italic">
+                            No remarks recorded (e.g. Not Reached).
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer with Quick Log Action */}
+            <div className="p-3 sm:p-4 border-t border-slate-100 bg-slate-50/70 flex items-center justify-between gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setHistoryModalLead(null)}
+                className="px-3.5 py-2 text-xs font-semibold text-slate-700 bg-slate-200 hover:bg-slate-300 rounded-xl transition"
+              >
+                Close
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const lead = historyModalLead;
+                    setHistoryModalLead(null);
+                    handleOpenOutcomeManually(lead);
+                  }}
+                  className="px-3.5 py-2 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition flex items-center gap-1.5 shadow-sm"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Log New Remark</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const lead = historyModalLead;
+                    setHistoryModalLead(null);
+                    handleDial(lead);
+                  }}
+                  className="px-3.5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition flex items-center gap-1.5 shadow-sm"
+                >
+                  <Phone className="w-3.5 h-3.5 fill-current" />
+                  <span>Dial Now</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

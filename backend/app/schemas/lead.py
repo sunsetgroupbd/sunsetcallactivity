@@ -63,6 +63,7 @@ class LeadRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     latest_call: Optional[LeadCallLogRead] = None
+    call_logs: List[LeadCallLogRead] = Field(default_factory=list)
 
     class Config:
         from_attributes = True

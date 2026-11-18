@@ -65,6 +65,48 @@ class LeadService:
         counts = await self.lead_repo.get_summary_counts(target_emp_id)
         return LeadSummaryResponse(**counts)
 
+    @staticmethod
+    def _to_lead_read(l: Lead) -> LeadRead:
+        call_logs_read: List[LeadCallLogRead] = []
+        if l.call_logs:
+            for log in l.call_logs:
+                caller_name = log.caller.full_name if log.caller else None
+                call_logs_read.append(
+                    LeadCallLogRead(
+                        id=log.id,
+                        lead_id=log.lead_id,
+                        caller_id=log.caller_id,
+                        caller_name=caller_name,
+                        from_status=log.from_status,
+                        to_status=log.to_status,
+                        called_at=log.called_at,
+                        call_duration_seconds=log.call_duration_seconds,
+                        notes=log.notes,
+                    )
+                )
+
+        latest_call_read = call_logs_read[0] if call_logs_read else None
+
+        return LeadRead(
+            id=l.id,
+            name=l.name,
+            phone=l.phone,
+            source=l.source,
+            status=l.status,
+            assigned_to_id=l.assigned_to_id,
+            assigned_to_name=l.assigned_to.full_name if l.assigned_to else None,
+            created_by_id=l.created_by_id,
+            lead_date=l.lead_date,
+            last_called_at=l.last_called_at,
+            total_calls_count=l.total_calls_count,
+            notes=l.notes,
+            is_active=l.is_active,
+            created_at=l.created_at,
+            updated_at=l.updated_at,
+            latest_call=latest_call_read,
+            call_logs=call_logs_read,
+        )
+
     async def list_leads(
         self,
         current_user: User,
@@ -89,45 +131,7 @@ class LeadService:
             offset=offset,
         )
 
-        lead_reads: List[LeadRead] = []
-        for l in leads:
-            latest_call_read = None
-            if l.call_logs:
-                first_log = l.call_logs[0]
-                caller_name = first_log.caller.full_name if first_log.caller else None
-                latest_call_read = LeadCallLogRead(
-                    id=first_log.id,
-                    lead_id=first_log.lead_id,
-                    caller_id=first_log.caller_id,
-                    caller_name=caller_name,
-                    from_status=first_log.from_status,
-                    to_status=first_log.to_status,
-                    called_at=first_log.called_at,
-                    call_duration_seconds=first_log.call_duration_seconds,
-                    notes=first_log.notes,
-                )
-
-            lead_reads.append(
-                LeadRead(
-                    id=l.id,
-                    name=l.name,
-                    phone=l.phone,
-                    source=l.source,
-                    status=l.status,
-                    assigned_to_id=l.assigned_to_id,
-                    assigned_to_name=l.assigned_to.full_name if l.assigned_to else None,
-                    created_by_id=l.created_by_id,
-                    lead_date=l.lead_date,
-                    last_called_at=l.last_called_at,
-                    total_calls_count=l.total_calls_count,
-                    notes=l.notes,
-                    is_active=l.is_active,
-                    created_at=l.created_at,
-                    updated_at=l.updated_at,
-                    latest_call=latest_call_read,
-                )
-            )
-
+        lead_reads = [self._to_lead_read(l) for l in leads]
         return lead_reads, total
 
     async def create_lead(self, data: LeadCreate, current_user: User) -> LeadRead:
@@ -158,24 +162,7 @@ class LeadService:
         if not full_lead:
             raise HTTPException(status_code=500, detail="Failed to load created lead")
 
-        return LeadRead(
-            id=full_lead.id,
-            name=full_lead.name,
-            phone=full_lead.phone,
-            source=full_lead.source,
-            status=full_lead.status,
-            assigned_to_id=full_lead.assigned_to_id,
-            assigned_to_name=full_lead.assigned_to.full_name if full_lead.assigned_to else None,
-            created_by_id=full_lead.created_by_id,
-            lead_date=full_lead.lead_date,
-            last_called_at=full_lead.last_called_at,
-            total_calls_count=full_lead.total_calls_count,
-            notes=full_lead.notes,
-            is_active=full_lead.is_active,
-            created_at=full_lead.created_at,
-            updated_at=full_lead.updated_at,
-            latest_call=None,
-        )
+        return self._to_lead_read(full_lead)
 
     async def record_call_outcome(
         self,
@@ -193,6 +180,14 @@ class LeadService:
 
         old_status = lead.status
         new_status = outcome.new_status.lower().strip()
+        notes = (outcome.notes or "").strip()
+
+        # Validation: Remarks / Customer Feedback is mandatory for HP, P, FUP, NI. Only NR is optional.
+        if new_status != "nr" and not notes:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Call Remarks / Customer Feedback is mandatory when call is connected (HP, P, FUP, NI). Only Not Reached (NR) can be saved without remarks.",
+            )
 
         # 1. Save Call Log & update Lead status
         await self.lead_repo.log_call(
@@ -201,7 +196,7 @@ class LeadService:
             from_status=old_status,
             to_status=new_status,
             duration=outcome.call_duration_seconds,
-            notes=outcome.notes,
+            notes=notes if notes else None,
         )
 
         # 2. Automatic Reporting Bridge: Auto-update today's DailyActivityReport for this executive
@@ -213,45 +208,27 @@ class LeadService:
 
         await self.db.commit()
 
-        # Reload updated lead
+        # Reload updated lead with relationships
         full_lead = await self.lead_repo.get_by_id(lead.id)
         if not full_lead:
             raise HTTPException(status_code=500, detail="Failed to load updated lead")
 
-        latest_call_read = None
-        if full_lead.call_logs:
-            first_log = full_lead.call_logs[0]
-            caller_name = first_log.caller.full_name if first_log.caller else None
-            latest_call_read = LeadCallLogRead(
-                id=first_log.id,
-                lead_id=first_log.lead_id,
-                caller_id=first_log.caller_id,
-                caller_name=caller_name,
-                from_status=first_log.from_status,
-                to_status=first_log.to_status,
-                called_at=first_log.called_at,
-                call_duration_seconds=first_log.call_duration_seconds,
-                notes=first_log.notes,
+        return self._to_lead_read(full_lead)
+
+    async def get_call_logs(self, lead_id: int, current_user: User) -> List[LeadCallLogRead]:
+        lead = await self.lead_repo.get_by_id(lead_id)
+        if not lead:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found")
+
+        is_supervisor = current_user.role in (UserRole.ADMIN, UserRole.SUB_ADMIN)
+        if not is_supervisor and lead.assigned_to_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to view remarks for this lead",
             )
 
-        return LeadRead(
-            id=full_lead.id,
-            name=full_lead.name,
-            phone=full_lead.phone,
-            source=full_lead.source,
-            status=full_lead.status,
-            assigned_to_id=full_lead.assigned_to_id,
-            assigned_to_name=full_lead.assigned_to.full_name if full_lead.assigned_to else None,
-            created_by_id=full_lead.created_by_id,
-            lead_date=full_lead.lead_date,
-            last_called_at=full_lead.last_called_at,
-            total_calls_count=full_lead.total_calls_count,
-            notes=full_lead.notes,
-            is_active=full_lead.is_active,
-            created_at=full_lead.created_at,
-            updated_at=full_lead.updated_at,
-            latest_call=latest_call_read,
-        )
+        lead_read = self._to_lead_read(lead)
+        return lead_read.call_logs
 
     async def _auto_update_daily_call_report(
         self,

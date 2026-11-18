@@ -359,6 +359,18 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
                 """))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_lead_call_logs_lead_id ON lead_call_logs(lead_id);"))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_lead_call_logs_caller_id ON lead_call_logs(caller_id);"))
+
+                # Ensure delegation columns exist on leads (SQLite)
+                res_lead_cols = await conn.execute(text("PRAGMA table_info(leads)"))
+                lead_cols = {row[1] for row in res_lead_cols.fetchall()}
+                if lead_cols:
+                    if "delegated_to_id" not in lead_cols:
+                        await conn.execute(text("ALTER TABLE leads ADD COLUMN delegated_to_id INTEGER REFERENCES users(id) ON DELETE SET NULL;"))
+                        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_leads_delegated_to_id ON leads(delegated_to_id);"))
+                    if "delegated_at" not in lead_cols:
+                        await conn.execute(text("ALTER TABLE leads ADD COLUMN delegated_at TIMESTAMP;"))
+                    if "delegation_notes" not in lead_cols:
+                        await conn.execute(text("ALTER TABLE leads ADD COLUMN delegation_notes VARCHAR(255);"))
             else:
                 await conn.execute(text("""
                     CREATE TABLE IF NOT EXISTS leads (
@@ -369,6 +381,9 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
                         status VARCHAR(20) NOT NULL DEFAULT 'fup',
                         assigned_to_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                         created_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                        delegated_to_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                        delegated_at TIMESTAMP WITH TIME ZONE,
+                        delegation_notes VARCHAR(255),
                         lead_date DATE NOT NULL,
                         last_called_at TIMESTAMP WITH TIME ZONE,
                         total_calls_count INTEGER NOT NULL DEFAULT 0,
@@ -382,6 +397,12 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_leads_source ON leads(source);"))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_leads_status ON leads(status);"))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_leads_lead_date ON leads(lead_date);"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_leads_delegated_to_id ON leads(delegated_to_id);"))
+
+                # Ensure delegation columns exist on already-created leads table (Postgres)
+                await conn.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS delegated_to_id INTEGER REFERENCES users(id) ON DELETE SET NULL;"))
+                await conn.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS delegated_at TIMESTAMP WITH TIME ZONE;"))
+                await conn.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS delegation_notes VARCHAR(255);"))
 
                 await conn.execute(text("""
                     CREATE TABLE IF NOT EXISTS lead_call_logs (

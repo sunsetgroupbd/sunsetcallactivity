@@ -801,6 +801,27 @@ export interface WorkflowLead {
   updated_at: string;
   latest_call?: LeadCallLog | null;
   call_logs?: LeadCallLog[];
+  delegated_to_id?: number | null;
+  delegated_to_name?: string | null;
+  delegated_at?: string | null;
+  delegation_notes?: string | null;
+  is_delegated_to_me?: boolean | null;
+  is_delegated_by_me?: boolean | null;
+}
+
+export interface LeadDelegatePayload {
+  delegated_to_id: number;
+  notes?: string;
+}
+
+export interface BulkLeadDelegatePayload {
+  lead_ids?: number[];
+  delegated_to_id: number;
+  notes?: string;
+}
+
+export interface BulkRevokeDelegatePayload {
+  lead_ids?: number[];
 }
 
 export interface LeadStatusCounts {

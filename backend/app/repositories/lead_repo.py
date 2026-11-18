@@ -21,6 +21,7 @@ class LeadRepository:
             .options(
                 selectinload(Lead.assigned_to),
                 selectinload(Lead.created_by),
+                selectinload(Lead.delegated_to),
                 selectinload(Lead.call_logs),
             )
         )
@@ -48,6 +49,7 @@ class LeadRepository:
         source: Optional[str] = None,
         status: Optional[str] = None,
         search: Optional[str] = None,
+        delegation_filter: Optional[str] = None,
         is_active: bool = True,
         limit: int = 100,
         offset: int = 0,
@@ -55,7 +57,19 @@ class LeadRepository:
         stmt = select(Lead).where(Lead.is_active == is_active)
 
         if assigned_to_id is not None:
-            stmt = stmt.where(Lead.assigned_to_id == assigned_to_id)
+            if delegation_filter == "delegated_to_me":
+                stmt = stmt.where(Lead.delegated_to_id == assigned_to_id)
+            elif delegation_filter == "owned_only":
+                stmt = stmt.where(Lead.assigned_to_id == assigned_to_id)
+            elif delegation_filter == "delegated_by_me":
+                stmt = stmt.where(Lead.assigned_to_id == assigned_to_id, Lead.delegated_to_id.isnot(None))
+            else:
+                # Default: Show both leads owned by user and leads delegated to user
+                stmt = stmt.where(or_(Lead.assigned_to_id == assigned_to_id, Lead.delegated_to_id == assigned_to_id))
+        elif delegation_filter == "all_delegated":
+            # For admin/supervisor to view all currently delegated leads across company
+            stmt = stmt.where(Lead.delegated_to_id.isnot(None))
+
         if source and source != "all":
             stmt = stmt.where(Lead.source == source.lower().strip())
         if status and status != "all":
@@ -74,6 +88,7 @@ class LeadRepository:
             stmt.options(
                 selectinload(Lead.assigned_to),
                 selectinload(Lead.created_by),
+                selectinload(Lead.delegated_to),
                 selectinload(Lead.call_logs),
             )
             .order_by(
@@ -91,13 +106,14 @@ class LeadRepository:
         """
         Calculates status counts grouped by source for:
         fb_lead, fair_lead, cold_lead, reference.
+        Includes delegated leads if assigned_to_id is specified.
         """
         stmt = (
             select(Lead.source, Lead.status, func.count(Lead.id))
             .where(Lead.is_active == True)
         )
         if assigned_to_id is not None:
-            stmt = stmt.where(Lead.assigned_to_id == assigned_to_id)
+            stmt = stmt.where(or_(Lead.assigned_to_id == assigned_to_id, Lead.delegated_to_id == assigned_to_id))
         stmt = stmt.group_by(Lead.source, Lead.status)
 
         res = await self.db.execute(stmt)

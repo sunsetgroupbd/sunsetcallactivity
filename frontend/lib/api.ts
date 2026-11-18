@@ -34,6 +34,9 @@ import {
   LeadSummaryResponse,
   LeadCallOutcomePayload,
   CreateLeadPayload,
+  LeadDelegatePayload,
+  BulkLeadDelegatePayload,
+  BulkRevokeDelegatePayload,
 } from "@/types";
 
 const API_BASE =
@@ -1056,6 +1059,7 @@ export const api = {
       status?: string;
       search?: string;
       employee_id?: number;
+      delegation?: string;
       limit?: number;
       offset?: number;
     }): Promise<{
@@ -1069,6 +1073,7 @@ export const api = {
       if (params?.status && params.status !== "all") q.set("status", params.status);
       if (params?.search) q.set("search", params.search);
       if (params?.employee_id) q.set("employee_id", params.employee_id.toString());
+      if (params?.delegation) q.set("delegation", params.delegation);
       if (params?.limit) q.set("limit", params.limit.toString());
       if (params?.offset) q.set("offset", params.offset.toString());
       const queryStr = q.toString() ? `?${q.toString()}` : "";
@@ -1096,6 +1101,33 @@ export const api = {
     },
     getCallLogs: async (leadId: number): Promise<LeadCallLog[]> => {
       return request(`/leads-workflow/${leadId}/call-logs`);
+    },
+    delegateLead: async (leadId: number, payload: LeadDelegatePayload): Promise<WorkflowLead> => {
+      return request(`/leads-workflow/${leadId}/delegate`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    },
+    revokeDelegation: async (leadId: number): Promise<WorkflowLead> => {
+      return request(`/leads-workflow/${leadId}/revoke-delegation`, {
+        method: "POST",
+      });
+    },
+    bulkDelegate: async (
+      payload: BulkLeadDelegatePayload
+    ): Promise<{ success: boolean; delegated_count: number; delegated_to_name: string }> => {
+      return request("/leads-workflow/bulk-delegate", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    },
+    bulkRevokeDelegation: async (
+      payload: BulkRevokeDelegatePayload
+    ): Promise<{ success: boolean; revoked_count: number }> => {
+      return request("/leads-workflow/bulk-revoke-delegation", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
     },
   },
 };

@@ -15,6 +15,9 @@ from app.schemas.lead import (
     LeadRead,
     LeadSummaryResponse,
     LeadUpdate,
+    LeadDelegatePayload,
+    BulkLeadDelegatePayload,
+    BulkRevokeDelegatePayload,
 )
 from app.services.lead_service import LeadService
 
@@ -37,6 +40,7 @@ async def list_leads(
     status: Optional[str] = Query(None, description="hp, p, fup, ni, nr, or all"),
     search: Optional[str] = Query(None, description="Search by name or phone"),
     employee_id: Optional[int] = Query(None, description="Filter by executive (Admin only)"),
+    delegation: Optional[str] = Query(None, description="all, owned_only, delegated_to_me, delegated_by_me"),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
@@ -49,6 +53,7 @@ async def list_leads(
         status_filter=status,
         search=search,
         filter_employee_id=employee_id,
+        delegation_filter=delegation,
         limit=limit,
         offset=offset,
     )
@@ -90,6 +95,51 @@ async def get_lead_call_logs(
     """Retrieve all call logs and customer feedback remarks for a lead."""
     svc = LeadService(db)
     return await svc.get_call_logs(lead_id, current_user)
+
+
+@router.post("/{lead_id}/delegate", response_model=LeadRead)
+async def delegate_lead(
+    lead_id: int,
+    payload: LeadDelegatePayload,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Temporarily delegate calling permissions for a lead to another colleague/TL/CO."""
+    svc = LeadService(db)
+    return await svc.delegate_lead(lead_id, payload.delegated_to_id, payload.notes, current_user)
+
+
+@router.post("/{lead_id}/revoke-delegation", response_model=LeadRead)
+async def revoke_lead_delegation(
+    lead_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Revoke temporary calling delegation, restoring sole management to the owner."""
+    svc = LeadService(db)
+    return await svc.revoke_delegation(lead_id, current_user)
+
+
+@router.post("/bulk-delegate", response_model=dict)
+async def bulk_delegate_leads(
+    payload: BulkLeadDelegatePayload,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bulk delegate multiple or all active leads to a colleague during absence/leave."""
+    svc = LeadService(db)
+    return await svc.bulk_delegate(payload.delegated_to_id, payload.notes, payload.lead_ids, current_user)
+
+
+@router.post("/bulk-revoke-delegation", response_model=dict)
+async def bulk_revoke_lead_delegations(
+    payload: BulkRevokeDelegatePayload,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bulk revoke delegated leads and return them to the original owner."""
+    svc = LeadService(db)
+    return await svc.bulk_revoke_delegation(payload.lead_ids, current_user)
 
 
 @router.delete("/{lead_id}", response_model=dict)

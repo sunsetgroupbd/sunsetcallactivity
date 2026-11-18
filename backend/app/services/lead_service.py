@@ -66,7 +66,7 @@ class LeadService:
         return LeadSummaryResponse(**counts)
 
     @staticmethod
-    def _to_lead_read(l: Lead) -> LeadRead:
+    def _to_lead_read(l: Lead, current_user_id: Optional[int] = None) -> LeadRead:
         call_logs_read: List[LeadCallLogRead] = []
         if l.call_logs:
             for log in l.call_logs:
@@ -86,6 +86,9 @@ class LeadService:
                 )
 
         latest_call_read = call_logs_read[0] if call_logs_read else None
+        delegated_to_name = l.delegated_to.full_name if getattr(l, "delegated_to", None) else None
+        is_delegated_to_me = bool(current_user_id and l.delegated_to_id == current_user_id)
+        is_delegated_by_me = bool(current_user_id and l.assigned_to_id == current_user_id and l.delegated_to_id is not None)
 
         return LeadRead(
             id=l.id,
@@ -105,6 +108,12 @@ class LeadService:
             updated_at=l.updated_at,
             latest_call=latest_call_read,
             call_logs=call_logs_read,
+            delegated_to_id=l.delegated_to_id,
+            delegated_to_name=delegated_to_name,
+            delegated_at=l.delegated_at,
+            delegation_notes=l.delegation_notes,
+            is_delegated_to_me=is_delegated_to_me,
+            is_delegated_by_me=is_delegated_by_me,
         )
 
     async def list_leads(
@@ -114,6 +123,7 @@ class LeadService:
         status_filter: Optional[str] = None,
         search: Optional[str] = None,
         filter_employee_id: Optional[int] = None,
+        delegation_filter: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
     ) -> Tuple[List[LeadRead], int]:
@@ -127,11 +137,12 @@ class LeadService:
             source=source,
             status=status_filter,
             search=search,
+            delegation_filter=delegation_filter,
             limit=limit,
             offset=offset,
         )
 
-        lead_reads = [self._to_lead_read(l) for l in leads]
+        lead_reads = [self._to_lead_read(l, current_user.id) for l in leads]
         return lead_reads, total
 
     async def create_lead(self, data: LeadCreate, current_user: User) -> LeadRead:
@@ -175,7 +186,9 @@ class LeadService:
             raise HTTPException(status_code=404, detail="Lead not found")
 
         is_supervisor = current_user.role in (UserRole.ADMIN, UserRole.SUB_ADMIN)
-        if not is_supervisor and lead.assigned_to_id != current_user.id:
+        is_owner = lead.assigned_to_id == current_user.id
+        is_delegated = lead.delegated_to_id == current_user.id
+        if not is_supervisor and not is_owner and not is_delegated:
             raise HTTPException(status_code=403, detail="Not authorized to log calls for this lead")
 
         old_status = lead.status
@@ -199,9 +212,9 @@ class LeadService:
             notes=notes if notes else None,
         )
 
-        # 2. Automatic Reporting Bridge: Auto-update today's DailyActivityReport for this executive
+        # 2. Automatic Reporting Bridge: Auto-update today's DailyActivityReport for the person who actually made the call
         await self._auto_update_daily_call_report(
-            executive_id=lead.assigned_to_id,
+            executive_id=current_user.id,
             lead_source=lead.source,
             new_status=new_status,
         )
@@ -213,9 +226,15 @@ class LeadService:
         if not full_lead:
             raise HTTPException(status_code=500, detail="Failed to load updated lead")
 
-        return self._to_lead_read(full_lead)
+        return self._to_lead_read(full_lead, current_user.id)
 
-    async def get_call_logs(self, lead_id: int, current_user: User) -> List[LeadCallLogRead]:
+    async def delegate_lead(
+        self,
+        lead_id: int,
+        delegated_to_id: int,
+        notes: Optional[str],
+        current_user: User,
+    ) -> LeadRead:
         lead = await self.lead_repo.get_by_id(lead_id)
         if not lead:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found")
@@ -224,10 +243,135 @@ class LeadService:
         if not is_supervisor and lead.assigned_to_id != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only the lead owner or a supervisor can delegate this lead",
+            )
+
+        target_user = await self.db.get(User, delegated_to_id)
+        if not target_user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target employee not found")
+
+        lead.delegated_to_id = delegated_to_id
+        lead.delegated_at = datetime.now(timezone.utc)
+        lead.delegation_notes = notes.strip() if notes else None
+        await self.lead_repo.update(lead)
+        await self.db.commit()
+
+        full_lead = await self.lead_repo.get_by_id(lead.id)
+        return self._to_lead_read(full_lead, current_user.id)
+
+    async def revoke_delegation(
+        self,
+        lead_id: int,
+        current_user: User,
+    ) -> LeadRead:
+        lead = await self.lead_repo.get_by_id(lead_id)
+        if not lead:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found")
+
+        is_supervisor = current_user.role in (UserRole.ADMIN, UserRole.SUB_ADMIN)
+        is_owner = lead.assigned_to_id == current_user.id
+        is_delegated = lead.delegated_to_id == current_user.id
+
+        if not is_supervisor and not is_owner and not is_delegated:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to revoke delegation for this lead",
+            )
+
+        lead.delegated_to_id = None
+        lead.delegated_at = None
+        lead.delegation_notes = None
+        await self.lead_repo.update(lead)
+        await self.db.commit()
+
+        full_lead = await self.lead_repo.get_by_id(lead.id)
+        return self._to_lead_read(full_lead, current_user.id)
+
+    async def bulk_delegate(
+        self,
+        delegated_to_id: int,
+        notes: Optional[str],
+        lead_ids: Optional[List[int]],
+        current_user: User,
+    ) -> dict:
+        is_supervisor = current_user.role in (UserRole.ADMIN, UserRole.SUB_ADMIN)
+
+        target_user = await self.db.get(User, delegated_to_id)
+        if not target_user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target employee not found")
+
+        now = datetime.now(timezone.utc)
+        note_str = notes.strip() if notes else None
+
+        if lead_ids:
+            stmt = select(Lead).where(Lead.id.in_(lead_ids), Lead.is_active == True)
+            if not is_supervisor:
+                stmt = stmt.where(Lead.assigned_to_id == current_user.id)
+        else:
+            stmt = select(Lead).where(Lead.assigned_to_id == current_user.id, Lead.is_active == True)
+
+        res = await self.db.execute(stmt)
+        leads = res.scalars().all()
+        count = 0
+        for l in leads:
+            l.delegated_to_id = delegated_to_id
+            l.delegated_at = now
+            l.delegation_notes = note_str
+            count += 1
+
+        await self.db.commit()
+        return {
+            "success": True,
+            "delegated_count": count,
+            "delegated_to_name": target_user.full_name,
+        }
+
+    async def bulk_revoke_delegation(
+        self,
+        lead_ids: Optional[List[int]],
+        current_user: User,
+    ) -> dict:
+        is_supervisor = current_user.role in (UserRole.ADMIN, UserRole.SUB_ADMIN)
+
+        if lead_ids:
+            stmt = select(Lead).where(Lead.id.in_(lead_ids))
+            if not is_supervisor:
+                stmt = stmt.where(
+                    or_(Lead.assigned_to_id == current_user.id, Lead.delegated_to_id == current_user.id)
+                )
+        else:
+            stmt = select(Lead).where(Lead.assigned_to_id == current_user.id, Lead.delegated_to_id.isnot(None))
+
+        res = await self.db.execute(stmt)
+        leads = res.scalars().all()
+        count = 0
+        for l in leads:
+            l.delegated_to_id = None
+            l.delegated_at = None
+            l.delegation_notes = None
+            count += 1
+
+        await self.db.commit()
+        return {
+            "success": True,
+            "revoked_count": count,
+        }
+
+    async def get_call_logs(self, lead_id: int, current_user: User) -> List[LeadCallLogRead]:
+        lead = await self.lead_repo.get_by_id(lead_id)
+        if not lead:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found")
+
+        is_supervisor = current_user.role in (UserRole.ADMIN, UserRole.SUB_ADMIN)
+        is_owner = lead.assigned_to_id == current_user.id
+        is_delegated = lead.delegated_to_id == current_user.id
+        if not is_supervisor and not is_owner and not is_delegated:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not authorized to view remarks for this lead",
             )
 
-        lead_read = self._to_lead_read(lead)
+        lead_read = self._to_lead_read(lead, current_user.id)
         return lead_read.call_logs
 
     async def _auto_update_daily_call_report(

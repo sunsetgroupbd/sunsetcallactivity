@@ -64,9 +64,30 @@ class LeadRead(BaseModel):
     updated_at: datetime
     latest_call: Optional[LeadCallLogRead] = None
     call_logs: List[LeadCallLogRead] = Field(default_factory=list)
+    delegated_to_id: Optional[int] = None
+    delegated_to_name: Optional[str] = None
+    delegated_at: Optional[datetime] = None
+    delegation_notes: Optional[str] = None
+    is_delegated_to_me: Optional[bool] = None
+    is_delegated_by_me: Optional[bool] = None
 
     class Config:
         from_attributes = True
+
+
+class LeadDelegatePayload(BaseModel):
+    delegated_to_id: int
+    notes: Optional[str] = None
+
+
+class BulkLeadDelegatePayload(BaseModel):
+    lead_ids: Optional[List[int]] = None
+    delegated_to_id: int
+    notes: Optional[str] = None
+
+
+class BulkRevokeDelegatePayload(BaseModel):
+    lead_ids: Optional[List[int]] = None
 
 
 class LeadStatusCounts(BaseModel):

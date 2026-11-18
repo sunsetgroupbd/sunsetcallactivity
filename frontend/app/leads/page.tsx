@@ -71,6 +71,7 @@ export default function CrmLeadsPage() {
   const [crmStatus, setCrmStatus] = useState<any>(null);
 
   // Filters, Search & Pagination
+  const [inputQuery, setInputQuery] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [projectFilter, setProjectFilter] = useState("all");
@@ -120,6 +121,33 @@ export default function CrmLeadsPage() {
     } finally {
       setDebugLoading(false);
     }
+  };
+
+  // Debounce inputQuery to searchQuery (400ms delay) to prevent flooding 50k+ leads query
+  useEffect(() => {
+    const trimmed = inputQuery.trim();
+    const timer = setTimeout(() => {
+      if (trimmed !== searchQuery) {
+        setSearchQuery(trimmed);
+        setPage(1); // Always reset to page 1 on new search
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [inputQuery, searchQuery]);
+
+  const handleImmediateSearch = () => {
+    const trimmed = inputQuery.trim();
+    if (trimmed !== searchQuery) {
+      setSearchQuery(trimmed);
+      setPage(1);
+    }
+  };
+
+  const handleClearSearch = () => {
+    setInputQuery("");
+    setSearchQuery("");
+    setPage(1);
   };
 
   // Load CRM Status and Leads
@@ -208,33 +236,14 @@ export default function CrmLeadsPage() {
   }, [leads]);
 
   // Filtered Leads
+  // Note: Search query and status are executed on the server across 50,000+ leads in Somikoron CRM.
+  // Here we only apply client-only projectFilter if a specific project is selected.
   const filteredLeads = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    return leads.filter((lead) => {
-      // Search matching
-      const matchesSearch =
-        !q ||
-        lead.name.toLowerCase().includes(q) ||
-        lead.phone.toLowerCase().includes(q) ||
-        lead.email.toLowerCase().includes(q) ||
-        lead.project.toLowerCase().includes(q) ||
-        lead.assigned_to.toLowerCase().includes(q) ||
-        lead.source.toLowerCase().includes(q) ||
-        (lead.address && lead.address.toLowerCase().includes(q));
-
-      // Status matching
-      const matchesStatus =
-        statusFilter === "all" ||
-        lead.status.toLowerCase() === statusFilter.toLowerCase();
-
-      // Project matching
-      const matchesProject =
-        projectFilter === "all" ||
-        lead.project.toLowerCase() === projectFilter.toLowerCase();
-
-      return matchesSearch && matchesStatus && matchesProject;
-    });
-  }, [leads, searchQuery, statusFilter, projectFilter]);
+    if (projectFilter === "all") return leads;
+    return leads.filter(
+      (lead) => lead.project && lead.project.toLowerCase() === projectFilter.toLowerCase()
+    );
+  }, [leads, projectFilter]);
 
   // CSV Export helpers
   const downloadCsvBlob = (csvString: string, filename: string) => {
@@ -772,8 +781,12 @@ export default function CrmLeadsPage() {
 
           <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Filtered Results</p>
-            <p className="text-xl font-bold text-indigo-700 mt-0.5">{filteredLeads.length}</p>
-            <p className="text-[10px] text-slate-400 mt-0.5">Matching current view</p>
+            <p className="text-xl font-bold text-indigo-700 mt-0.5">
+              {(recordsFiltered ?? filteredLeads.length).toLocaleString()}
+            </p>
+            <p className="text-[10px] text-slate-400 mt-0.5">
+              {searchQuery ? "Matches in 50k+ CRM" : "Matching current view"}
+            </p>
           </div>
 
           <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
@@ -792,23 +805,42 @@ export default function CrmLeadsPage() {
         {/* Search & Filter Toolbar */}
         <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
           <div className="relative flex-1">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            {loading && searchQuery ? (
+              <Loader2 className="w-4 h-4 text-indigo-600 animate-spin absolute left-3 top-1/2 -translate-y-1/2" />
+            ) : (
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            )}
             <input
               type="text"
-              placeholder="Search by client name, phone, email, project, or executive..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-8 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-600 focus:border-indigo-600 bg-white"
+              placeholder="Search by client name, phone, email, project, or executive (across 50,000+ leads)..."
+              value={inputQuery}
+              onChange={(e) => setInputQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  handleImmediateSearch();
+                }
+              }}
+              className="w-full pl-9 pr-24 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-600 focus:border-indigo-600 bg-white"
             />
-            {searchQuery && (
+            <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+              {inputQuery && (
+                <button
+                  type="button"
+                  onClick={handleClearSearch}
+                  className="p-1 text-slate-400 hover:text-slate-600 transition"
+                  title="Clear search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => setSearchQuery("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                onClick={handleImmediateSearch}
+                className="px-2 py-0.5 text-[11px] font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded transition"
               >
-                <X className="w-3.5 h-3.5" />
+                Search
               </button>
-            )}
+            </div>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -817,7 +849,10 @@ export default function CrmLeadsPage() {
               <span className="font-semibold text-slate-500">Status:</span>
               <select
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setPage(1);
+                }}
                 className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600"
               >
                 <option value="all">All Stages ({leads.length})</option>
@@ -854,7 +889,7 @@ export default function CrmLeadsPage() {
                 onChange={(e) => {
                   const newDir = e.target.value as "desc" | "asc";
                   setOrderDir(newDir);
-                  loadLeads(true, 1, perPage, searchQuery, statusFilter, newDir);
+                  setPage(1);
                 }}
                 className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600"
               >
@@ -864,6 +899,29 @@ export default function CrmLeadsPage() {
             </div>
           </div>
         </div>
+
+        {/* Active Search Badge */}
+        {searchQuery && (
+          <div className="flex items-center justify-between gap-2 px-3 py-2 bg-indigo-50 border border-indigo-100 rounded-xl text-xs text-indigo-900">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-semibold">Search results for:</span>
+              <span className="font-bold bg-white px-2 py-0.5 rounded border border-indigo-200">
+                &quot;{searchQuery}&quot;
+              </span>
+              <span className="text-indigo-600 text-[11px]">
+                ({(recordsFiltered ?? leads.length).toLocaleString()} matching leads found across 50,000+ CRM database)
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleClearSearch}
+              className="text-indigo-700 hover:text-indigo-950 font-semibold underline text-[11px] flex items-center gap-1 shrink-0"
+            >
+              <span>Clear search</span>
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        )}
 
         {/* Leads Data Table (Desktop) */}
         <div className="hidden lg:block bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
@@ -886,14 +944,35 @@ export default function CrmLeadsPage() {
                 {loading ? (
                   <tr>
                     <td colSpan={9} className="py-16 text-center text-slate-400">
-                      <RefreshCw className="w-6 h-6 mx-auto animate-spin mb-2 text-indigo-600" />
-                      Loading CRM leads...
+                      <Loader2 className="w-6 h-6 mx-auto animate-spin mb-2 text-indigo-600" />
+                      {searchQuery
+                        ? `Searching 50,000+ CRM leads for "${searchQuery}"...`
+                        : "Loading CRM leads..."}
                     </td>
                   </tr>
                 ) : filteredLeads.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="py-16 text-center text-slate-400">
-                      No matching leads found.
+                      {searchQuery ? (
+                        <div className="space-y-2">
+                          <p className="font-semibold text-slate-600 text-sm">
+                            No matching leads found for &quot;{searchQuery}&quot; in Somikoron CRM.
+                          </p>
+                          <p className="text-xs text-slate-400">
+                            Searched across 50,000+ CRM database records by name, phone, email, and ID.
+                          </p>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleClearSearch}
+                            className="text-xs mt-2"
+                          >
+                            Clear Search Filter
+                          </Button>
+                        </div>
+                      ) : (
+                        "No matching leads found."
+                      )}
                     </td>
                   </tr>
                 ) : (
@@ -1021,12 +1100,28 @@ export default function CrmLeadsPage() {
         <div className="lg:hidden space-y-2.5">
           {loading ? (
             <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-400">
-              <RefreshCw className="w-6 h-6 mx-auto animate-spin mb-2 text-indigo-600" />
-              Loading CRM leads...
+              <Loader2 className="w-6 h-6 mx-auto animate-spin mb-2 text-indigo-600" />
+              {searchQuery
+                ? `Searching 50,000+ CRM leads for "${searchQuery}"...`
+                : "Loading CRM leads..."}
             </div>
           ) : filteredLeads.length === 0 ? (
-            <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-400">
-              No matching leads found.
+            <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-400 space-y-2">
+              <p className="font-semibold text-slate-600">
+                {searchQuery
+                  ? `No matching leads found for "${searchQuery}".`
+                  : "No matching leads found."}
+              </p>
+              {searchQuery && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleClearSearch}
+                  className="text-xs"
+                >
+                  Clear search
+                </Button>
+              )}
             </div>
           ) : (
             filteredLeads.map((lead, idx) => (
@@ -1105,9 +1200,14 @@ export default function CrmLeadsPage() {
               </strong>{" "}
               of{" "}
               <strong className="text-indigo-700 font-bold">
-                {(recordsFiltered || recordsTotal || leads.length).toLocaleString()}
+                {(recordsFiltered ?? recordsTotal ?? leads.length).toLocaleString()}
               </strong>{" "}
               entries
+              {recordsFiltered !== null && recordsTotal !== null && recordsFiltered !== recordsTotal && (
+                <span className="text-slate-400 text-[11px] ml-1">
+                  (filtered from {recordsTotal.toLocaleString()} total in CRM)
+                </span>
+              )}
             </span>
           </div>
 
@@ -1120,7 +1220,6 @@ export default function CrmLeadsPage() {
                   const newPer = Number(e.target.value);
                   setPerPage(newPer);
                   setPage(1);
-                  loadLeads(false, 1, newPer);
                 }}
                 className="border border-slate-200 rounded px-2 py-1 text-xs font-semibold bg-white text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-600"
               >
@@ -1137,11 +1236,7 @@ export default function CrmLeadsPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  const newP = Math.max(1, page - 1);
-                  setPage(newP);
-                  loadLeads(false, newP);
-                }}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1 || loading}
                 className="h-7 w-7 p-0 flex items-center justify-center text-slate-600"
                 title="Previous page"
@@ -1159,7 +1254,6 @@ export default function CrmLeadsPage() {
                     const val = Number(e.target.value);
                     if (val >= 1 && val <= totalPages) {
                       setPage(val);
-                      loadLeads(false, val);
                     }
                   }}
                   className="w-12 text-center py-0.5 border border-slate-200 rounded font-bold text-indigo-700 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600"
@@ -1169,11 +1263,7 @@ export default function CrmLeadsPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  const newP = Math.min(totalPages, page + 1);
-                  setPage(newP);
-                  loadLeads(false, newP);
-                }}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages || loading}
                 className="h-7 w-7 p-0 flex items-center justify-center text-slate-600"
                 title="Next page"

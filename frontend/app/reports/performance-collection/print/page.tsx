@@ -38,6 +38,7 @@ function PrintablePerformanceCollectionContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [printedDateStr, setPrintedDateStr] = useState<string>("");
+  const [orientation, setOrientation] = useState<"landscape" | "portrait">("landscape");
 
   useEffect(() => {
     if (!monthParam) {
@@ -190,6 +191,34 @@ function PrintablePerformanceCollectionContent() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Orientation Toggle: Landscape (Default) vs Portrait */}
+          <div className="inline-flex items-center rounded-lg border border-slate-300 bg-slate-100 p-0.5 text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => setOrientation("landscape")}
+              className={`px-2.5 py-1 rounded-md transition ${
+                orientation === "landscape"
+                  ? "bg-white text-emerald-800 shadow-2xs font-bold"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+              title="Landscape A4 (Recommended for wide 19-column tables)"
+            >
+              Landscape (Recommended)
+            </button>
+            <button
+              type="button"
+              onClick={() => setOrientation("portrait")}
+              className={`px-2.5 py-1 rounded-md transition ${
+                orientation === "portrait"
+                  ? "bg-white text-emerald-800 shadow-2xs font-bold"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+              title="Portrait A4"
+            >
+              Portrait
+            </button>
+          </div>
+
           <button
             onClick={handleExportCSV}
             className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-2xs transition"
@@ -210,8 +239,26 @@ function PrintablePerformanceCollectionContent() {
         </div>
       </div>
 
+      {/* Dynamic Print CSS for Orientation */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+            @media print {
+              @page {
+                size: ${orientation === "landscape" ? "A4 landscape" : "A4 portrait"};
+                margin: ${orientation === "landscape" ? "6mm 5mm 6mm 5mm" : "8mm 6mm 8mm 6mm"};
+              }
+              body {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
+            }
+          `,
+        }}
+      />
+
       {/* ── Official Printable Document Sheet ──────────────────────────────── */}
-      <div className="print-page-sheet max-w-6xl mx-auto my-6 bg-white border border-slate-300 p-8 sm:p-10 shadow-sm print:border-none print:shadow-none print:p-0 print:m-0 print:max-w-none text-slate-900 text-xs">
+      <div className={`print-page-sheet ${orientation === "landscape" ? "max-w-[1300px]" : "max-w-4xl"} mx-auto my-6 bg-white border border-slate-300 p-6 sm:p-8 shadow-sm print:border-none print:shadow-none print:p-0 print:m-0 print:max-w-none text-slate-900 text-xs transition-all`}>
         {/* Document Letterhead */}
         <div className="border-b-2 border-emerald-800 pb-4 mb-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:flex-row print:items-center print:justify-between">

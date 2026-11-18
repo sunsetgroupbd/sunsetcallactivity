@@ -15,6 +15,7 @@ function PrintContent() {
   const [reportData, setReportData] =
     useState<ExecutiveCollectionReportResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [orientation, setOrientation] = useState<"landscape" | "portrait">("landscape");
 
   const teamIdParam = searchParams.get("team_id")
     ? Number(searchParams.get("team_id"))
@@ -56,6 +57,34 @@ function PrintContent() {
         </button>
 
         <div className="flex items-center gap-2">
+          {/* Orientation Toggle: Landscape (Default) vs Portrait */}
+          <div className="inline-flex items-center rounded-lg border border-gray-300 bg-gray-100 p-0.5 text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => setOrientation("landscape")}
+              className={`px-2.5 py-1 rounded-md transition ${
+                orientation === "landscape"
+                  ? "bg-white text-emerald-800 shadow-2xs font-bold"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+              title="Landscape A4 (Recommended for executive sheet)"
+            >
+              Landscape (Recommended)
+            </button>
+            <button
+              type="button"
+              onClick={() => setOrientation("portrait")}
+              className={`px-2.5 py-1 rounded-md transition ${
+                orientation === "portrait"
+                  ? "bg-white text-emerald-800 shadow-2xs font-bold"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+              title="Portrait A4"
+            >
+              Portrait
+            </button>
+          </div>
+
           <button
             onClick={() => window.print()}
             className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded text-xs font-bold shadow-sm"
@@ -64,6 +93,24 @@ function PrintContent() {
           </button>
         </div>
       </div>
+
+      {/* Dynamic Print CSS for Orientation */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+            @media print {
+              @page {
+                size: ${orientation === "landscape" ? "A4 landscape" : "A4 portrait"};
+                margin: ${orientation === "landscape" ? "6mm 5mm 6mm 5mm" : "8mm 6mm 8mm 6mm"};
+              }
+              body {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
+            }
+          `,
+        }}
+      />
 
       {loading ? (
         <div className="py-20 text-center text-sm font-semibold text-gray-500">

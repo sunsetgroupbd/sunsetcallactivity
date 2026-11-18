@@ -894,7 +894,14 @@ function DailyCallActivityContent() {
           >
             <PhoneCall className="w-4 h-4" />
             <span>Lead Dialing Workflow</span>
-            <span className="hidden sm:inline-block text-[10px] uppercase tracking-wider bg-white/20 text-white px-2 py-0.5 rounded-full font-semibold">
+            <span
+              className={cn(
+                "hidden sm:inline-block text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-semibold transition-colors",
+                activeWorkflowTab === "lead_dialing"
+                  ? "bg-white/20 text-white"
+                  : "bg-slate-200 text-slate-700"
+              )}
+            >
               Live Calling
             </span>
           </button>
@@ -911,7 +918,14 @@ function DailyCallActivityContent() {
           >
             <FileSpreadsheet className="w-4 h-4" />
             <span>Daily Call Activity Sheet</span>
-            <span className="hidden sm:inline-block text-[10px] uppercase tracking-wider bg-white/20 text-white px-2 py-0.5 rounded-full font-semibold">
+            <span
+              className={cn(
+                "hidden sm:inline-block text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-semibold transition-colors",
+                activeWorkflowTab === "daily_sheet"
+                  ? "bg-white/20 text-white"
+                  : "bg-slate-200 text-slate-700"
+              )}
+            >
               Slots &amp; Report
             </span>
           </button>
@@ -1289,7 +1303,7 @@ function DailyCallActivityContent() {
                     {/* Starting Leads & Updated Leads Pill */}
                     <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-slate-50 border-b border-slate-100 text-xs">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-slate-600 font-semibold">Start Leads:</span>
+                        <span className="text-slate-600 font-semibold">Total Leads:</span>
                         <div className="w-24">
                           <MobileNumberInput
                             value={e.till_today_status}
@@ -1389,11 +1403,11 @@ function DailyCallActivityContent() {
                         </div>
                       </div>
 
-                      {/* Section 2: Lead Classification */}
+                      {/* Section 2: Lead Status Update */}
                       <div>
                         <div className="flex items-center justify-between mb-2">
                           <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                            Lead Classification
+                            Lead Status Update
                           </label>
                         </div>
                         <div className="grid grid-cols-2 gap-2.5">
@@ -1525,7 +1539,7 @@ function DailyCallActivityContent() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <CardTitle className="flex items-center gap-2">
                   <PhoneCall className="w-4 h-4 text-green-700" />
-                  Daily Dialed & Lead Classification Table
+                  Daily Dialed & Lead Status Update Table
                 </CardTitle>
                 <div className="text-xs text-slate-500">
                   <span>{formatReadableDate(reportDate)}</span>
@@ -1540,8 +1554,8 @@ function DailyCallActivityContent() {
                       Lead Category
                     </th>
                     <th className="py-2.5 px-2 text-center w-24">
-                      <Tooltip content="Starting Leads" subcontent="Starting leads for today (automatically carried forward or entered manually).">
-                        <span className="border-b border-dotted border-slate-400 hover:text-slate-900 font-bold">Start Leads</span>
+                      <Tooltip content="Total Leads" subcontent="Total leads for today (automatically carried forward or entered manually).">
+                        <span className="border-b border-dotted border-slate-400 hover:text-slate-900 font-bold">Total Leads</span>
                       </Tooltip>
                     </th>
                     <th className="py-2.5 px-2 text-center w-24 bg-green-50/50">
@@ -2240,7 +2254,7 @@ function DailyCallActivityContent() {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                  Lead Classification *
+                  Lead Status Update *
                 </label>
                 <select
                   value={clientFormCategory}

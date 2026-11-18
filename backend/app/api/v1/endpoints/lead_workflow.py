@@ -19,6 +19,7 @@ from app.schemas.lead import (
     BulkLeadDelegatePayload,
     BulkRevokeDelegatePayload,
 )
+from app.schemas.user import UserRead
 from app.services.lead_service import LeadService
 
 router = APIRouter(tags=["Lead Workflow"])
@@ -32,6 +33,20 @@ async def get_lead_summary(
 ):
     svc = LeadService(db)
     return await svc.get_summary(current_user, filter_employee_id=employee_id)
+
+
+@router.get("/shareable-colleagues", response_model=List[UserRead])
+async def get_shareable_colleagues(
+    lead_id: Optional[int] = Query(None, description="Optional lead ID being shared"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get list of group/team colleagues that the current user can share leads with.
+    Sales executives see active members of their own group (teammates, TL, CO).
+    """
+    svc = LeadService(db)
+    return await svc.get_shareable_colleagues(current_user=current_user, lead_id=lead_id)
 
 
 @router.get("", response_model=dict)

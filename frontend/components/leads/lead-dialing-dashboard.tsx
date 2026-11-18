@@ -206,6 +206,8 @@ export function LeadDialingDashboard({
   });
   const [creatingLead, setCreatingLead] = useState(false);
   const [executivesList, setExecutivesList] = useState<UserType[]>([]);
+  const [colleaguesList, setColleaguesList] = useState<UserType[]>([]);
+  const [loadingColleagues, setLoadingColleagues] = useState(false);
 
   // Delete Lead state (Admin / Sub-Admin only)
   const [leadToDelete, setLeadToDelete] = useState<WorkflowLead | null>(null);
@@ -272,15 +274,37 @@ export function LeadDialingDashboard({
     fetchLeads();
   }, [fetchSummary, fetchLeads]);
 
-  // Load employee list for delegation & admin assignment dropdown
-  useEffect(() => {
-    api.employees
-      .list({ limit: 200, is_active: true })
-      .then((res) => {
-        setExecutivesList(Array.isArray(res) ? res : []);
-      })
-      .catch((err) => console.warn("Could not fetch executives list:", err));
+  // Fetch shareable colleagues for lead sharing (strictly own team members for employees)
+  const fetchShareableColleagues = useCallback(async (leadId?: number) => {
+    try {
+      setLoadingColleagues(true);
+      const list = await api.leadWorkflow.getShareableColleagues(leadId);
+      const safeList = Array.isArray(list) ? list : [];
+      setColleaguesList(safeList);
+      return safeList;
+    } catch (err: any) {
+      console.warn("Could not fetch shareable colleagues:", err);
+      return [];
+    } finally {
+      setLoadingColleagues(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchShareableColleagues();
+  }, [fetchShareableColleagues]);
+
+  // Load employee list for admin assignment dropdown (only if admin/subadmin)
+  useEffect(() => {
+    if (isAdmin) {
+      api.employees
+        .list({ limit: 200, is_active: true })
+        .then((res) => {
+          setExecutivesList(Array.isArray(res) ? res : []);
+        })
+        .catch((err) => console.warn("Could not fetch executives list:", err));
+    }
+  }, [isAdmin]);
 
   // ─── 3. Android Call Detection Event Listeners ─────────────────────────────
   useEffect(() => {
@@ -455,13 +479,28 @@ export function LeadDialingDashboard({
   };
 
   // ─── 7. Temporary Absence Coverage / Delegation Handlers ──────────────────
-  const handleOpenDelegateModal = (lead: WorkflowLead) => {
+  const handleOpenDelegateModal = async (lead: WorkflowLead) => {
     setLeadToDelegate(lead);
-    const otherExec = executivesList.find(
+    setDelegateNotes("");
+    let list = colleaguesList;
+    if (list.length === 0) {
+      list = await fetchShareableColleagues(lead.id);
+    }
+    const otherColleague = list.find(
       (e) => e.id !== lead.assigned_to_id && e.id !== user?.id
     );
-    setDelegateTargetEmpId(otherExec?.id);
+    setDelegateTargetEmpId(otherColleague?.id);
+  };
+
+  const handleOpenBulkDelegateModal = async () => {
     setDelegateNotes("");
+    setBulkDelegateModalOpen(true);
+    let list = colleaguesList;
+    if (list.length === 0) {
+      list = await fetchShareableColleagues();
+    }
+    const otherColleague = list.find((e) => e.id !== user?.id);
+    setDelegateTargetEmpId(otherColleague?.id);
   };
 
   const handleConfirmDelegate = async (e: React.FormEvent) => {
@@ -476,7 +515,9 @@ export function LeadDialingDashboard({
         delegated_to_id: delegateTargetEmpId,
         notes: delegateNotes.trim() || undefined,
       });
-      const targetEmp = executivesList.find((e) => e.id === delegateTargetEmpId);
+      const targetEmp =
+        colleaguesList.find((e) => e.id === delegateTargetEmpId) ||
+        executivesList.find((e) => e.id === delegateTargetEmpId);
       setSuccessToast(`✓ Lead shared with ${targetEmp?.full_name || "colleague"} successfully.`);
       setTimeout(() => setSuccessToast(null), 4000);
       setLeadToDelegate(null);
@@ -587,12 +628,7 @@ export function LeadDialingDashboard({
           {/* Absence / Leave Share Button */}
           <button
             type="button"
-            onClick={() => {
-              const otherExec = executivesList.find((e) => e.id !== user?.id);
-              setDelegateTargetEmpId(otherExec?.id);
-              setDelegateNotes("");
-              setBulkDelegateModalOpen(true);
-            }}
+            onClick={handleOpenBulkDelegateModal}
             className="px-3 py-2 text-slate-700 hover:text-slate-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-xl transition text-xs font-semibold flex items-center gap-1.5"
             title="Share your leads with a colleague while on leave or absent"
           >
@@ -1633,7 +1669,7 @@ export function LeadDialingDashboard({
       {/* ── 8. Single Lead Share Modal ───────────────────────────────────── */}
       {leadToDelegate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-200 space-y-4 text-slate-900">
+          <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto p-5 shadow-2xl border border-slate-200 space-y-4 text-slate-900">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 flex items-center justify-center">
@@ -1666,7 +1702,7 @@ export function LeadDialingDashboard({
             <form onSubmit={handleConfirmDelegate} className="space-y-3.5">
               <div>
                 <label className="text-xs font-bold text-slate-700 block mb-1">
-                  Select Colleague, TL, or CO to Share with <span className="text-rose-500">*</span>
+                  Select Group Colleague, TL, or CO to Share with <span className="text-rose-500">*</span>
                 </label>
                 <select
                   required
@@ -1674,15 +1710,26 @@ export function LeadDialingDashboard({
                   onChange={(e) => setDelegateTargetEmpId(Number(e.target.value))}
                   className="w-full p-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 font-medium"
                 >
-                  <option value="" disabled>-- Select Employee / Colleague --</option>
-                  {executivesList
-                    .filter((e) => e.id !== leadToDelegate.assigned_to_id)
+                  <option value="" disabled>
+                    {loadingColleagues
+                      ? "-- Loading group colleagues... --"
+                      : colleaguesList.filter((e) => e.id !== leadToDelegate.assigned_to_id && e.id !== user?.id).length === 0
+                      ? "-- No other group members found --"
+                      : "-- Select Group Colleague / Leader --"}
+                  </option>
+                  {colleaguesList
+                    .filter((e) => e.id !== leadToDelegate.assigned_to_id && e.id !== user?.id)
                     .map((emp) => (
                       <option key={emp.id} value={emp.id}>
-                        {emp.full_name} ({formatEmployeeId(emp.id, emp.created_at)}) - {emp.designation || emp.role}
+                        {emp.full_name} ({formatEmployeeId(emp.id, emp.created_at)}) - {emp.designation || emp.role?.toUpperCase()}{emp.team_name ? ` • ${emp.team_name}` : ""}
                       </option>
                     ))}
                 </select>
+                {colleaguesList.filter((e) => e.id !== leadToDelegate.assigned_to_id && e.id !== user?.id).length === 0 && !loadingColleagues && (
+                  <p className="mt-1.5 text-[11px] text-amber-700 bg-amber-50 p-2 rounded-lg border border-amber-200">
+                    No other colleagues found in your group. Contact your TL or Admin to assign team members.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -1733,7 +1780,7 @@ export function LeadDialingDashboard({
       {/* ── 9. Bulk Absence / Leave Share Modal ─────────────────────────────── */}
       {bulkDelegateModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-200 space-y-4 text-slate-900">
+          <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto p-5 shadow-2xl border border-slate-200 space-y-4 text-slate-900">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 flex items-center justify-center">
@@ -1766,7 +1813,7 @@ export function LeadDialingDashboard({
             <form onSubmit={handleBulkDelegateAll} className="space-y-3.5">
               <div>
                 <label className="text-xs font-bold text-slate-700 block mb-1">
-                  Select Colleague, TL, or CO to Share with <span className="text-rose-500">*</span>
+                  Select Group Colleague, TL, or CO to Share with <span className="text-rose-500">*</span>
                 </label>
                 <select
                   required
@@ -1774,15 +1821,26 @@ export function LeadDialingDashboard({
                   onChange={(e) => setDelegateTargetEmpId(Number(e.target.value))}
                   className="w-full p-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 font-medium"
                 >
-                  <option value="" disabled>-- Select Employee / Colleague --</option>
-                  {executivesList
+                  <option value="" disabled>
+                    {loadingColleagues
+                      ? "-- Loading group colleagues... --"
+                      : colleaguesList.filter((e) => e.id !== user?.id).length === 0
+                      ? "-- No other group members found --"
+                      : "-- Select Group Colleague / Leader --"}
+                  </option>
+                  {colleaguesList
                     .filter((e) => e.id !== user?.id)
                     .map((emp) => (
                       <option key={emp.id} value={emp.id}>
-                        {emp.full_name} ({formatEmployeeId(emp.id, emp.created_at)}) - {emp.designation || emp.role}
+                        {emp.full_name} ({formatEmployeeId(emp.id, emp.created_at)}) - {emp.designation || emp.role?.toUpperCase()}{emp.team_name ? ` • ${emp.team_name}` : ""}
                       </option>
                     ))}
                 </select>
+                {colleaguesList.filter((e) => e.id !== user?.id).length === 0 && !loadingColleagues && (
+                  <p className="mt-1.5 text-[11px] text-amber-700 bg-amber-50 p-2 rounded-lg border border-amber-200">
+                    No other colleagues found in your group. Contact your TL or Admin to assign team members.
+                  </p>
+                )}
               </div>
 
               <div>

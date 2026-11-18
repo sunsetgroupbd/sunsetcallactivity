@@ -1129,6 +1129,10 @@ export const api = {
         body: JSON.stringify(payload),
       });
     },
+    getShareableColleagues: async (leadId?: number): Promise<User[]> => {
+      const q = leadId ? `?lead_id=${leadId}` : "";
+      return request(`/leads-workflow/shareable-colleagues${q}`);
+    },
   },
 };
 

@@ -23,6 +23,7 @@ from app.schemas.lead import (
     LeadSummaryResponse,
     LeadUpdate,
 )
+from app.schemas.user import UserRead
 
 
 def get_dhaka_date_and_time() -> Tuple[date, datetime, int]:
@@ -483,3 +484,94 @@ class LeadService:
 
         await self.lead_repo.delete(lead)
         return True
+
+    async def get_shareable_colleagues(
+        self,
+        current_user: User,
+        lead_id: Optional[int] = None,
+    ) -> List[UserRead]:
+        """
+        Get colleagues eligible for sharing/delegating calling workflow leads.
+        For sales executives / TL / CO: restricts strictly to members of their own group/team.
+        """
+        from sqlalchemy.orm import selectinload
+        from sqlalchemy import or_
+
+        is_admin = current_user.role in (UserRole.ADMIN, UserRole.SUB_ADMIN)
+
+        target_team_id = current_user.team_id
+        manager_id = current_user.reporting_manager_id
+
+        if is_admin:
+            if lead_id:
+                lead = await self.lead_repo.get_by_id(lead_id)
+                if lead and lead.assigned_to_id:
+                    owner = await self.db.get(User, lead.assigned_to_id)
+                    if owner and owner.team_id:
+                        target_team_id = owner.team_id
+                        manager_id = owner.reporting_manager_id
+            else:
+                # Superuser listing: return all active employees & leaders
+                stmt = (
+                    select(User)
+                    .options(selectinload(User.team), selectinload(User.reporting_manager))
+                    .where(User.is_active == True)
+                    .order_by(User.full_name)
+                )
+                res = await self.db.execute(stmt)
+                users = res.scalars().all()
+                return [UserRead.model_validate(u) for u in users]
+
+        # Regular sales employee / TL / CO:
+        # Group members = same team OR same manager OR direct manager OR subordinates
+        group_conditions = []
+        if target_team_id is not None:
+            group_conditions.append(User.team_id == target_team_id)
+        if manager_id is not None:
+            group_conditions.append(User.id == manager_id)
+            group_conditions.append(User.reporting_manager_id == manager_id)
+        # Subordinates if current_user is a TL/manager
+        group_conditions.append(User.reporting_manager_id == current_user.id)
+
+        if group_conditions:
+            stmt = (
+                select(User)
+                .options(selectinload(User.team), selectinload(User.reporting_manager))
+                .where(
+                    User.is_active == True,
+                    User.id != current_user.id,
+                    or_(*group_conditions),
+                )
+                .order_by(User.role, User.full_name)
+            )
+            res = await self.db.execute(stmt)
+            users = res.scalars().all()
+            if users:
+                seen_ids = set()
+                result: List[UserRead] = []
+                for u in users:
+                    if u.id not in seen_ids and u.id != current_user.id:
+                        seen_ids.add(u.id)
+                        result.append(UserRead.model_validate(u))
+                return result
+
+        # Fallback if employee is not assigned to a team or group yet:
+        # Return other active sales employees/leaders so the dropdown is not permanently empty
+        stmt = (
+            select(User)
+            .options(selectinload(User.team), selectinload(User.reporting_manager))
+            .where(
+                User.is_active == True,
+                User.id != current_user.id,
+            )
+            .order_by(User.full_name)
+        )
+        res = await self.db.execute(stmt)
+        users = res.scalars().all()
+        seen_ids = set()
+        result_fallback: List[UserRead] = []
+        for u in users:
+            if u.id not in seen_ids and u.id != current_user.id:
+                seen_ids.add(u.id)
+                result_fallback.append(UserRead.model_validate(u))
+        return result_fallback

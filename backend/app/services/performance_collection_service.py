@@ -130,6 +130,136 @@ class PerformanceCollectionService:
             "total_lead_hp_p": hp_total + p_total,
         }
 
+    @staticmethod
+    def _get_user_role_str(u: Optional[User]) -> str:
+        """Normalize user role considering both role enum and designation text."""
+        if not u:
+            return ""
+        # 1. Role Enum check
+        r_val = ""
+        if u.role:
+            r_val = (u.role.value if hasattr(u.role, "value") else str(u.role)).strip().lower()
+        if r_val in ("co", "coordinator") or "coord" in r_val:
+            return "co"
+        if r_val in ("tl", "team_leader", "team leader", "teamlead", "team lead", "group leader", "group lead", "gl"):
+            return "tl"
+        if r_val in ("admin", "administrator"):
+            return "admin"
+        if r_val in ("sub_admin", "subadmin", "sub admin"):
+            return "sub_admin"
+
+        # 2. Designation fallback check
+        desig = (u.designation or "").strip().lower()
+        if "coordinator" in desig or desig == "co" or desig.startswith("co ") or " co" in desig:
+            return "co"
+        if "team leader" in desig or "team lead" in desig or desig == "tl" or desig.startswith("tl ") or "group lead" in desig or desig == "gl":
+            return "tl"
+        if "sub admin" in desig:
+            return "sub_admin"
+        if "admin" in desig or "director" in desig:
+            return "admin"
+
+        return "employee"
+
+    def _resolve_hierarchy_names(
+        self,
+        emp: User,
+        user_lookup: Dict[int, User],
+        team_lookup: Dict[int, Team],
+    ) -> tuple[Optional[str], Optional[str], Optional[str]]:
+        """
+        Accurately resolve (tl_name, co_name, team_name) matching Sunset Group hierarchy:
+        - TL: The actual Team Lead person
+        - CO: The actual Coordinator person
+        - Group: Team / Group Name (e.g. 'Team Gazi' or 'Team Hasib')
+        """
+        emp_team = team_lookup.get(emp.team_id) if emp.team_id else None
+        team_name_val = emp_team.name if emp_team else None
+
+        emp_role = self._get_user_role_str(emp)
+        emp_mgr = user_lookup.get(emp.reporting_manager_id) if emp.reporting_manager_id else None
+        mgr_role = self._get_user_role_str(emp_mgr) if emp_mgr else ""
+
+        # Find team-level TL and CO
+        team_tl: Optional[User] = None
+        team_co: Optional[User] = None
+        if emp.team_id:
+            for u in user_lookup.values():
+                if u.team_id == emp.team_id and u.id != emp.id:
+                    u_r = self._get_user_role_str(u)
+                    if u_r == "tl" and not team_tl:
+                        team_tl = u
+                    elif u_r == "co" and not team_co:
+                        team_co = u
+
+        # 1. If employee is a Coordinator themselves:
+        if emp_role == "co":
+            return None, emp.full_name, team_name_val
+
+        # 2. If employee is a Team Lead themselves:
+        if emp_role == "tl":
+            co_name = None
+            if emp_mgr and mgr_role == "co":
+                co_name = emp_mgr.full_name
+            elif emp_mgr:
+                co_name = emp_mgr.full_name
+            elif team_co:
+                co_name = team_co.full_name
+            return emp.full_name, co_name, team_name_val
+
+        # 3. If employee is Admin or Sub-Admin:
+        if emp_role in ("admin", "sub_admin"):
+            return None, None, team_name_val
+
+        # 4. Standard Employee / Sales Executive:
+        tl_name: Optional[str] = None
+        co_name: Optional[str] = None
+
+        if emp_mgr:
+            if mgr_role == "tl":
+                tl_name = emp_mgr.full_name
+                # Check TL's manager for CO
+                tl_mgr = user_lookup.get(emp_mgr.reporting_manager_id) if emp_mgr.reporting_manager_id else None
+                if tl_mgr and self._get_user_role_str(tl_mgr) == "co":
+                    co_name = tl_mgr.full_name
+                elif tl_mgr:
+                    co_name = tl_mgr.full_name
+                elif team_co:
+                    co_name = team_co.full_name
+            elif mgr_role == "co":
+                co_name = emp_mgr.full_name
+                # Check if there is a separate TL in the team
+                if team_tl:
+                    tl_name = team_tl.full_name
+            else:
+                # Direct manager has general/other role
+                if team_co and emp_mgr.id == team_co.id:
+                    co_name = emp_mgr.full_name
+                    if team_tl:
+                        tl_name = team_tl.full_name
+                elif team_tl and emp_mgr.id == team_tl.id:
+                    tl_name = emp_mgr.full_name
+                    if team_co:
+                        co_name = team_co.full_name
+                else:
+                    if team_co and emp_mgr.id != team_co.id:
+                        tl_name = emp_mgr.full_name
+                        co_name = team_co.full_name
+                    elif team_tl and emp_mgr.id != team_tl.id:
+                        co_name = emp_mgr.full_name
+                        tl_name = team_tl.full_name
+                    else:
+                        tl_name = emp_mgr.full_name
+                        co_name = team_co.full_name if team_co else None
+        else:
+            # No direct manager assigned, fall back to team peers
+            if team_tl:
+                tl_name = team_tl.full_name
+            if team_co:
+                co_name = team_co.full_name
+
+        return tl_name, co_name, team_name_val
+
     async def get_report_data(
         self,
         current_user: User,
@@ -284,19 +414,20 @@ class PerformanceCollectionService:
             prev2_reports = [r for r in all_emp_reports if r.report_date.year == prev2_y and r.report_date.month == prev2_m]
 
             # Role formatted display
+            emp_role = self._get_user_role_str(emp)
             pos_title: str = (
                 emp.designation
                 if emp.designation
-                else "Sales Executive"
-                if emp.role == UserRole.EMPLOYEE
-                else "Team Lead"
-                if emp.role == UserRole.TL
                 else "Coordinator"
-                if emp.role == UserRole.CO
+                if emp_role == "co"
+                else "Team Lead"
+                if emp_role == "tl"
+                else "Sales Executive"
+                if emp_role == "employee"
                 else "Management"
             )
             gl_title = "GL" if ("gl" in pos_title.lower() or "group lead" in pos_title.lower()) else (
-                "GL" if emp.role == UserRole.EMPLOYEE else pos_title
+                "GL" if emp_role == "employee" else pos_title
             )
 
             # Target lookup
@@ -324,34 +455,10 @@ class PerformanceCollectionService:
             m1_metrics = self._aggregate_reports_metrics(prev1_reports)
             m2_metrics = self._aggregate_reports_metrics(prev2_reports)
 
-            # Supervisor / TL / CO detection using preloaded lookups (completely avoids async lazy-loading)
-            emp_mgr = user_lookup.get(emp.reporting_manager_id) if emp.reporting_manager_id else None
-            emp_team = team_lookup.get(emp.team_id) if emp.team_id else None
-
-            tl_name_val = None
-            if emp_mgr and emp_mgr.role == UserRole.TL:
-                tl_name_val = emp_mgr.full_name
-            elif emp_mgr:
-                tl_name_val = emp_mgr.full_name
-            elif emp_team:
-                for u in user_lookup.values():
-                    if u.team_id == emp.team_id and u.role == UserRole.TL and u.id != emp.id:
-                        tl_name_val = u.full_name
-                        break
-
-            co_name_val = None
-            if emp_team:
-                if emp_team.director_name:
-                    co_name_val = emp_team.director_name
-                else:
-                    for u in user_lookup.values():
-                        if u.team_id == emp.team_id and u.role == UserRole.CO and u.id != emp.id:
-                            co_name_val = u.full_name
-                            break
-            elif emp_mgr and emp_mgr.role == UserRole.CO:
-                co_name_val = emp_mgr.full_name
-
-            team_name_val = emp_team.name if emp_team else None
+            # Supervisor / TL / CO detection accurately resolving Sunset Group hierarchy
+            tl_name_val, co_name_val, team_name_val = self._resolve_hierarchy_names(
+                emp, user_lookup, team_lookup
+            )
 
             # Build previous 2 months history objects
             m2_label = f"{calendar.month_abbr[prev2_m]}-{str(prev2_y)[-2:]}"

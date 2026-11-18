@@ -924,6 +924,12 @@ function PerformanceCollectionReportContent() {
                                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">Position:</span>
                                   <span className="font-semibold text-slate-800">{emp.position || "Executive"}</span>
                                 </div>
+                                {emp.team_name && (
+                                  <div className="border-l border-slate-300 pl-3">
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">Group:</span>
+                                    <span className="font-semibold text-slate-800">{emp.team_name}</span>
+                                  </div>
+                                )}
                                 <div className="border-l border-slate-300 pl-3">
                                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1">Marking (Out of 100):</span>
                                   <span className="font-bold text-emerald-800">{emp.marking_score ?? "-"}</span>

@@ -386,6 +386,12 @@ function PrintablePerformanceCollectionContent() {
                           <span><strong className="text-slate-500 uppercase text-[8px]">CO:</strong> {emp.co_name || ""}</span>
                           <span className="text-slate-300">|</span>
                           <span><strong className="text-slate-500 uppercase text-[8px]">Position:</strong> {emp.position || "Executive"}</span>
+                          {emp.team_name && (
+                            <>
+                              <span className="text-slate-300">|</span>
+                              <span><strong className="text-slate-500 uppercase text-[8px]">Group:</strong> {emp.team_name}</span>
+                            </>
+                          )}
                           <span className="text-slate-300">|</span>
                           <span><strong className="text-slate-500 uppercase text-[8px]">Marking (Out of 100):</strong> {emp.marking_score ?? ""}</span>
                           <span className="text-slate-300">|</span>

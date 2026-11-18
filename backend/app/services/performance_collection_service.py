@@ -18,6 +18,7 @@ from sqlalchemy.orm import selectinload, joinedload
 
 from app.models.milestone_checkpoint import MilestoneCheckpoint
 from app.models.report import DailyActivityReport
+from app.models.team import Team
 from app.models.user import User, UserRole
 from app.repositories.targets_repo import TargetsRepository
 from app.schemas.performance_collection_report import (
@@ -190,6 +191,15 @@ class PerformanceCollectionService:
                 summary=PerformanceCollectionSummaryTotals(),
             )
 
+        # Preload all users and teams into memory to eliminate any synchronous ORM lazy loading
+        all_users_stmt = select(User)
+        all_users_res = await self.db.execute(all_users_stmt)
+        user_lookup: Dict[int, User] = {u.id: u for u in all_users_res.scalars().all()}
+
+        teams_stmt = select(Team)
+        teams_res = await self.db.execute(teams_stmt)
+        team_lookup: Dict[int, Team] = {t.id: t for t in teams_res.scalars().all()}
+
         # Determine 2 previous months (e.g. if active is Nov-26 -> Oct-26 and Sep-26)
         if month > 2:
             prev1_m, prev1_y = month - 1, year
@@ -314,26 +324,34 @@ class PerformanceCollectionService:
             m1_metrics = self._aggregate_reports_metrics(prev1_reports)
             m2_metrics = self._aggregate_reports_metrics(prev2_reports)
 
-            # Supervisor / TL / CO detection
+            # Supervisor / TL / CO detection using preloaded lookups (completely avoids async lazy-loading)
+            emp_mgr = user_lookup.get(emp.reporting_manager_id) if emp.reporting_manager_id else None
+            emp_team = team_lookup.get(emp.team_id) if emp.team_id else None
+
             tl_name_val = None
-            if emp.reporting_manager:
-                tl_name_val = emp.reporting_manager.full_name
-            elif emp.team and hasattr(emp.team, "members"):
-                for m in emp.team.members:
-                    if m.role == UserRole.TL and m.id != emp.id:
-                        tl_name_val = m.full_name
+            if emp_mgr and emp_mgr.role == UserRole.TL:
+                tl_name_val = emp_mgr.full_name
+            elif emp_mgr:
+                tl_name_val = emp_mgr.full_name
+            elif emp_team:
+                for u in user_lookup.values():
+                    if u.team_id == emp.team_id and u.role == UserRole.TL and u.id != emp.id:
+                        tl_name_val = u.full_name
                         break
-            
+
             co_name_val = None
-            if emp.team:
-                if emp.team.director_name:
-                    co_name_val = emp.team.director_name
-                elif hasattr(emp.team, "members"):
-                    for m in emp.team.members:
-                        if m.role == UserRole.CO and m.id != emp.id:
-                            co_name_val = m.full_name
+            if emp_team:
+                if emp_team.director_name:
+                    co_name_val = emp_team.director_name
+                else:
+                    for u in user_lookup.values():
+                        if u.team_id == emp.team_id and u.role == UserRole.CO and u.id != emp.id:
+                            co_name_val = u.full_name
                             break
-            team_name_val = emp.team.name if emp.team else None
+            elif emp_mgr and emp_mgr.role == UserRole.CO:
+                co_name_val = emp_mgr.full_name
+
+            team_name_val = emp_team.name if emp_team else None
 
             # Build previous 2 months history objects
             m2_label = f"{calendar.month_abbr[prev2_m]}-{str(prev2_y)[-2:]}"
@@ -857,7 +875,11 @@ class PerformanceCollectionService:
                     collection_probability=prob_val,
                     remarks=se.notes or se.description,
                     employee_id=r.employee_id,
-                    employee_name=r.employee.full_name if r.employee else "Employee",
+                    employee_name=(
+                        user_lookup[r.employee_id].full_name
+                        if r.employee_id in user_lookup
+                        else (r.employee.full_name if getattr(r, "employee", None) else "Employee")
+                    ),
                 )
                 customer_collection_items.append(item)
                 summary_totals["total_paid"] += paid

@@ -24,7 +24,6 @@ import {
   MessageSquare,
   ShieldAlert,
   Loader2,
-  Sparkles,
   Globe,
   Building2,
   Snowflake,
@@ -705,7 +704,7 @@ export function LeadDialingDashboard({
             {/* Modal Header */}
             <div className="border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2 text-emerald-700 font-bold text-xs uppercase tracking-wider mb-1">
-                <Sparkles className="w-3.5 h-3.5" />
+                <PhoneCall className="w-3.5 h-3.5" />
                 <span>Call Outcome Recorded</span>
               </div>
               <h3 className="text-base font-bold text-slate-900">

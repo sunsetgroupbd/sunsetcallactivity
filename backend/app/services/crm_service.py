@@ -75,6 +75,16 @@ class CrmService:
         except Exception as e:
             logger.warning("Failed to save crm_pipeline_cache.json: %s", e)
 
+    @classmethod
+    def _clear_pipeline_cache(cls) -> None:
+        cls._cached_full_pipeline = None
+        fpath = cls._cache_file_path()
+        if fpath.exists():
+            try:
+                fpath.unlink()
+            except Exception as e:
+                logger.warning("Failed to delete crm_pipeline_cache.json: %s", e)
+
     def __init__(self) -> None:
         import os
         from pathlib import Path
@@ -542,6 +552,10 @@ class CrmService:
         - Total CRM leads
         """
         # If full sync cache exists on disk or in memory and not forcing a fresh live sample
+        # If forcing refresh, purge existing cached pipeline
+        if force_refresh:
+            self._clear_pipeline_cache()
+
         cached = self._load_pipeline_cache()
         if cached and not force_refresh:
             return cached
@@ -755,6 +769,7 @@ class CrmService:
                 "status": CrmService._sync_state,
             }
 
+        self._clear_pipeline_cache()
         CrmService._sync_cancel_requested = False
         target_total = CrmService._cached_records_total or 53442
         CrmService._sync_state = {
@@ -1491,13 +1506,13 @@ class CrmService:
 
         stage_candidate = (
             pick(
+                "stage_name",
                 "lead_category",
                 "category_name",
                 "cat_name",
                 "lead_cat_name",
                 "category",
                 "lead_stage",
-                "stage_name",
                 "stage",
                 "pipeline_stage",
                 "sub_category",
@@ -1522,11 +1537,11 @@ class CrmService:
             clean_status = "Active"
 
         # Resolve Project
-        raw_project = pick("project", "project_name", "property", "interested_project", "product")
+        raw_project = pick("project_name", "project", "property", "interested_project", "product")
         clean_project = strip_html(raw_project) if raw_project else "—"
 
-        # Resolve Assigned To
-        raw_assigned = pick("cr_name", "user_id", "assigned_to", "executive", "employee", "agent", "handler", "assigned_person")
+        # Resolve Assigned To (Prioritize assigned sales executive user_name over creator cr_name)
+        raw_assigned = pick("user_name", "assigned_to", "executive", "employee", "agent", "handler", "assigned_person", "cr_name", "user_id")
         clean_assigned = strip_html(raw_assigned) if raw_assigned else "Unassigned"
         if not clean_assigned or clean_assigned in ("—", "-"):
             clean_assigned = "Unassigned"

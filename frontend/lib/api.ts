@@ -37,6 +37,10 @@ import {
   LeadDelegatePayload,
   BulkLeadDelegatePayload,
   BulkRevokeDelegatePayload,
+  LeadTransferPreview,
+  LeadTransferPayload,
+  LeadTransferResponse,
+  LeadTransferLog,
 } from "@/types";
 
 const API_BASE =
@@ -1132,6 +1136,31 @@ export const api = {
     getShareableColleagues: async (leadId?: number): Promise<User[]> => {
       const q = leadId ? `?lead_id=${leadId}` : "";
       return request(`/leads-workflow/shareable-colleagues${q}`);
+    },
+    getTransferPreview: async (fromEmployeeId: number): Promise<LeadTransferPreview> => {
+      return request(`/leads-workflow/transfer-preview?from_employee_id=${fromEmployeeId}`);
+    },
+    transferLeads: async (payload: LeadTransferPayload): Promise<LeadTransferResponse> => {
+      return request("/leads-workflow/transfer", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    },
+    getTransferHistory: async (params?: {
+      from_employee_id?: number;
+      to_employee_id?: number;
+      lead_id?: number;
+      limit?: number;
+      offset?: number;
+    }): Promise<LeadTransferLog[]> => {
+      const q = new URLSearchParams();
+      if (params?.from_employee_id) q.set("from_employee_id", params.from_employee_id.toString());
+      if (params?.to_employee_id) q.set("to_employee_id", params.to_employee_id.toString());
+      if (params?.lead_id) q.set("lead_id", params.lead_id.toString());
+      if (params?.limit) q.set("limit", params.limit.toString());
+      if (params?.offset) q.set("offset", params.offset.toString());
+      const queryStr = q.toString() ? `?${q.toString()}` : "";
+      return request(`/leads-workflow/transfer-history${queryStr}`);
     },
   },
 };

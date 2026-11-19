@@ -431,5 +431,23 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
                 """))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_lead_call_logs_lead_id ON lead_call_logs(lead_id);"))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_lead_call_logs_caller_id ON lead_call_logs(caller_id);"))
+
+                await conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS lead_transfer_logs (
+                        id SERIAL PRIMARY KEY,
+                        lead_id INTEGER NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+                        from_employee_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        to_employee_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        transferred_by_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        lead_status_at_transfer VARCHAR(20),
+                        reason VARCHAR(255),
+                        transferred_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+                    );
+                """))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_lead_transfer_logs_lead_id ON lead_transfer_logs(lead_id);"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_lead_transfer_logs_from_id ON lead_transfer_logs(from_employee_id);"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_lead_transfer_logs_to_id ON lead_transfer_logs(to_employee_id);"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_lead_transfer_logs_by_id ON lead_transfer_logs(transferred_by_id);"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_lead_transfer_logs_at ON lead_transfer_logs(transferred_at);"))
     except Exception as e:
         logger.warning("Could not ensure leads tables: %s", e)

@@ -15,4 +15,4 @@ from app.models.settings import AppSettings  # noqa: F401
 from app.models.notice import Notice  # noqa: F401
 from app.models.milestone_checkpoint import MilestoneCheckpoint  # noqa: F401
 from app.models.team import Team  # noqa: F401
-from app.models.lead import Lead, LeadCallLog  # noqa: F401
+from app.models.lead import Lead, LeadCallLog, LeadTransferLog  # noqa: F401

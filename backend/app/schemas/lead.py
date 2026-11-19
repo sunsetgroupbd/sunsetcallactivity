@@ -106,3 +106,53 @@ class LeadSummaryResponse(BaseModel):
     reference: LeadStatusCounts
     total_active_leads: int = 0
     today_calls_made: int = 0
+
+
+# ─── Lead Transfer & Handover Schemas (Admin / Sub-Admin Only) ─────────────────
+
+class LeadTransferPreviewResponse(BaseModel):
+    from_employee_id: int
+    from_employee_name: str
+    total_leads: int = 0
+    hp_count: int = 0
+    p_count: int = 0
+    fup_count: int = 0
+    ni_count: int = 0
+    nr_count: int = 0
+    source_counts: dict = Field(default_factory=dict)
+
+
+class LeadTransferPayload(BaseModel):
+    from_employee_id: int
+    to_employee_id: int
+    lead_ids: Optional[List[int]] = None
+    statuses: Optional[List[str]] = None
+    sources: Optional[List[str]] = None
+    reason: Optional[str] = Field(None, max_length=255)
+
+
+class LeadTransferResponse(BaseModel):
+    success: bool
+    transferred_count: int
+    from_employee_name: str
+    to_employee_name: str
+    message: str
+
+
+class LeadTransferLogRead(BaseModel):
+    id: int
+    lead_id: int
+    lead_name: Optional[str] = None
+    lead_phone: Optional[str] = None
+    from_employee_id: int
+    from_employee_name: Optional[str] = None
+    to_employee_id: int
+    to_employee_name: Optional[str] = None
+    transferred_by_id: int
+    transferred_by_name: Optional[str] = None
+    lead_status_at_transfer: Optional[str] = None
+    reason: Optional[str] = None
+    transferred_at: datetime
+
+    class Config:
+        from_attributes = True

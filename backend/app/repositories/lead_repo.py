@@ -7,7 +7,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.lead import Lead, LeadCallLog
+from app.models.lead import Lead, LeadCallLog, LeadTransferLog
 
 
 class LeadRepository:
@@ -179,3 +179,155 @@ class LeadRepository:
 
         await self.db.flush()
         return call_log
+
+    async def get_transfer_preview(self, from_employee_id: int) -> dict:
+        """
+        Count active leads owned by an executive broken down by status and source
+        before executing a transfer/handover.
+        """
+        stmt = (
+            select(Lead.source, Lead.status, func.count(Lead.id))
+            .where(Lead.assigned_to_id == from_employee_id, Lead.is_active == True)
+            .group_by(Lead.source, Lead.status)
+        )
+        res = await self.db.execute(stmt)
+        rows = res.all()
+
+        total = 0
+        hp_count = 0
+        p_count = 0
+        fup_count = 0
+        ni_count = 0
+        nr_count = 0
+        source_counts: dict = {}
+
+        for src, stat, count in rows:
+            s_clean = (src or "cold_lead").lower().strip()
+            st_clean = (stat or "fup").lower().strip()
+            total += count
+            source_counts[s_clean] = source_counts.get(s_clean, 0) + count
+
+            if st_clean == "hp":
+                hp_count += count
+            elif st_clean == "p":
+                p_count += count
+            elif st_clean in ("fup", "fub"):
+                fup_count += count
+            elif st_clean == "ni":
+                ni_count += count
+            elif st_clean == "nr":
+                nr_count += count
+
+        return {
+            "total_leads": total,
+            "hp_count": hp_count,
+            "p_count": p_count,
+            "fup_count": fup_count,
+            "ni_count": ni_count,
+            "nr_count": nr_count,
+            "source_counts": source_counts,
+        }
+
+    async def execute_lead_transfer(
+        self,
+        from_employee_id: int,
+        to_employee_id: int,
+        transferred_by_id: int,
+        from_employee_name: str,
+        to_employee_name: str,
+        transferred_by_name: str,
+        lead_ids: Optional[List[int]] = None,
+        statuses: Optional[List[str]] = None,
+        sources: Optional[List[str]] = None,
+        reason: Optional[str] = None,
+    ) -> int:
+        """
+        Permanently transfer lead ownership from one executive to another.
+        Creates transfer audit log and lead call history note.
+        """
+        stmt = select(Lead).where(
+            Lead.assigned_to_id == from_employee_id,
+            Lead.is_active == True,
+        )
+
+        if lead_ids:
+            stmt = stmt.where(Lead.id.in_(lead_ids))
+        if statuses:
+            stmt = stmt.where(Lead.status.in_([s.lower().strip() for s in statuses]))
+        if sources:
+            stmt = stmt.where(Lead.source.in_([s.lower().strip() for s in sources]))
+
+        res = await self.db.execute(stmt)
+        leads = res.scalars().all()
+        now = datetime.now(timezone.utc)
+        clean_reason = reason.strip() if reason else "Employee job switch / Resignation handover"
+
+        count = 0
+        for l in leads:
+            # 1. Create LeadTransferLog audit record
+            transfer_log = LeadTransferLog(
+                lead_id=l.id,
+                from_employee_id=from_employee_id,
+                to_employee_id=to_employee_id,
+                transferred_by_id=transferred_by_id,
+                lead_status_at_transfer=l.status,
+                reason=clean_reason,
+                transferred_at=now,
+            )
+            self.db.add(transfer_log)
+
+            # 2. Add an audit entry to LeadCallLog so caller timeline clearly shows the handover
+            audit_call_log = LeadCallLog(
+                lead_id=l.id,
+                caller_id=transferred_by_id,
+                from_status=l.status,
+                to_status=l.status,
+                called_at=now,
+                call_duration_seconds=0,
+                notes=(
+                    f"[Lead Handover] Transferred from {from_employee_name} to {to_employee_name} "
+                    f"by Admin {transferred_by_name}. Reason: {clean_reason}"
+                ),
+            )
+            self.db.add(audit_call_log)
+
+            # 3. Update ownership & clear any temporary delegation
+            l.assigned_to_id = to_employee_id
+            l.delegated_to_id = None
+            l.delegated_at = None
+            l.delegation_notes = None
+            l.updated_at = now
+            count += 1
+
+        await self.db.flush()
+        return count
+
+    async def get_transfer_logs(
+        self,
+        from_employee_id: Optional[int] = None,
+        to_employee_id: Optional[int] = None,
+        lead_id: Optional[int] = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> List[LeadTransferLog]:
+        stmt = (
+            select(LeadTransferLog)
+            .options(
+                selectinload(LeadTransferLog.lead),
+                selectinload(LeadTransferLog.from_employee),
+                selectinload(LeadTransferLog.to_employee),
+                selectinload(LeadTransferLog.transferred_by),
+            )
+            .order_by(LeadTransferLog.transferred_at.desc())
+        )
+
+        if from_employee_id is not None:
+            stmt = stmt.where(LeadTransferLog.from_employee_id == from_employee_id)
+        if to_employee_id is not None:
+            stmt = stmt.where(LeadTransferLog.to_employee_id == to_employee_id)
+        if lead_id is not None:
+            stmt = stmt.where(LeadTransferLog.lead_id == lead_id)
+
+        stmt = stmt.limit(limit).offset(offset)
+        res = await self.db.execute(stmt)
+        return list(res.scalars().all())

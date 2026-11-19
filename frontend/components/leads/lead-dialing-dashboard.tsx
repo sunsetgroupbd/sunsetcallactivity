@@ -45,6 +45,10 @@ import {
   LeadSummaryResponse,
   CreateLeadPayload,
   User as UserType,
+  LeadTransferPreview,
+  LeadTransferPayload,
+  LeadTransferResponse,
+  LeadTransferLog,
 } from "@/types";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -228,6 +232,20 @@ export function LeadDialingDashboard({
   const [bulkDelegating, setBulkDelegating] = useState(false);
   const [bulkRevoking, setBulkRevoking] = useState(false);
   const [dialedLeadIds, setDialedLeadIds] = useState<Set<number>>(new Set());
+
+  // Lead Transfer & Handover states (Strictly Admin & Sub-Admin Only)
+  const [transferModalOpen, setTransferModalOpen] = useState(false);
+  const [transferFromEmpId, setTransferFromEmpId] = useState<number | undefined>(undefined);
+  const [transferToEmpId, setTransferToEmpId] = useState<number | undefined>(undefined);
+  const [transferScope, setTransferScope] = useState<"all" | "active_pipeline" | "selected" | "fair_lead" | "fb_lead">("all");
+  const [transferReason, setTransferReason] = useState<string>("Employee resignation / Switched job");
+  const [transferPreview, setTransferPreview] = useState<LeadTransferPreview | null>(null);
+  const [loadingTransferPreview, setLoadingTransferPreview] = useState(false);
+  const [submittingTransfer, setSubmittingTransfer] = useState(false);
+  const [selectedLeadIds, setSelectedLeadIds] = useState<Set<number>>(new Set());
+  const [transferHistoryModalOpen, setTransferHistoryModalOpen] = useState(false);
+  const [transferHistoryLogs, setTransferHistoryLogs] = useState<LeadTransferLog[]>([]);
+  const [loadingTransferHistory, setLoadingTransferHistory] = useState(false);
 
   // Track pending native phone call
   const pendingCallRef = useRef<{
@@ -587,6 +605,113 @@ export function LeadDialingDashboard({
     }
   };
 
+  // ─── 8. Lead Transfer & Handover Handlers (Admin / Sub-Admin Only) ────────
+  const fetchTransferPreview = useCallback(async (empId: number) => {
+    try {
+      setLoadingTransferPreview(true);
+      const data = await api.leadWorkflow.getTransferPreview(empId);
+      setTransferPreview(data);
+    } catch (err: any) {
+      console.error("Failed to load transfer preview:", err);
+      setTransferPreview(null);
+    } finally {
+      setLoadingTransferPreview(false);
+    }
+  }, []);
+
+  const handleOpenTransferModal = (defaultFromId?: number) => {
+    if (!isSupervisor) return;
+    const initialFrom = defaultFromId || selectedEmployeeId || user?.id;
+    setTransferFromEmpId(initialFrom);
+    const other = executivesList.find((e) => e.id !== initialFrom);
+    setTransferToEmpId(other?.id);
+    if (selectedLeadIds.size > 0) {
+      setTransferScope("selected");
+    } else {
+      setTransferScope("all");
+    }
+    setTransferReason("Employee resignation / Switched job");
+    setTransferModalOpen(true);
+    if (initialFrom) {
+      fetchTransferPreview(initialFrom);
+    }
+  };
+
+  const handleConfirmTransfer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isSupervisor) return;
+    if (!transferFromEmpId || !transferToEmpId) {
+      alert("Please select both source and destination executives.");
+      return;
+    }
+    if (transferFromEmpId === transferToEmpId) {
+      alert("Source and destination executive cannot be the same person.");
+      return;
+    }
+
+    try {
+      setSubmittingTransfer(true);
+      const payload: LeadTransferPayload = {
+        from_employee_id: transferFromEmpId,
+        to_employee_id: transferToEmpId,
+        reason: transferReason.trim() || undefined,
+      };
+
+      if (transferScope === "selected") {
+        payload.lead_ids = Array.from(selectedLeadIds);
+      } else if (transferScope === "active_pipeline") {
+        payload.statuses = ["hp", "p", "fup"];
+      } else if (transferScope === "fair_lead") {
+        payload.sources = ["fair_lead"];
+      } else if (transferScope === "fb_lead") {
+        payload.sources = ["fb_lead"];
+      }
+
+      const res = await api.leadWorkflow.transferLeads(payload);
+      setSuccessToast(`✓ ${res.message}`);
+      setTimeout(() => setSuccessToast(null), 5000);
+      setTransferModalOpen(false);
+      setSelectedLeadIds(new Set());
+      await Promise.all([fetchSummary(), fetchLeads()]);
+      onCallLogged?.();
+    } catch (err: any) {
+      alert(`Failed to transfer leads: ${err?.message || "Unknown error"}`);
+    } finally {
+      setSubmittingTransfer(false);
+    }
+  };
+
+  const handleOpenTransferHistory = async () => {
+    if (!isSupervisor) return;
+    setTransferHistoryModalOpen(true);
+    setLoadingTransferHistory(true);
+    try {
+      const logs = await api.leadWorkflow.getTransferHistory({ limit: 50 });
+      setTransferHistoryLogs(logs);
+    } catch (err: any) {
+      console.error("Failed to load transfer history:", err);
+    } finally {
+      setLoadingTransferHistory(false);
+    }
+  };
+
+  const toggleSelectLead = (id: number) => {
+    setSelectedLeadIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleSelectAllOnPage = () => {
+    if (selectedLeadIds.size === leads.length) {
+      setSelectedLeadIds(new Set());
+    } else {
+      setSelectedLeadIds(new Set(leads.map((l) => l.id)));
+    }
+  };
+
   // Current category counts helper
   const currentCategoryCounts = summary ? summary[selectedSource] : null;
 
@@ -639,6 +764,29 @@ export function LeadDialingDashboard({
             <Share2 className="w-3.5 h-3.5 text-amber-700" />
             <span>Share Leads (Leave)</span>
           </button>
+
+          {/* Permanent Handover / Transfer Leads (Admin & Sub-Admin Only) */}
+          {isSupervisor && (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => handleOpenTransferModal()}
+                className="px-3.5 py-2 text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition text-xs font-bold flex items-center gap-1.5 shadow-2xs"
+                title="Transfer/Handover leads permanently when an employee switches jobs or resigns (Admin/Sub-Admin only)"
+              >
+                <ArrowRightLeft className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Transfer Leads</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenTransferHistory}
+                className="p-2 text-slate-500 hover:text-indigo-800 bg-slate-100 hover:bg-indigo-50 rounded-xl transition text-xs font-semibold"
+                title="View Lead Transfer Audit History"
+              >
+                <History className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
           <button
             type="button"
@@ -856,7 +1004,48 @@ export function LeadDialingDashboard({
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100 border border-slate-100 rounded-xl overflow-hidden">
+          <div className="space-y-2">
+            {/* Bulk Selection Bar (Admin & Sub-Admin Only) */}
+            {isSupervisor && leads.length > 0 && (
+              <div className="flex items-center justify-between gap-3 bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-xl text-xs">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="select-all-leads"
+                    checked={selectedLeadIds.size > 0 && selectedLeadIds.size === leads.length}
+                    onChange={handleSelectAllOnPage}
+                    className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                  />
+                  <label htmlFor="select-all-leads" className="text-slate-600 font-semibold cursor-pointer select-none">
+                    {selectedLeadIds.size > 0
+                      ? `${selectedLeadIds.size} of ${leads.length} selected on this page`
+                      : `Select all on page (${leads.length})`}
+                  </label>
+                </div>
+
+                {selectedLeadIds.size > 0 && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenTransferModal()}
+                      className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition"
+                    >
+                      <ArrowRightLeft className="w-3.5 h-3.5" />
+                      <span>Transfer ({selectedLeadIds.size}) Leads</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedLeadIds(new Set())}
+                      className="text-slate-500 hover:text-slate-800 text-[11px] underline"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="divide-y divide-slate-100 border border-slate-100 rounded-xl overflow-hidden">
             {leads.map((lead) => {
               const statusBadge =
                 STATUSES.find((s) => s.key === lead.status) || {
@@ -872,6 +1061,19 @@ export function LeadDialingDashboard({
                   key={lead.id}
                   className="p-3 sm:p-3.5 hover:bg-slate-50/70 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                 >
+                  {/* Select Checkbox (Admin Only) */}
+                  {isSupervisor && (
+                    <label className="flex items-center cursor-pointer shrink-0 pt-0.5 sm:pt-0">
+                      <input
+                        type="checkbox"
+                        checked={selectedLeadIds.has(lead.id)}
+                        onChange={() => toggleSelectLead(lead.id)}
+                        className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                        title="Select lead for handover"
+                      />
+                    </label>
+                  )}
+
                   {/* Customer Info */}
                   <div className="flex-1 min-w-0 space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -1066,6 +1268,21 @@ export function LeadDialingDashboard({
                       </button>
                     )}
 
+                    {/* Admin Transfer Lead button */}
+                    {isSupervisor && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedLeadIds(new Set([lead.id]));
+                          handleOpenTransferModal(lead.assigned_to_id);
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition text-xs"
+                        title="Transfer this lead to another executive (Admin Only)"
+                      >
+                        <ArrowRightLeft className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+
                     {/* Admin Delete Lead button */}
                     {isSupervisor && (
                       <button
@@ -1081,6 +1298,7 @@ export function LeadDialingDashboard({
                 </div>
               );
             })}
+            </div>
           </div>
         )}
       </div>
@@ -1914,6 +2132,375 @@ export function LeadDialingDashboard({
                 </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── 10. Lead Transfer & Handover Modal (Admin / Sub-Admin Only) ─────── */}
+      {isSupervisor && transferModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-5 sm:p-6 shadow-2xl border border-slate-200 space-y-4 text-slate-900">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                  <ArrowRightLeft className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2">
+                    <span>Lead Transfer &amp; Handover</span>
+                    <span className="text-[10px] bg-indigo-100 text-indigo-800 font-extrabold px-2 py-0.5 rounded-full uppercase">
+                      Admin Only
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Permanently reassign lead ownership for employee job switches, resignations, or team handovers.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTransferModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmTransfer} className="space-y-4">
+              {/* Step 1: From Executive (Current Owner) */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 block">
+                  1. From Executive (Current Lead Owner) <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={transferFromEmpId || ""}
+                  onChange={(e) => {
+                    const id = Number(e.target.value);
+                    setTransferFromEmpId(id);
+                    if (id === transferToEmpId) {
+                      const other = executivesList.find((x) => x.id !== id);
+                      setTransferToEmpId(other?.id);
+                    }
+                  }}
+                  className="w-full text-xs bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  required
+                >
+                  <option value="">-- Select Source Employee --</option>
+                  {executivesList.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.full_name} ({emp.role}) • {formatEmployeeId(emp.id)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Source Employee Live Portfolio Summary Card */}
+              {loadingTransferPreview ? (
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
+                  <span>Loading executive&apos;s lead portfolio...</span>
+                </div>
+              ) : transferPreview ? (
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-700">Current Lead Portfolio:</span>
+                    <span className="font-extrabold text-indigo-800 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full text-[11px]">
+                      {transferPreview.total_leads} Total Active Leads
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
+                    <div className="bg-rose-50 border border-rose-200 p-1.5 rounded-lg text-rose-800">
+                      <div className="font-bold">{transferPreview.hp_count}</div>
+                      <div className="text-[9.5px] uppercase font-semibold">HP (Hot)</div>
+                    </div>
+                    <div className="bg-amber-50 border border-amber-200 p-1.5 rounded-lg text-amber-800">
+                      <div className="font-bold">{transferPreview.p_count}</div>
+                      <div className="text-[9.5px] uppercase font-semibold">P (Warm)</div>
+                    </div>
+                    <div className="bg-blue-50 border border-blue-200 p-1.5 rounded-lg text-blue-800">
+                      <div className="font-bold">{transferPreview.fup_count}</div>
+                      <div className="text-[9.5px] uppercase font-semibold">FUP</div>
+                    </div>
+                  </div>
+
+                  {Object.keys(transferPreview.source_counts).length > 0 && (
+                    <div className="text-[10.5px] text-slate-500 flex items-center gap-2 flex-wrap pt-0.5">
+                      <span>Sources:</span>
+                      {Object.entries(transferPreview.source_counts).map(([src, cnt]) => (
+                        <span key={src} className="bg-white border border-slate-200 px-1.5 py-0.5 rounded text-slate-700 font-mono">
+                          {src.replace("_", " ")}: <strong>{cnt}</strong>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : null}
+
+              {/* Step 2: To Executive (New Recipient) */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 block">
+                  2. To Executive (New Owner) <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={transferToEmpId || ""}
+                  onChange={(e) => setTransferToEmpId(Number(e.target.value))}
+                  className="w-full text-xs bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  required
+                >
+                  <option value="">-- Select Destination Employee --</option>
+                  {executivesList
+                    .filter((emp) => emp.id !== transferFromEmpId)
+                    .map((emp) => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.full_name} ({emp.role}) • {formatEmployeeId(emp.id)}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Step 3: Transfer Scope Selection */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 block">
+                  3. Select Transfer Scope
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <label className={cn(
+                    "p-2.5 rounded-xl border cursor-pointer transition flex items-start gap-2",
+                    transferScope === "all" ? "bg-indigo-50/70 border-indigo-300 text-indigo-950 font-bold" : "bg-white border-slate-200 text-slate-700"
+                  )}>
+                    <input
+                      type="radio"
+                      name="transferScope"
+                      checked={transferScope === "all"}
+                      onChange={() => setTransferScope("all")}
+                      className="mt-0.5 text-indigo-600 cursor-pointer"
+                    />
+                    <div>
+                      <div>All Leads (Complete Handover)</div>
+                      <div className="text-[10px] text-slate-500 font-normal">Best for resignation / job switch</div>
+                    </div>
+                  </label>
+
+                  <label className={cn(
+                    "p-2.5 rounded-xl border cursor-pointer transition flex items-start gap-2",
+                    transferScope === "active_pipeline" ? "bg-indigo-50/70 border-indigo-300 text-indigo-950 font-bold" : "bg-white border-slate-200 text-slate-700"
+                  )}>
+                    <input
+                      type="radio"
+                      name="transferScope"
+                      checked={transferScope === "active_pipeline"}
+                      onChange={() => setTransferScope("active_pipeline")}
+                      className="mt-0.5 text-indigo-600 cursor-pointer"
+                    />
+                    <div>
+                      <div>Active Pipeline Only</div>
+                      <div className="text-[10px] text-slate-500 font-normal">HP, P &amp; FUP leads only</div>
+                    </div>
+                  </label>
+
+                  <label className={cn(
+                    "p-2.5 rounded-xl border cursor-pointer transition flex items-start gap-2",
+                    transferScope === "fair_lead" ? "bg-indigo-50/70 border-indigo-300 text-indigo-950 font-bold" : "bg-white border-slate-200 text-slate-700"
+                  )}>
+                    <input
+                      type="radio"
+                      name="transferScope"
+                      checked={transferScope === "fair_lead"}
+                      onChange={() => setTransferScope("fair_lead")}
+                      className="mt-0.5 text-indigo-600 cursor-pointer"
+                    />
+                    <div>
+                      <div>Fair Leads Only</div>
+                      <div className="text-[10px] text-slate-500 font-normal">Leads sourced from real estate fairs</div>
+                    </div>
+                  </label>
+
+                  {selectedLeadIds.size > 0 && (
+                    <label className={cn(
+                      "p-2.5 rounded-xl border cursor-pointer transition flex items-start gap-2",
+                      transferScope === "selected" ? "bg-indigo-50/70 border-indigo-300 text-indigo-950 font-bold" : "bg-white border-slate-200 text-slate-700"
+                    )}>
+                      <input
+                        type="radio"
+                        name="transferScope"
+                        checked={transferScope === "selected"}
+                        onChange={() => setTransferScope("selected")}
+                        className="mt-0.5 text-indigo-600 cursor-pointer"
+                      />
+                      <div>
+                        <div>Selected Leads ({selectedLeadIds.size})</div>
+                        <div className="text-[10px] text-slate-500 font-normal">Only checkboxes checked on table</div>
+                      </div>
+                    </label>
+                  )}
+                </div>
+              </div>
+
+              {/* Step 4: Transfer Reason & Quick Chips */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 block">
+                  4. Reason / Handover Notes
+                </label>
+                <input
+                  type="text"
+                  value={transferReason}
+                  onChange={(e) => setTransferReason(e.target.value)}
+                  placeholder="e.g. Employee resignation handover / switched job"
+                  className="w-full text-xs bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                  <span className="text-[10px] text-slate-400">Quick chips:</span>
+                  {[
+                    "Employee resignation / Switched job",
+                    "Team Reallocation",
+                    "Performance Reassignment",
+                    "Long-term Absence Handover",
+                  ].map((chip) => (
+                    <button
+                      key={chip}
+                      type="button"
+                      onClick={() => setTransferReason(chip)}
+                      className="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-0.5 rounded-md transition"
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Preservation Notice */}
+              <div className="p-2.5 bg-indigo-50/60 rounded-xl border border-indigo-100 text-[11px] text-indigo-900 flex items-start gap-2">
+                <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                <span>
+                  <strong>Client History Protected:</strong> All previous call logs, remarks, and feedback timestamps will be preserved and visible to the new executive.
+                </span>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setTransferModalOpen(false)}
+                  className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 bg-slate-100 rounded-xl transition"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={submittingTransfer || !transferFromEmpId || !transferToEmpId || transferFromEmpId === transferToEmpId}
+                  className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white px-4 py-2 rounded-xl transition text-xs font-bold flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                >
+                  {submittingTransfer ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Transferring Leads...</span>
+                    </>
+                  ) : (
+                    <>
+                      <ArrowRightLeft className="w-4 h-4" />
+                      <span>Confirm &amp; Transfer Leads</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── 11. Lead Transfer History Audit Modal (Admin / Sub-Admin Only) ──── */}
+      {isSupervisor && transferHistoryModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-5 sm:p-6 shadow-2xl border border-slate-200 space-y-4 text-slate-900">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
+                  <History className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-slate-900">
+                    Lead Transfer Audit History
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Official log of all lead reassignments and handovers.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTransferHistoryModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700"
+              >
+                ✕
+              </button>
+            </div>
+
+            {loadingTransferHistory ? (
+              <div className="py-12 text-center text-slate-500 space-y-2">
+                <Loader2 className="w-6 h-6 animate-spin text-indigo-600 mx-auto" />
+                <p className="text-xs">Loading transfer history...</p>
+              </div>
+            ) : transferHistoryLogs.length === 0 ? (
+              <div className="py-12 text-center text-slate-400 text-xs">
+                No lead transfers have been recorded yet.
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden text-xs">
+                {transferHistoryLogs.map((log) => (
+                  <div key={log.id} className="p-3 space-y-1 hover:bg-slate-50 transition">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-1.5 font-bold text-slate-900">
+                        <span>{log.lead_name || `Lead #${log.lead_id}`}</span>
+                        {log.lead_phone && (
+                          <span className="text-[10.5px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded">
+                            {log.lead_phone}
+                          </span>
+                        )}
+                        {log.lead_status_at_transfer && (
+                          <span className="text-[10px] font-extrabold uppercase bg-slate-200 text-slate-800 px-1.5 py-0.2 rounded">
+                            {log.lead_status_at_transfer}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10.5px] text-slate-400">
+                        {new Date(log.transferred_at).toLocaleString([], {
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-[11px] text-slate-600 flex-wrap">
+                      <span>From: <strong className="text-slate-800">{log.from_employee_name || `#${log.from_employee_id}`}</strong></span>
+                      <ArrowRight className="w-3 h-3 text-slate-400" />
+                      <span>To: <strong className="text-indigo-700">{log.to_employee_name || `#${log.to_employee_id}`}</strong></span>
+                      <span className="text-slate-400">• By Admin: <strong className="text-slate-700">{log.transferred_by_name || `#${log.transferred_by_id}`}</strong></span>
+                    </div>
+
+                    {log.reason && (
+                      <div className="text-[11px] text-slate-500 italic bg-slate-50 px-2 py-1 rounded">
+                        Reason: &quot;{log.reason}&quot;
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setTransferHistoryModalOpen(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-slate-100 rounded-xl transition"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

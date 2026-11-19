@@ -883,6 +883,51 @@ export interface CreateLeadPayload {
   notes?: string;
 }
 
+export interface LeadTransferPreview {
+  from_employee_id: number;
+  from_employee_name: string;
+  total_leads: number;
+  hp_count: number;
+  p_count: number;
+  fup_count: number;
+  ni_count: number;
+  nr_count: number;
+  source_counts: Record<string, number>;
+}
+
+export interface LeadTransferPayload {
+  from_employee_id: number;
+  to_employee_id: number;
+  lead_ids?: number[];
+  statuses?: string[];
+  sources?: string[];
+  reason?: string;
+}
+
+export interface LeadTransferResponse {
+  success: boolean;
+  transferred_count: number;
+  from_employee_name: string;
+  to_employee_name: string;
+  message: string;
+}
+
+export interface LeadTransferLog {
+  id: number;
+  lead_id: number;
+  lead_name?: string | null;
+  lead_phone?: string | null;
+  from_employee_id: number;
+  from_employee_name?: string | null;
+  to_employee_id: number;
+  to_employee_name?: string | null;
+  transferred_by_id: number;
+  transferred_by_name?: string | null;
+  lead_status_at_transfer?: string | null;
+  reason?: string | null;
+  transferred_at: string;
+}
+
 
 
 

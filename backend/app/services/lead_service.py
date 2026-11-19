@@ -22,6 +22,10 @@ from app.schemas.lead import (
     LeadRead,
     LeadSummaryResponse,
     LeadUpdate,
+    LeadTransferPayload,
+    LeadTransferPreviewResponse,
+    LeadTransferResponse,
+    LeadTransferLogRead,
 )
 from app.schemas.user import UserRead
 
@@ -575,3 +579,140 @@ class LeadService:
                 seen_ids.add(u.id)
                 result_fallback.append(UserRead.model_validate(u))
         return result_fallback
+
+    # ─── Lead Transfer & Handover Methods (Admin / Sub-Admin Only) ─────────────
+
+    async def get_transfer_preview(
+        self,
+        from_employee_id: int,
+        current_user: User,
+    ) -> LeadTransferPreviewResponse:
+        """
+        Preview active leads summary for an executive before executing handover.
+        Strictly restricted to Admin and Sub-Admin.
+        """
+        if current_user.role not in (UserRole.ADMIN, UserRole.SUB_ADMIN):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied. Only Administrators and Sub-Administrators can transfer leads.",
+            )
+
+        from_user = await self.db.get(User, from_employee_id)
+        if not from_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Source employee ID {from_employee_id} not found.",
+            )
+
+        preview_data = await self.lead_repo.get_transfer_preview(from_employee_id)
+        return LeadTransferPreviewResponse(
+            from_employee_id=from_employee_id,
+            from_employee_name=from_user.full_name,
+            **preview_data,
+        )
+
+    async def transfer_leads(
+        self,
+        payload: LeadTransferPayload,
+        current_user: User,
+    ) -> LeadTransferResponse:
+        """
+        Permanently reassign lead ownership (e.g. employee resignation or job switch handover).
+        Strictly restricted to Admin and Sub-Admin.
+        """
+        if current_user.role not in (UserRole.ADMIN, UserRole.SUB_ADMIN):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied. Only Administrators and Sub-Administrators can transfer leads.",
+            )
+
+        if payload.from_employee_id == payload.to_employee_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Source employee and target employee cannot be the same person.",
+            )
+
+        from_user = await self.db.get(User, payload.from_employee_id)
+        if not from_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Source employee ID {payload.from_employee_id} not found.",
+            )
+
+        to_user = await self.db.get(User, payload.to_employee_id)
+        if not to_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Target employee ID {payload.to_employee_id} not found.",
+            )
+
+        count = await self.lead_repo.execute_lead_transfer(
+            from_employee_id=payload.from_employee_id,
+            to_employee_id=payload.to_employee_id,
+            transferred_by_id=current_user.id,
+            from_employee_name=from_user.full_name,
+            to_employee_name=to_user.full_name,
+            transferred_by_name=current_user.full_name,
+            lead_ids=payload.lead_ids,
+            statuses=payload.statuses,
+            sources=payload.sources,
+            reason=payload.reason,
+        )
+
+        await self.db.commit()
+
+        return LeadTransferResponse(
+            success=True,
+            transferred_count=count,
+            from_employee_name=from_user.full_name,
+            to_employee_name=to_user.full_name,
+            message=f"Successfully transferred {count} lead(s) from {from_user.full_name} to {to_user.full_name}.",
+        )
+
+    async def get_transfer_logs(
+        self,
+        current_user: User,
+        from_employee_id: Optional[int] = None,
+        to_employee_id: Optional[int] = None,
+        lead_id: Optional[int] = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> List[LeadTransferLogRead]:
+        """
+        Retrieve transfer audit history.
+        Strictly restricted to Admin and Sub-Admin.
+        """
+        if current_user.role not in (UserRole.ADMIN, UserRole.SUB_ADMIN):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied. Only Administrators and Sub-Administrators can view transfer logs.",
+            )
+
+        logs = await self.lead_repo.get_transfer_logs(
+            from_employee_id=from_employee_id,
+            to_employee_id=to_employee_id,
+            lead_id=lead_id,
+            limit=limit,
+            offset=offset,
+        )
+
+        result: List[LeadTransferLogRead] = []
+        for lg in logs:
+            result.append(
+                LeadTransferLogRead(
+                    id=lg.id,
+                    lead_id=lg.lead_id,
+                    lead_name=lg.lead.name if lg.lead else None,
+                    lead_phone=lg.lead.phone if lg.lead else None,
+                    from_employee_id=lg.from_employee_id,
+                    from_employee_name=lg.from_employee.full_name if lg.from_employee else None,
+                    to_employee_id=lg.to_employee_id,
+                    to_employee_name=lg.to_employee.full_name if lg.to_employee else None,
+                    transferred_by_id=lg.transferred_by_id,
+                    transferred_by_name=lg.transferred_by.full_name if lg.transferred_by else None,
+                    lead_status_at_transfer=lg.lead_status_at_transfer,
+                    reason=lg.reason,
+                    transferred_at=lg.transferred_at,
+                )
+            )
+        return result

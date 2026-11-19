@@ -7,7 +7,7 @@ import re
 from typing import Optional, Any
 
 from fastapi import APIRouter, Depends, Query, UploadFile, File, Form, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import get_current_user, require_admin
@@ -15,6 +15,7 @@ from app.core.security import hash_password
 from app.db.session import get_db
 from app.models.team import Team
 from app.models.user import User, UserRole
+from app.models.lead import Lead
 from app.repositories.user_repo import UserRepository
 from app.schemas.user import UserCreate, UserRead, UserUpdate
 
@@ -421,4 +422,18 @@ async def delete_employee(
         raise HTTPException(status_code=404, detail="User not found")
     if current_admin.role == UserRole.SUB_ADMIN and user.role == UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Sub-admin cannot delete an administrator account")
+
+    # Safety Guard: Ensure employee has no active leads before deleting
+    lead_count_stmt = select(func.count(Lead.id)).where(Lead.assigned_to_id == user_id, Lead.is_active == True)
+    res = await db.execute(lead_count_stmt)
+    active_leads = res.scalar() or 0
+    if active_leads > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Cannot delete employee: {active_leads} active lead(s) are currently assigned to {user.full_name}. "
+                "Please transfer their leads to another executive before deleting."
+            ),
+        )
+
     await repo.delete(user)

@@ -18,6 +18,10 @@ from app.schemas.lead import (
     LeadDelegatePayload,
     BulkLeadDelegatePayload,
     BulkRevokeDelegatePayload,
+    LeadTransferPayload,
+    LeadTransferPreviewResponse,
+    LeadTransferResponse,
+    LeadTransferLogRead,
 )
 from app.schemas.user import UserRead
 from app.services.lead_service import LeadService
@@ -167,3 +171,58 @@ async def delete_lead(
     svc = LeadService(db)
     await svc.delete_lead(lead_id, current_user)
     return {"success": True, "message": "Lead deleted successfully"}
+
+
+# ─── Lead Transfer & Handover Endpoints (Admin & Sub-Admin Only) ───────────────
+
+@router.get("/transfer-preview", response_model=LeadTransferPreviewResponse)
+async def get_transfer_preview(
+    from_employee_id: int = Query(..., description="Employee whose leads will be transferred"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get count and status breakdown of an executive's leads before transferring.
+    Restricted to Administrators and Sub-Administrators only.
+    """
+    svc = LeadService(db)
+    return await svc.get_transfer_preview(from_employee_id, current_user)
+
+
+@router.post("/transfer", response_model=LeadTransferResponse)
+async def transfer_leads(
+    payload: LeadTransferPayload,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Permanently transfer leads from one employee to another (e.g. employee job switch / resignation).
+    Restricted to Administrators and Sub-Administrators only.
+    """
+    svc = LeadService(db)
+    return await svc.transfer_leads(payload, current_user)
+
+
+@router.get("/transfer-history", response_model=List[LeadTransferLogRead])
+async def get_transfer_history(
+    from_employee_id: Optional[int] = Query(None, description="Filter by source executive"),
+    to_employee_id: Optional[int] = Query(None, description="Filter by destination executive"),
+    lead_id: Optional[int] = Query(None, description="Filter by lead ID"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Audit history of all lead transfers performed across the company.
+    Restricted to Administrators and Sub-Administrators only.
+    """
+    svc = LeadService(db)
+    return await svc.get_transfer_logs(
+        current_user=current_user,
+        from_employee_id=from_employee_id,
+        to_employee_id=to_employee_id,
+        lead_id=lead_id,
+        limit=limit,
+        offset=offset,
+    )

@@ -983,6 +983,7 @@ export interface CrmPipelineExecutive {
   p_count: number;
   fup_count: number;
   other_count: number;
+  status_breakdown?: Record<string, number>;
   projects: string[];
   lead_samples: Array<{
     id: string | number;
@@ -1003,6 +1004,7 @@ export interface CrmPipelineSummaryResponse {
   total_p: number;
   total_fup: number;
   total_other: number;
+  status_counts?: Record<string, number>;
   unassigned_count: number;
   unassigned_leads: Array<{
     id: string | number;

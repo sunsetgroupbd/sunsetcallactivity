@@ -67,6 +67,7 @@ export default function LeadPipelinePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [workloadFilter, setWorkloadFilter] = useState<string>("all");
   const [teamFilter, setTeamFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<"total" | "hp" | "p" | "name">("total");
 
   // Lead Inspection Drawer
@@ -326,6 +327,14 @@ export default function LeadPipelinePage() {
       );
     }
 
+    if (statusFilter !== "all") {
+      list = list.filter(
+        (e) =>
+          (e.status_breakdown && (e.status_breakdown[statusFilter] || 0) > 0) ||
+          e.lead_samples.some((l) => l.status === statusFilter)
+      );
+    }
+
     list.sort((a, b) => {
       if (sortBy === "hp") return b.hp_count - a.hp_count;
       if (sortBy === "p") return b.p_count - a.p_count;
@@ -510,8 +519,9 @@ export default function LeadPipelinePage() {
 
         {/* KPI Cards Row */}
         {activeTab === "crm" ? (
-          /* CRM KPI Row */
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3.5">
+          <>
+            {/* CRM KPI Row */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3.5">
             <Card className="border-slate-200 shadow-2xs hover:shadow-md transition">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
@@ -608,6 +618,102 @@ export default function LeadPipelinePage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Dynamic Pipeline Stages in Somikoron CRM */}
+          {crmData?.status_counts && Object.keys(crmData.status_counts).length > 0 && (
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-2.5">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-indigo-600" />
+                  <span className="text-xs font-bold text-slate-900">
+                    All Pipeline Stages Found in CRM ({Object.keys(crmData.status_counts).length} stages):
+                  </span>
+                  <span className="text-[10px] text-slate-400">Click any stage badge to filter</span>
+                </div>
+                {statusFilter !== "all" && (
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter("all")}
+                    className="text-[11px] text-indigo-600 hover:text-indigo-800 font-bold underline cursor-pointer"
+                  >
+                    Reset to all stages ({crmData.analyzed_count})
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("all")}
+                  className={cn(
+                    "px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs",
+                    statusFilter === "all"
+                      ? "bg-slate-900 text-white"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                  )}
+                >
+                  <span>All Stages</span>
+                  <span
+                    className={cn(
+                      "text-[10px] px-1.5 py-0.2 rounded-full font-mono",
+                      statusFilter === "all" ? "bg-white/25 text-white" : "bg-slate-200 text-slate-700"
+                    )}
+                  >
+                    {crmData.analyzed_count.toLocaleString()}
+                  </span>
+                </button>
+
+                {Object.entries(crmData.status_counts).map(([stName, count]) => {
+                  const isSelected = statusFilter === stName;
+                  const lower = stName.toLowerCase();
+                  let badgeTheme = "bg-slate-100 text-slate-800 hover:bg-slate-200 border-slate-200";
+                  if (lower.includes("high") || lower.includes("hp") || lower.includes("hot")) {
+                    badgeTheme = isSelected
+                      ? "bg-amber-600 text-white border-amber-600"
+                      : "bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100";
+                  } else if (
+                    lower.includes("potential") ||
+                    lower.includes("positive") ||
+                    lower.includes("pos") ||
+                    lower.includes("warm")
+                  ) {
+                    badgeTheme = isSelected
+                      ? "bg-indigo-600 text-white border-indigo-600"
+                      : "bg-indigo-50 text-indigo-900 border-indigo-200 hover:bg-indigo-100";
+                  } else if (lower.includes("follow") || lower.includes("fup") || lower.includes("fub")) {
+                    badgeTheme = isSelected
+                      ? "bg-sky-600 text-white border-sky-600"
+                      : "bg-sky-50 text-sky-900 border-sky-200 hover:bg-sky-100";
+                  } else if (isSelected) {
+                    badgeTheme = "bg-indigo-600 text-white border-indigo-600";
+                  }
+
+                  return (
+                    <button
+                      key={stName}
+                      type="button"
+                      onClick={() => setStatusFilter(isSelected ? "all" : stName)}
+                      className={cn(
+                        "px-3 py-1.5 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 cursor-pointer shadow-2xs",
+                        badgeTheme
+                      )}
+                    >
+                      <span>{stName}</span>
+                      <span
+                        className={cn(
+                          "text-[10px] px-1.5 py-0.2 rounded-full font-mono",
+                          isSelected ? "bg-white/25 text-white" : "bg-black/5"
+                        )}
+                      >
+                        {count.toLocaleString()}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </>
         ) : (
           /* Internal Calling KPI Row */
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3.5">
@@ -806,6 +912,25 @@ export default function LeadPipelinePage() {
               </>
             )}
 
+            {/* CRM Stage Filter */}
+            {activeTab === "crm" && crmData?.statuses_found && crmData.statuses_found.length > 0 && (
+              <div className="flex items-center gap-1 text-xs text-slate-600">
+                <span className="font-semibold text-slate-500">Stage:</span>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600 max-w-[170px] truncate"
+                >
+                  <option value="all">All Stages ({crmData.analyzed_count})</option>
+                  {crmData.statuses_found.map((st) => (
+                    <option key={st} value={st}>
+                      {st} ({crmData.status_counts?.[st] || 0})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* Sort Order */}
             <div className="flex items-center gap-1 text-xs text-slate-600">
               <span className="font-semibold text-slate-500">Sort by:</span>
@@ -867,7 +992,7 @@ export default function LeadPipelinePage() {
                       Potential (P)
                     </th>
                     <th className="py-3 px-4 min-w-[120px] text-center">Follow Up (FUP)</th>
-                    <th className="py-3 px-4 min-w-[100px] text-center">Other</th>
+                    <th className="py-3 px-4 min-w-[200px]">Pipeline Stages Breakdown</th>
                     <th className="py-3 px-4 min-w-[120px] text-center font-extrabold">Total Leads</th>
                     <th className="py-3 px-4 min-w-[180px]">Assigned Projects</th>
                     <th className="py-3 px-4 w-28 text-center">Actions</th>
@@ -944,9 +1069,28 @@ export default function LeadPipelinePage() {
                             )}
                           </td>
 
-                          {/* Other Count */}
-                          <td className="py-3 px-4 text-center font-mono text-slate-400">
-                            {exec.other_count}
+                          {/* Pipeline Stages Breakdown */}
+                          <td className="py-3 px-4">
+                            <div className="flex flex-wrap gap-1 max-w-[240px]">
+                              {exec.status_breakdown && Object.keys(exec.status_breakdown).length > 0 ? (
+                                Object.entries(exec.status_breakdown).map(([st, cnt]) => (
+                                  <button
+                                    key={st}
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setStatusFilter(st);
+                                    }}
+                                    className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-800 border border-slate-200 transition cursor-pointer"
+                                    title={`Filter by ${st}`}
+                                  >
+                                    {st}: <strong className="font-mono text-slate-900">{cnt}</strong>
+                                  </button>
+                                ))
+                              ) : (
+                                <span className="text-slate-400 text-[11px]">—</span>
+                              )}
+                            </div>
                           </td>
 
                           {/* Total Leads */}

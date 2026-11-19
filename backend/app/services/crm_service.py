@@ -511,6 +511,7 @@ class CrmService:
         exec_map: Dict[str, Dict[str, Any]] = {}
         unassigned_leads: List[Dict[str, Any]] = []
         statuses_found: set[str] = set()
+        status_counts: Dict[str, int] = {}
 
         total_hp = 0
         total_p = 0
@@ -519,14 +520,37 @@ class CrmService:
 
         for lead in leads:
             assigned = (lead.get("assigned_to") or "").strip()
-            raw_status = (lead.get("status") or "").strip()
-            st_clean = raw_status.lower()
-            if raw_status and raw_status not in ("—", "-"):
-                statuses_found.add(raw_status)
+            raw_status = (lead.get("status") or lead.get("badge") or "").strip()
+            if not raw_status or raw_status in ("—", "-"):
+                raw_status = "Active"
 
-            is_hp = "high" in st_clean or st_clean in ("hp", "high potential", "high-potential")
-            is_p = not is_hp and ("potential" in st_clean or st_clean in ("p",))
-            is_fup = not is_hp and not is_p and ("follow" in st_clean or "fup" in st_clean or "fub" in st_clean)
+            st_clean = raw_status.lower()
+            statuses_found.add(raw_status)
+            status_counts[raw_status] = status_counts.get(raw_status, 0) + 1
+
+            is_hp = (
+                "high" in st_clean
+                or "hp" in st_clean
+                or "hot" in st_clean
+                or "top" in st_clean
+                or "priority" in st_clean
+            )
+            is_p = not is_hp and (
+                "potential" in st_clean
+                or "positive" in st_clean
+                or "pos" in st_clean
+                or "warm" in st_clean
+                or "interested" in st_clean
+                or st_clean in ("p", "pot")
+            )
+            is_fup = not is_hp and not is_p and (
+                "follow" in st_clean
+                or "fup" in st_clean
+                or "fub" in st_clean
+                or "call" in st_clean
+                or "next" in st_clean
+                or "scheduled" in st_clean
+            )
 
             if is_hp:
                 total_hp += 1
@@ -563,11 +587,15 @@ class CrmService:
                     "p_count": 0,
                     "fup_count": 0,
                     "other_count": 0,
+                    "status_breakdown": {},
                     "projects": set(),
                     "lead_samples": [],
                 }
 
             exec_map[assigned]["total_leads"] += 1
+            exec_map[assigned]["status_breakdown"][raw_status] = (
+                exec_map[assigned]["status_breakdown"].get(raw_status, 0) + 1
+            )
             if is_hp:
                 exec_map[assigned]["hp_count"] += 1
             elif is_p:
@@ -600,6 +628,7 @@ class CrmService:
                 "p_count": data["p_count"],
                 "fup_count": data["fup_count"],
                 "other_count": data["other_count"],
+                "status_breakdown": data["status_breakdown"],
                 "projects": sorted(list(data["projects"]))[:6],
                 "lead_samples": data["lead_samples"],
             })
@@ -614,6 +643,7 @@ class CrmService:
             "total_p": total_p,
             "total_fup": total_fup,
             "total_other": total_other,
+            "status_counts": status_counts,
             "unassigned_count": len(unassigned_leads),
             "unassigned_leads": unassigned_leads[:50],
             "executives": executives,
@@ -1043,11 +1073,25 @@ class CrmService:
         if not clean_source or clean_source in ("—", "-"):
             clean_source = embedded.get("source", "—")
 
-        # Resolve Status
-        raw_status = pick("status", "lead_status", "stage", "category", "lead_type")
-        clean_status = strip_html(raw_status) if raw_status else "Active"
-        if not clean_status or clean_status in ("—", "-"):
-            clean_status = "Active"
+        # Resolve Status - check pick, embedded, badge, and HTML markup
+        emb_status = (
+            embedded.get("status")
+            or embedded.get("stage")
+            or embedded.get("lead status")
+            or embedded.get("category")
+            or embedded.get("lead category")
+            or embedded.get("lead_category")
+            or embedded.get("lead_cat")
+            or embedded.get("priority")
+        )
+        raw_status = (
+            pick("status", "lead_status", "stage", "category", "lead_type", "state", "lead_state")
+            or emb_status
+            or badge
+        )
+        clean_status = strip_html(raw_status) if raw_status else ""
+        if not clean_status or clean_status in ("—", "-", "null", "None"):
+            clean_status = badge or "Active"
 
         # Resolve Project
         raw_project = pick("project", "project_name", "property", "interested_project", "product")

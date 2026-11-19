@@ -101,8 +101,10 @@ export default function LeadPipelinePage() {
   const [transferSuccessMsg, setTransferSuccessMsg] = useState<string | null>(null);
   const [transferErrorMsg, setTransferErrorMsg] = useState<string | null>(null);
 
+  const [sampleSize, setSampleSize] = useState<number>(1500);
+
   // Fetch Pipeline Data
-  const loadData = useCallback(async (forceRefresh = false) => {
+  const loadData = useCallback(async (forceRefresh = false, targetLimit = sampleSize) => {
     try {
       if (forceRefresh) setRefreshing(true);
       else setLoading(true);
@@ -110,7 +112,7 @@ export default function LeadPipelinePage() {
 
       // Load both in parallel
       const [crmRes, internalRes] = await Promise.allSettled([
-        api.crm.getPipelineSummary({ force_refresh: forceRefresh, limit: 1500 }),
+        api.crm.getPipelineSummary({ force_refresh: forceRefresh, limit: targetLimit }),
         api.leadWorkflow.getPipelineSummary(),
       ]);
 
@@ -980,9 +982,28 @@ export default function LeadPipelinePage() {
                   Aggregated from external Somikoron CRM. Showing individual High Potential (HP), Potential (P), and project distribution.
                 </p>
               </div>
-              <span className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-lg font-mono">
-                {filteredCrmExecutives.length} Executives
-              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg">
+                  <span className="font-semibold text-slate-500 text-[11px]">Analysis Depth:</span>
+                  <select
+                    value={sampleSize}
+                    onChange={(e) => {
+                      const sz = Number(e.target.value);
+                      setSampleSize(sz);
+                      loadData(true, sz);
+                    }}
+                    disabled={loading || refreshing}
+                    className="font-mono text-xs font-bold text-slate-800 bg-transparent focus:outline-none cursor-pointer"
+                  >
+                    <option value={1500}>1,500 Leads (Fast)</option>
+                    <option value={3000}>3,000 Leads (Deep)</option>
+                    <option value={5000}>5,000 Leads (Maximum Sample)</option>
+                  </select>
+                </div>
+                <span className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-lg font-mono">
+                  {filteredCrmExecutives.length} Executives
+                </span>
+              </div>
             </div>
 
             <div className="overflow-x-auto">

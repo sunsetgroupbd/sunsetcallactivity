@@ -494,7 +494,7 @@ class CrmService:
         - Unassigned leads count and samples
         - Total CRM leads
         """
-        fetch_len = min(limit, 2000)
+        fetch_len = min(limit, 5000)
         res = await self.fetch_leads(
             force_refresh=force_refresh,
             length=fetch_len,

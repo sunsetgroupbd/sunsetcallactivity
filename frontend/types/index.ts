@@ -928,6 +928,98 @@ export interface LeadTransferLog {
   transferred_at: string;
 }
 
+export interface EmployeePipelineItem {
+  id: number;
+  full_name: string;
+  username: string;
+  email: string;
+  phone?: string | null;
+  designation?: string | null;
+  role: string;
+  team_id?: number | null;
+  team_name?: string | null;
+  director_name?: string | null;
+  manager_name?: string | null;
+  is_active: boolean;
+  total_leads: number;
+  hp_count: number;
+  p_count: number;
+  fup_count: number;
+  ni_count: number;
+  nr_count: number;
+  workload_level: "available" | "optimal" | "heavy" | "overloaded";
+  source_counts: Record<string, number>;
+  sample_leads?: Array<Record<string, any>>;
+}
+
+export interface PipelineOverview {
+  total_leads: number;
+  hp_count: number;
+  p_count: number;
+  fup_count: number;
+  ni_count: number;
+  nr_count: number;
+  unassigned_leads: number;
+  total_executives: number;
+}
+
+export interface LeadPipelineSummaryResponse {
+  overview: PipelineOverview;
+  employees: EmployeePipelineItem[];
+  unassigned_samples: Array<{
+    id: number;
+    name: string;
+    phone: string;
+    source: string;
+    status: string;
+    created_at?: string;
+  }>;
+}
+
+export interface CrmPipelineExecutive {
+  name: string;
+  total_leads: number;
+  hp_count: number;
+  p_count: number;
+  fup_count: number;
+  other_count: number;
+  projects: string[];
+  lead_samples: Array<{
+    id: string | number;
+    name: string;
+    phone: string;
+    project?: string;
+    status: string;
+    created_at?: string;
+  }>;
+}
+
+export interface CrmPipelineSummaryResponse {
+  success: boolean;
+  error?: string;
+  total_crm_leads?: number;
+  analyzed_count: number;
+  total_hp: number;
+  total_p: number;
+  total_fup: number;
+  total_other: number;
+  unassigned_count: number;
+  unassigned_leads: Array<{
+    id: string | number;
+    name: string;
+    phone: string;
+    project?: string;
+    status: string;
+    created_at?: string;
+    crm_link?: string;
+  }>;
+  executives: CrmPipelineExecutive[];
+  statuses_found: string[];
+  fetched_at?: string;
+  from_cache?: boolean;
+}
+
+
 
 
 

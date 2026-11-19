@@ -41,6 +41,22 @@ async def debug_crm_connection(current_user: User = Depends(get_current_user)) -
     return await svc.debug_connection()
 
 
+@router.get("/pipeline-summary")
+async def get_crm_pipeline_summary(
+    force_refresh: bool = Query(False, description="Bypass cache and re-fetch from CRM"),
+    limit: int = Query(1000, ge=100, le=5000, description="Number of leads to analyze"),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """
+    Aggregate Somikoron CRM leads by assigned executive:
+    HP, Potential, Follow Up counts, project spread, and unassigned leads.
+    Restricted to Administrators and Sub-Administrators.
+    """
+    _require_admin(current_user)
+    svc = CrmService()
+    return await svc.get_pipeline_summary(force_refresh=force_refresh, limit=limit)
+
+
 @router.get("/leads")
 async def get_crm_leads(
     force_refresh: bool = Query(False, description="Bypass cache and fetch live from CRM"),

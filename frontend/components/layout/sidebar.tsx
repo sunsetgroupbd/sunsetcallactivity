@@ -15,6 +15,7 @@ import {
   Network,
   Settings,
   Database,
+  GitFork,
   X,
   BellRing,
   LogOut,
@@ -52,6 +53,7 @@ export function Sidebar({
     { name: "Notice Board", href: "/notices", icon: BellRing },
     ...(isAdmin || isSubAdmin
       ? [
+          { name: "Lead Pipeline", href: "/lead-pipeline", icon: GitFork },
           { name: "CRM Leads", href: "/leads", icon: Database },
           { name: "Performance & Collection", href: "/reports/performance-collection", icon: Target },
           { name: "Executive Collection", href: "/reports/executive-collection", icon: FileSpreadsheet },

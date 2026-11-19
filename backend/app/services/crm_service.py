@@ -487,6 +487,141 @@ class CrmService:
                     "total": 0,
                 }
 
+    async def get_pipeline_summary(self, force_refresh: bool = False, limit: int = 1000) -> Dict[str, Any]:
+        """
+        Aggregate leads from Somikoron CRM grouped by assigned executive:
+        - HP, Potential, Follow Up counts per executive
+        - Unassigned leads count and samples
+        - Total CRM leads
+        """
+        fetch_len = min(limit, 2000)
+        res = await self.fetch_leads(
+            force_refresh=force_refresh,
+            length=fetch_len,
+            start=0,
+            from_date="1971-01-01",
+            active_status="Active",
+        )
+        if not res.get("success", False):
+            return res
+
+        leads = res.get("leads", [])
+        records_total = res.get("records_total") or len(leads)
+
+        exec_map: Dict[str, Dict[str, Any]] = {}
+        unassigned_leads: List[Dict[str, Any]] = []
+        statuses_found: set[str] = set()
+
+        total_hp = 0
+        total_p = 0
+        total_fup = 0
+        total_other = 0
+
+        for lead in leads:
+            assigned = (lead.get("assigned_to") or "").strip()
+            raw_status = (lead.get("status") or "").strip()
+            st_clean = raw_status.lower()
+            if raw_status and raw_status not in ("—", "-"):
+                statuses_found.add(raw_status)
+
+            is_hp = "high" in st_clean or st_clean in ("hp", "high potential", "high-potential")
+            is_p = not is_hp and ("potential" in st_clean or st_clean in ("p",))
+            is_fup = not is_hp and not is_p and ("follow" in st_clean or "fup" in st_clean or "fub" in st_clean)
+
+            if is_hp:
+                total_hp += 1
+            elif is_p:
+                total_p += 1
+            elif is_fup:
+                total_fup += 1
+            else:
+                total_other += 1
+
+            is_unassigned = (
+                not assigned
+                or assigned in ("—", "-", "Unassigned", "None", "null", "undefined")
+                or assigned.lower() in ("unassigned", "not assigned", "none")
+            )
+
+            if is_unassigned:
+                unassigned_leads.append({
+                    "id": lead.get("id"),
+                    "name": lead.get("name"),
+                    "phone": lead.get("phone"),
+                    "project": lead.get("project"),
+                    "status": raw_status,
+                    "created_at": lead.get("created_at"),
+                    "crm_link": lead.get("crm_link"),
+                })
+                continue
+
+            if assigned not in exec_map:
+                exec_map[assigned] = {
+                    "name": assigned,
+                    "total_leads": 0,
+                    "hp_count": 0,
+                    "p_count": 0,
+                    "fup_count": 0,
+                    "other_count": 0,
+                    "projects": set(),
+                    "lead_samples": [],
+                }
+
+            exec_map[assigned]["total_leads"] += 1
+            if is_hp:
+                exec_map[assigned]["hp_count"] += 1
+            elif is_p:
+                exec_map[assigned]["p_count"] += 1
+            elif is_fup:
+                exec_map[assigned]["fup_count"] += 1
+            else:
+                exec_map[assigned]["other_count"] += 1
+
+            proj = lead.get("project")
+            if proj and proj not in ("—", "-"):
+                exec_map[assigned]["projects"].add(proj)
+
+            if len(exec_map[assigned]["lead_samples"]) < 5:
+                exec_map[assigned]["lead_samples"].append({
+                    "id": lead.get("id"),
+                    "name": lead.get("name"),
+                    "phone": lead.get("phone"),
+                    "project": proj,
+                    "status": raw_status,
+                    "created_at": lead.get("created_at"),
+                })
+
+        executives = []
+        for name, data in exec_map.items():
+            executives.append({
+                "name": name,
+                "total_leads": data["total_leads"],
+                "hp_count": data["hp_count"],
+                "p_count": data["p_count"],
+                "fup_count": data["fup_count"],
+                "other_count": data["other_count"],
+                "projects": sorted(list(data["projects"]))[:6],
+                "lead_samples": data["lead_samples"],
+            })
+
+        executives.sort(key=lambda x: (x["total_leads"], x["hp_count"]), reverse=True)
+
+        return {
+            "success": True,
+            "total_crm_leads": records_total,
+            "analyzed_count": len(leads),
+            "total_hp": total_hp,
+            "total_p": total_p,
+            "total_fup": total_fup,
+            "total_other": total_other,
+            "unassigned_count": len(unassigned_leads),
+            "unassigned_leads": unassigned_leads[:50],
+            "executives": executives,
+            "statuses_found": sorted(list(statuses_found)),
+            "fetched_at": res.get("fetched_at"),
+            "from_cache": res.get("from_cache", False),
+        }
+
     async def debug_connection(self) -> Dict[str, Any]:
         """Diagnostic probe for testing CRM connection step-by-step."""
         diagnostics: Dict[str, Any] = {

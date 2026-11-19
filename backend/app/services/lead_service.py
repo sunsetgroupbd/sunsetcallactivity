@@ -26,6 +26,7 @@ from app.schemas.lead import (
     LeadTransferPreviewResponse,
     LeadTransferResponse,
     LeadTransferLogRead,
+    LeadPipelineSummaryResponse,
 )
 from app.schemas.user import UserRead
 
@@ -716,3 +717,18 @@ class LeadService:
                 )
             )
         return result
+
+    async def get_pipeline_summary(self, current_user: User) -> LeadPipelineSummaryResponse:
+        """
+        Retrieve complete company lead pipeline overview and employee-wise breakdown.
+        Strictly restricted to Admin and Sub-Admin.
+        """
+        if current_user.role not in (UserRole.ADMIN, UserRole.SUB_ADMIN):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied. Only Administrators and Sub-Administrators can access the lead pipeline.",
+            )
+
+        data = await self.lead_repo.get_pipeline_summary()
+        return LeadPipelineSummaryResponse(**data)
+

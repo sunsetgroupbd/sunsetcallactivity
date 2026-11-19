@@ -331,3 +331,174 @@ class LeadRepository:
         stmt = stmt.limit(limit).offset(offset)
         res = await self.db.execute(stmt)
         return list(res.scalars().all())
+
+    async def get_pipeline_summary(self) -> dict:
+        """
+        Aggregate lead pipeline metrics across all employees:
+        - Total company leads, HP, P, FUP, NI, NR
+        - Employee-by-employee HP, P, FUP, NI, NR breakdown
+        - Team / Director hierarchy
+        - Workload classification
+        - Unassigned leads
+        """
+        from app.models.user import User
+
+        # 1. Fetch all users with team and manager
+        users_stmt = (
+            select(User)
+            .options(
+                selectinload(User.team),
+                selectinload(User.reporting_manager),
+            )
+            .order_by(User.full_name.asc())
+        )
+        res_users = await self.db.execute(users_stmt)
+        users = list(res_users.scalars().all())
+
+        # 2. Get lead counts grouped by assigned_to_id and status
+        status_stmt = (
+            select(Lead.assigned_to_id, Lead.status, func.count(Lead.id))
+            .where(Lead.is_active == True)
+            .group_by(Lead.assigned_to_id, Lead.status)
+        )
+        res_status = await self.db.execute(status_stmt)
+        status_rows = res_status.all()
+
+        # 3. Get lead counts grouped by assigned_to_id and source
+        source_stmt = (
+            select(Lead.assigned_to_id, Lead.source, func.count(Lead.id))
+            .where(Lead.is_active == True)
+            .group_by(Lead.assigned_to_id, Lead.source)
+        )
+        res_source = await self.db.execute(source_stmt)
+        source_rows = res_source.all()
+
+        # 4. Fetch unassigned leads
+        unassigned_count_stmt = (
+            select(func.count(Lead.id))
+            .where(Lead.is_active == True, or_(Lead.assigned_to_id == None, Lead.assigned_to_id == 0))
+        )
+        unassigned_total = (await self.db.execute(unassigned_count_stmt)).scalar() or 0
+
+        unassigned_stmt = (
+            select(Lead)
+            .where(Lead.is_active == True, or_(Lead.assigned_to_id == None, Lead.assigned_to_id == 0))
+            .order_by(Lead.created_at.desc())
+            .limit(20)
+        )
+        res_unassigned = await self.db.execute(unassigned_stmt)
+        unassigned_leads = list(res_unassigned.scalars().all())
+
+        # Build lookup tables
+        emp_stats: dict[int, dict] = {}
+        for emp_id, stat, cnt in status_rows:
+            if not emp_id:
+                continue
+            if emp_id not in emp_stats:
+                emp_stats[emp_id] = {"hp": 0, "p": 0, "fup": 0, "ni": 0, "nr": 0, "total": 0}
+            clean_s = (stat or "fup").lower().strip()
+            if clean_s == "hp":
+                emp_stats[emp_id]["hp"] += cnt
+            elif clean_s == "p":
+                emp_stats[emp_id]["p"] += cnt
+            elif clean_s in ("fup", "fub"):
+                emp_stats[emp_id]["fup"] += cnt
+            elif clean_s == "ni":
+                emp_stats[emp_id]["ni"] += cnt
+            elif clean_s == "nr":
+                emp_stats[emp_id]["nr"] += cnt
+            emp_stats[emp_id]["total"] += cnt
+
+        emp_sources: dict[int, dict] = {}
+        for emp_id, src, cnt in source_rows:
+            if not emp_id:
+                continue
+            if emp_id not in emp_sources:
+                emp_sources[emp_id] = {}
+            clean_src = (src or "cold_lead").lower().strip()
+            emp_sources[emp_id][clean_src] = emp_sources[emp_id].get(clean_src, 0) + cnt
+
+        # Totals across company
+        total_leads = sum(s["total"] for s in emp_stats.values()) + unassigned_total
+        total_hp = sum(s["hp"] for s in emp_stats.values())
+        total_p = sum(s["p"] for s in emp_stats.values())
+        total_fup = sum(s["fup"] for s in emp_stats.values())
+        total_ni = sum(s["ni"] for s in emp_stats.values())
+        total_nr = sum(s["nr"] for s in emp_stats.values())
+
+        # Build employee pipeline items
+        employee_items = []
+        for u in users:
+            stats = emp_stats.get(u.id, {"hp": 0, "p": 0, "fup": 0, "ni": 0, "nr": 0, "total": 0})
+            sources = emp_sources.get(u.id, {})
+
+            active_cnt = stats["total"]
+            if active_cnt < 30:
+                workload = "available"
+            elif active_cnt <= 80:
+                workload = "optimal"
+            elif active_cnt <= 150:
+                workload = "heavy"
+            else:
+                workload = "overloaded"
+
+            team_name = u.team.name if u.team else None
+            director_name = u.team.director_name if u.team else None
+            manager_name = u.reporting_manager.full_name if u.reporting_manager else None
+
+            role_str = u.role.value if hasattr(u.role, "value") else str(u.role)
+
+            employee_items.append({
+                "id": u.id,
+                "full_name": u.full_name,
+                "username": u.username,
+                "email": u.email,
+                "phone": u.phone,
+                "designation": u.designation or role_str,
+                "role": role_str,
+                "team_id": u.team_id,
+                "team_name": team_name,
+                "director_name": director_name,
+                "manager_name": manager_name,
+                "is_active": u.is_active,
+                "total_leads": stats["total"],
+                "hp_count": stats["hp"],
+                "p_count": stats["p"],
+                "fup_count": stats["fup"],
+                "ni_count": stats["ni"],
+                "nr_count": stats["nr"],
+                "workload_level": workload,
+                "source_counts": sources,
+                "sample_leads": [],
+            })
+
+        # Sort employees: first by total_leads descending, then hp_count descending
+        employee_items.sort(key=lambda x: (x["total_leads"], x["hp_count"]), reverse=True)
+
+        unassigned_samples_data = [
+            {
+                "id": l.id,
+                "name": l.name,
+                "phone": l.phone,
+                "source": l.source,
+                "status": l.status,
+                "created_at": l.created_at.strftime("%Y-%m-%d %H:%M") if l.created_at else "",
+            }
+            for l in unassigned_leads
+        ]
+
+        return {
+            "overview": {
+                "total_leads": total_leads,
+                "hp_count": total_hp,
+                "p_count": total_p,
+                "fup_count": total_fup,
+                "ni_count": total_ni,
+                "nr_count": total_nr,
+                "unassigned_leads": unassigned_total,
+                "total_executives": len(users),
+            },
+            "employees": employee_items,
+            "unassigned_samples": unassigned_samples_data,
+        }
+

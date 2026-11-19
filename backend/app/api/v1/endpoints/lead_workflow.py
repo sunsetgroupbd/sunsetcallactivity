@@ -22,6 +22,7 @@ from app.schemas.lead import (
     LeadTransferPreviewResponse,
     LeadTransferResponse,
     LeadTransferLogRead,
+    LeadPipelineSummaryResponse,
 )
 from app.schemas.user import UserRead
 from app.services.lead_service import LeadService
@@ -37,6 +38,21 @@ async def get_lead_summary(
 ):
     svc = LeadService(db)
     return await svc.get_summary(current_user, filter_employee_id=employee_id)
+
+
+@router.get("/pipeline-summary", response_model=LeadPipelineSummaryResponse)
+async def get_lead_pipeline_summary(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get full company lead pipeline metrics: HP, P, FUP, unassigned leads,
+    and individual employee workload distribution.
+    Strictly restricted to Admin and Sub-Admin.
+    """
+    svc = LeadService(db)
+    return await svc.get_pipeline_summary(current_user)
+
 
 
 @router.get("/shareable-colleagues", response_model=List[UserRead])

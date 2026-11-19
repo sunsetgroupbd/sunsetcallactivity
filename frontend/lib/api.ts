@@ -41,6 +41,8 @@ import {
   LeadTransferPayload,
   LeadTransferResponse,
   LeadTransferLog,
+  LeadPipelineSummaryResponse,
+  CrmPipelineSummaryResponse,
 } from "@/types";
 
 const API_BASE =
@@ -1028,6 +1030,16 @@ export const api = {
       const queryStr = q.toString() ? `?${q.toString()}` : "";
       return request(`/crm/leads${queryStr}`);
     },
+    getPipelineSummary: async (params?: {
+      force_refresh?: boolean;
+      limit?: number;
+    }): Promise<CrmPipelineSummaryResponse> => {
+      const q = new URLSearchParams();
+      if (params?.force_refresh) q.set("force_refresh", "true");
+      if (params?.limit) q.set("limit", params.limit.toString());
+      const queryStr = q.toString() ? `?${q.toString()}` : "";
+      return request(`/crm/pipeline-summary${queryStr}`);
+    },
     getDebug: async (): Promise<{
       configured: boolean;
       base_url: string;
@@ -1162,6 +1174,12 @@ export const api = {
       const queryStr = q.toString() ? `?${q.toString()}` : "";
       return request(`/leads-workflow/transfer-history${queryStr}`);
     },
+    getPipelineSummary: async (): Promise<LeadPipelineSummaryResponse> => {
+      return request("/leads-workflow/pipeline-summary");
+    },
+  },
+  get leads() {
+    return this.leadWorkflow;
   },
 };
 

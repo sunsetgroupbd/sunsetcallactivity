@@ -156,3 +156,47 @@ class LeadTransferLogRead(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ─── Lead Pipeline & Distribution Schemas (Admin / Sub-Admin Only) ────────────
+
+class EmployeePipelineItem(BaseModel):
+    id: int
+    full_name: str
+    username: str
+    email: str
+    phone: Optional[str] = None
+    designation: Optional[str] = None
+    role: str
+    team_id: Optional[int] = None
+    team_name: Optional[str] = None
+    director_name: Optional[str] = None
+    manager_name: Optional[str] = None
+    is_active: bool = True
+    total_leads: int = 0
+    hp_count: int = 0
+    p_count: int = 0
+    fup_count: int = 0
+    ni_count: int = 0
+    nr_count: int = 0
+    workload_level: str = "optimal"  # "available", "optimal", "heavy", "overloaded"
+    source_counts: dict = Field(default_factory=dict)
+    sample_leads: List[dict] = Field(default_factory=list)
+
+
+class PipelineOverview(BaseModel):
+    total_leads: int = 0
+    hp_count: int = 0
+    p_count: int = 0
+    fup_count: int = 0
+    ni_count: int = 0
+    nr_count: int = 0
+    unassigned_leads: int = 0
+    total_executives: int = 0
+
+
+class LeadPipelineSummaryResponse(BaseModel):
+    overview: PipelineOverview
+    employees: List[EmployeePipelineItem]
+    unassigned_samples: List[dict] = Field(default_factory=list)
+

@@ -984,6 +984,7 @@ export interface CrmPipelineExecutive {
   fup_count: number;
   other_count: number;
   status_breakdown?: Record<string, number>;
+  source_breakdown?: Record<string, number>;
   projects: string[];
   lead_samples: Array<{
     id: string | number;
@@ -991,6 +992,7 @@ export interface CrmPipelineExecutive {
     phone: string;
     project?: string;
     status: string;
+    source?: string;
     created_at?: string;
     badge?: string;
     lead_cat_id?: string | number;
@@ -1008,6 +1010,8 @@ export interface CrmPipelineSummaryResponse {
   total_fup: number;
   total_other: number;
   status_counts?: Record<string, number>;
+  source_counts?: Record<string, number>;
+  sources_found?: string[];
   unassigned_count: number;
   unassigned_leads: Array<{
     id: string | number;
@@ -1015,6 +1019,7 @@ export interface CrmPipelineSummaryResponse {
     phone: string;
     project?: string;
     status: string;
+    source?: string;
     created_at?: string;
     crm_link?: string;
   }>;

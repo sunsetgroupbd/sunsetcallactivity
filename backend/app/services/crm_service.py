@@ -567,6 +567,8 @@ class CrmService:
         unassigned_leads: List[Dict[str, Any]] = []
         statuses_found: set[str] = set()
         status_counts: Dict[str, int] = {}
+        sources_found: set[str] = set()
+        source_counts: Dict[str, int] = {}
 
         total_hp = 0
         total_p = 0
@@ -648,6 +650,12 @@ class CrmService:
                 })
                 continue
 
+            source_val = (lead.get("source") or "").strip()
+            if not source_val or source_val in ("—", "-", "null", "None", ""):
+                source_val = "Direct / Other"
+            sources_found.add(source_val)
+            source_counts[source_val] = source_counts.get(source_val, 0) + 1
+
             if assigned not in exec_map:
                 exec_map[assigned] = {
                     "name": assigned,
@@ -657,6 +665,7 @@ class CrmService:
                     "fup_count": 0,
                     "other_count": 0,
                     "status_breakdown": {},
+                    "source_breakdown": {},
                     "projects": set(),
                     "lead_samples": [],
                 }
@@ -664,6 +673,9 @@ class CrmService:
             exec_map[assigned]["total_leads"] += 1
             exec_map[assigned]["status_breakdown"][raw_status] = (
                 exec_map[assigned]["status_breakdown"].get(raw_status, 0) + 1
+            )
+            exec_map[assigned]["source_breakdown"][source_val] = (
+                exec_map[assigned]["source_breakdown"].get(source_val, 0) + 1
             )
             if is_hp:
                 exec_map[assigned]["hp_count"] += 1
@@ -687,6 +699,7 @@ class CrmService:
                     "phone": lead.get("phone"),
                     "project": proj,
                     "status": raw_status,
+                    "source": source_val,
                     "badge": lead.get("badge"),
                     "lead_cat_id": lead.get("lead_cat_id"),
                     "created_at": lead.get("created_at"),
@@ -703,6 +716,7 @@ class CrmService:
                 "fup_count": data["fup_count"],
                 "other_count": data["other_count"],
                 "status_breakdown": data["status_breakdown"],
+                "source_breakdown": data.get("source_breakdown", {}),
                 "projects": sorted(list(data["projects"]))[:6],
                 "lead_samples": data["lead_samples"],
             })
@@ -718,6 +732,8 @@ class CrmService:
             "total_fup": total_fup,
             "total_other": total_other,
             "status_counts": status_counts,
+            "source_counts": source_counts,
+            "sources_found": sorted(list(sources_found)),
             "unassigned_count": len(unassigned_leads),
             "unassigned_leads": unassigned_leads[:50],
             "executives": executives,
@@ -806,6 +822,8 @@ class CrmService:
             unassigned_leads: List[Dict[str, Any]] = []
             statuses_found: set[str] = set()
             status_counts: Dict[str, int] = {}
+            sources_found: set[str] = set()
+            source_counts: Dict[str, int] = {}
             total_hp = 0
             total_p = 0
             total_fup = 0
@@ -900,6 +918,12 @@ class CrmService:
                             })
                         continue
 
+                    source_val = (lead.get("source") or "").strip()
+                    if not source_val or source_val in ("—", "-", "null", "None", ""):
+                        source_val = "Direct / Other"
+                    sources_found.add(source_val)
+                    source_counts[source_val] = source_counts.get(source_val, 0) + 1
+
                     if assigned not in exec_map:
                         exec_map[assigned] = {
                             "name": assigned,
@@ -909,6 +933,7 @@ class CrmService:
                             "fup_count": 0,
                             "other_count": 0,
                             "status_breakdown": {},
+                            "source_breakdown": {},
                             "projects": set(),
                             "lead_samples": [],
                         }
@@ -916,6 +941,9 @@ class CrmService:
                     exec_map[assigned]["total_leads"] += 1
                     exec_map[assigned]["status_breakdown"][raw_status] = (
                         exec_map[assigned]["status_breakdown"].get(raw_status, 0) + 1
+                    )
+                    exec_map[assigned]["source_breakdown"][source_val] = (
+                        exec_map[assigned]["source_breakdown"].get(source_val, 0) + 1
                     )
                     if is_hp:
                         exec_map[assigned]["hp_count"] += 1
@@ -937,6 +965,7 @@ class CrmService:
                             "phone": lead.get("phone"),
                             "project": proj,
                             "status": raw_status,
+                            "source": source_val,
                             "badge": lead.get("badge"),
                             "lead_cat_id": lead.get("lead_cat_id"),
                             "created_at": lead.get("created_at"),
@@ -962,6 +991,7 @@ class CrmService:
                     "fup_count": data["fup_count"],
                     "other_count": data["other_count"],
                     "status_breakdown": data["status_breakdown"],
+                    "source_breakdown": data.get("source_breakdown", {}),
                     "projects": sorted(list(data["projects"]))[:6],
                     "lead_samples": data["lead_samples"],
                 })
@@ -977,6 +1007,8 @@ class CrmService:
                 "total_fup": total_fup,
                 "total_other": total_other,
                 "status_counts": status_counts,
+                "source_counts": source_counts,
+                "sources_found": sorted(list(sources_found)),
                 "unassigned_count": len(unassigned_leads),
                 "unassigned_leads": unassigned_leads,
                 "executives": executives,
@@ -1437,7 +1469,7 @@ class CrmService:
             clean_address = "—"
 
         # Resolve Source
-        raw_source = pick("source", "lead_source", "media", "campaign", "channel")
+        raw_source = pick("source_name", "source", "lead_source", "media", "campaign", "channel", "source_title")
         clean_source = strip_html(raw_source) if raw_source else ""
         if not clean_source or clean_source in ("—", "-"):
             clean_source = embedded.get("source", "—")

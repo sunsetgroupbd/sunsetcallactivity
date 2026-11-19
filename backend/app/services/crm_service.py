@@ -520,8 +520,22 @@ class CrmService:
 
         for lead in leads:
             assigned = (lead.get("assigned_to") or "").strip()
-            raw_status = (lead.get("status") or lead.get("badge") or "").strip()
-            if not raw_status or raw_status in ("—", "-"):
+            status_val = (lead.get("status") or "").strip()
+            badge_val = (lead.get("badge") or "").strip()
+            cat_val = (lead.get("lead_category") or "").strip()
+
+            # Determine the best stage representation (prefer specific stage over generic "Active")
+            if cat_val and cat_val not in ("—", "-"):
+                raw_status = cat_val
+            elif status_val and status_val.lower() not in ("active", "—", "-"):
+                raw_status = status_val
+            elif badge_val and badge_val.lower() not in ("active", "—", "-"):
+                raw_status = badge_val
+            elif status_val and status_val not in ("—", "-"):
+                raw_status = status_val
+            elif badge_val:
+                raw_status = badge_val
+            else:
                 raw_status = "Active"
 
             st_clean = raw_status.lower()
@@ -610,13 +624,18 @@ class CrmService:
                 exec_map[assigned]["projects"].add(proj)
 
             if len(exec_map[assigned]["lead_samples"]) < 5:
+                raw_obj = lead.get("raw")
+                raw_keys = list(raw_obj.keys()) if isinstance(raw_obj, dict) else (f"array_{len(raw_obj)}" if isinstance(raw_obj, (list, tuple)) else str(type(raw_obj)))
                 exec_map[assigned]["lead_samples"].append({
                     "id": lead.get("id"),
                     "name": lead.get("name"),
                     "phone": lead.get("phone"),
                     "project": proj,
                     "status": raw_status,
+                    "badge": lead.get("badge"),
+                    "lead_cat_id": lead.get("lead_cat_id"),
                     "created_at": lead.get("created_at"),
+                    "raw_keys": raw_keys,
                 })
 
         executives = []
@@ -980,37 +999,46 @@ class CrmService:
                         return val
             return None
 
-        # Check if any field contains the rich HTML lead-info block
-        html_blob = ""
-        for v in raw.values():
-            if isinstance(v, str) and ("lead-info" in v or "lead-field" in v or "lead-details" in v):
-                html_blob = v
-                break
-
+        # Comprehensive HTML parsing across ALL fields in raw
         embedded: Dict[str, str] = {}
         crm_link = None
         badge = None
+        badges: List[str] = []
 
-        if html_blob:
-            # Extract CRM details URL
-            href_m = re.search(r'href=["\']([^"\']+)["\']', html_blob, re.I)
-            if href_m:
-                crm_link = href_m.group(1).strip()
+        for v in raw.values():
+            if isinstance(v, str) and ("<" in v and ">" in v):
+                # Extract CRM details URL if present
+                if not crm_link:
+                    href_m = re.search(r'href=["\']([^"\']+)["\']', v, re.I)
+                    if href_m and ("lead" in href_m.group(1).lower() or "detail" in href_m.group(1).lower()):
+                        crm_link = href_m.group(1).strip()
 
-            # Extract badge (e.g. "New Assignment")
-            badge_m = re.search(r'<span[^>]*>(.*?)</span>', html_blob, re.I | re.S)
-            if badge_m:
-                b_text = strip_html(badge_m.group(1))
-                if b_text:
-                    badge = b_text
+                # Extract badges / labels (<span class="badge ..."> or <label class="..."> or any <span>)
+                span_matches = re.findall(r'<(?:span|label|strong|b)[^>]*>(.*?)</(?:span|label|strong|b)>', v, re.I | re.S)
+                for sm in span_matches:
+                    clean_b = strip_html(sm)
+                    if clean_b and clean_b not in ("—", "-", "...", "") and len(clean_b) < 60:
+                        badges.append(clean_b)
 
-            # Extract all <div class="lead-field">Key: Value</div>
-            field_matches = re.findall(r'<div[^>]*class=["\'][^"\']*lead-field[^"\']*["\'][^>]*>(.*?)</div>', html_blob, re.I | re.S)
-            for fm in field_matches:
-                clean_fm = strip_html(fm)
-                if ":" in clean_fm:
-                    k, val = clean_fm.split(":", 1)
-                    embedded[k.strip().lower()] = val.strip()
+                # Extract key: value pairs from divs, paragraphs, table cells, or bold tags
+                field_matches = re.findall(r'<(?:div|p|li|td)[^>]*>(.*?)</(?:div|p|li|td)>', v, re.I | re.S)
+                for fm in field_matches:
+                    clean_fm = strip_html(fm)
+                    if ":" in clean_fm:
+                        k, val = clean_fm.split(":", 1)
+                        clean_k = k.strip().lower()
+                        clean_v = val.strip()
+                        if clean_k and clean_v and clean_k not in embedded:
+                            embedded[clean_k] = clean_v
+
+        # Select primary badge (favor badges that look like sales categories)
+        for b in badges:
+            b_lower = b.lower()
+            if any(term in b_lower for term in ("hp", "potential", "follow", "fup", "hot", "warm", "cold", "booking", "sold", "lost", "interested", "active")):
+                badge = b
+                break
+        if not badge and badges:
+            badge = badges[0]
 
         # Resolve Clean Name
         raw_name = pick("name", "client_name", "customer_name", "full_name", "lead_name")
@@ -1073,25 +1101,52 @@ class CrmService:
         if not clean_source or clean_source in ("—", "-"):
             clean_source = embedded.get("source", "—")
 
-        # Resolve Status - check pick, embedded, badge, and HTML markup
+        # Resolve Status / Pipeline Category
+        lead_cat_id = pick("lead_cat_id", "category_id", "cat_id", "lead_category_id")
+
         emb_status = (
-            embedded.get("status")
-            or embedded.get("stage")
-            or embedded.get("lead status")
-            or embedded.get("category")
+            embedded.get("category")
             or embedded.get("lead category")
             or embedded.get("lead_category")
             or embedded.get("lead_cat")
+            or embedded.get("stage")
+            or embedded.get("lead stage")
             or embedded.get("priority")
+            or embedded.get("status")
+            or embedded.get("lead status")
         )
-        raw_status = (
-            pick("status", "lead_status", "stage", "category", "lead_type", "state", "lead_state")
+
+        stage_candidate = (
+            pick(
+                "lead_category",
+                "category_name",
+                "cat_name",
+                "lead_cat_name",
+                "category",
+                "lead_stage",
+                "stage_name",
+                "stage",
+                "pipeline_stage",
+                "sub_category",
+                "priority",
+                "priority_name",
+                "lead_type",
+            )
             or emb_status
-            or badge
+            or (badge if badge and badge.lower() not in ("active", "new assignment", "inactive") else None)
         )
-        clean_status = strip_html(raw_status) if raw_status else ""
+
+        general_status = pick("lead_status", "status", "state", "lead_state") or badge
+
+        if stage_candidate and stage_candidate.strip():
+            clean_status = strip_html(stage_candidate)
+        elif general_status and general_status.strip():
+            clean_status = strip_html(general_status)
+        else:
+            clean_status = "Active"
+
         if not clean_status or clean_status in ("—", "-", "null", "None"):
-            clean_status = badge or "Active"
+            clean_status = "Active"
 
         # Resolve Project
         raw_project = pick("project", "project_name", "property", "interested_project", "product")
@@ -1129,6 +1184,8 @@ class CrmService:
             "email": clean_email,
             "project": clean_project,
             "status": clean_status,
+            "lead_cat_id": lead_cat_id,
+            "stage": clean_status,
             "source": clean_source,
             "assigned_to": clean_assigned,
             "created_at": clean_created,

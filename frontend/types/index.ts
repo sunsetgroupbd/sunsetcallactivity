@@ -992,6 +992,9 @@ export interface CrmPipelineExecutive {
     project?: string;
     status: string;
     created_at?: string;
+    badge?: string;
+    lead_cat_id?: string | number;
+    raw_keys?: any;
   }>;
 }
 

@@ -83,6 +83,9 @@ export default function LeadPipelinePage() {
     source?: string;
     created_at?: string;
     crm_link?: string;
+    badge?: string;
+    lead_cat_id?: string | number;
+    raw_keys?: any;
   }>>([]);
   const [drawerLoading, setDrawerLoading] = useState(false);
   const [drawerSearch, setDrawerSearch] = useState("");
@@ -188,6 +191,9 @@ export default function LeadPipelinePage() {
         project: l.project || "—",
         status: l.status,
         created_at: l.created_at,
+        badge: l.badge,
+        lead_cat_id: l.lead_cat_id,
+        raw_keys: l.raw_keys,
       }))
     );
   };
@@ -1425,9 +1431,21 @@ export default function LeadPipelinePage() {
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div>
-                              <p className="font-bold text-slate-900 text-xs">
-                                {lead.name}
-                              </p>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <p className="font-bold text-slate-900 text-xs">
+                                  {lead.name}
+                                </p>
+                                {lead.badge && (
+                                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                    {lead.badge}
+                                  </span>
+                                )}
+                                {lead.lead_cat_id && (
+                                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
+                                    Cat #{lead.lead_cat_id}
+                                  </span>
+                                )}
+                              </div>
                               <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-500">
                                 <span className="font-mono flex items-center gap-1">
                                   <Phone className="w-3 h-3 text-slate-400" />

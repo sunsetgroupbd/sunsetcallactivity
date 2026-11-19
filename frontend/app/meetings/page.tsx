@@ -27,6 +27,8 @@ import {
   Check,
   Building,
   Tent,
+  FileText,
+  ArrowRight,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import {
@@ -1364,21 +1366,33 @@ function MeetingTimeDailyContent() {
                               {log.title || (log.visit_type === "fair" ? "Fair Duty" : "Client / Site Visit")}
                             </span>
                             <span
-                              className={`text-[10px] font-bold px-2 py-0.2 rounded-full border ${
+                              className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                                 log.visit_type === "fair"
                                   ? "bg-amber-50 text-amber-900 border-amber-200"
                                   : "bg-emerald-50 text-emerald-900 border-emerald-200"
                               }`}
                             >
-                              {log.visit_type === "fair" ? "🎪 Fair Duty" : "🏢 Client / Site"}
+                              {log.visit_type === "fair" ? (
+                                <>
+                                  <Tent className="w-3 h-3 text-amber-700" />
+                                  <span>Fair Duty</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Building className="w-3 h-3 text-emerald-700" />
+                                  <span>Client / Site</span>
+                                </>
+                              )}
                             </span>
                             {log.status === "in_progress" ? (
-                              <span className="text-[10px] font-bold px-2 py-0.2 rounded-full bg-amber-500 text-white animate-pulse">
-                                At Fair (Out)
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500 text-white animate-pulse">
+                                <Clock className="w-2.5 h-2.5" />
+                                <span>At Fair (Out)</span>
                               </span>
                             ) : (
-                              <span className="text-[10px] font-bold px-2 py-0.2 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                                ✓ Present
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                <Check className="w-3 h-3 text-emerald-700" />
+                                <span>Present</span>
                               </span>
                             )}
                           </div>
@@ -1389,13 +1403,15 @@ function MeetingTimeDailyContent() {
                               </span>
                             )}
                             {log.return_time && (
-                              <span>
-                                → Back: <strong className="font-mono text-slate-700">{log.return_time}</strong>
+                              <span className="inline-flex items-center gap-1">
+                                <ArrowRight className="w-3 h-3 text-slate-400" />
+                                <span>Back:</span> <strong className="font-mono text-slate-700">{log.return_time}</strong>
                               </span>
                             )}
                             {log.duration_minutes > 0 && (
-                              <span className="font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200 text-[11px]">
-                                ⏱ {formatMinutes(log.duration_minutes)}
+                              <span className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 text-[11px]">
+                                <Clock className="w-3 h-3 text-emerald-700" />
+                                <span>{formatMinutes(log.duration_minutes)}</span>
                               </span>
                             )}
                           </div>
@@ -1495,12 +1511,14 @@ function MeetingTimeDailyContent() {
                               </span>
                             </div>
                             <div className="flex items-center gap-2 mt-1 text-xs text-slate-600 flex-wrap">
-                              <span className="font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
-                                ⏱ {formatMinutes(act.durationMinutes)} ({act.durationMinutes} min)
+                              <span className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
+                                <Clock className="w-3 h-3 text-emerald-700" />
+                                <span>{formatMinutes(act.durationMinutes)} ({act.durationMinutes} min)</span>
                               </span>
                               {act.count !== undefined && (
-                                <span className="font-bold text-blue-800 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200/60">
-                                  👥 {act.count} {act.count === 1 ? "visit" : "visits"}
+                                <span className="inline-flex items-center gap-1 font-bold text-blue-800 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200/60">
+                                  <Users className="w-3 h-3 text-blue-700" />
+                                  <span>{act.count} {act.count === 1 ? "visit" : "visits"}</span>
                                 </span>
                               )}
                             </div>
@@ -2025,21 +2043,33 @@ function MeetingTimeDailyContent() {
                           {log.title || (log.visit_type === "fair" ? "Fair Duty" : "Client / Site Visit")}
                         </span>
                         <span
-                          className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full border ${
+                          className={`inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${
                             log.visit_type === "fair"
                               ? "bg-amber-50 text-amber-900 border-amber-200"
                               : "bg-emerald-50 text-emerald-900 border-emerald-200"
                           }`}
                         >
-                          {log.visit_type === "fair" ? "🎪 Fair Duty" : "🏢 Client / Site"}
+                          {log.visit_type === "fair" ? (
+                            <>
+                              <Tent className="w-2.5 h-2.5 text-amber-700" />
+                              <span>Fair Duty</span>
+                            </>
+                          ) : (
+                            <>
+                              <Building className="w-2.5 h-2.5 text-emerald-700" />
+                              <span>Client / Site</span>
+                            </>
+                          )}
                         </span>
                         {log.status === "in_progress" ? (
-                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-amber-500 text-white animate-pulse">
-                            At Fair (Out)
+                          <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500 text-white animate-pulse">
+                            <Clock className="w-2.5 h-2.5" />
+                            <span>At Fair (Out)</span>
                           </span>
                         ) : (
-                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                            ✓ Present
+                          <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            <Check className="w-2.5 h-2.5 text-emerald-700" />
+                            <span>Present</span>
                           </span>
                         )}
                       </div>
@@ -2050,13 +2080,15 @@ function MeetingTimeDailyContent() {
                           </span>
                         )}
                         {log.return_time && (
-                          <span>
-                            → Back: <strong className="font-mono text-slate-700">{log.return_time}</strong>
+                          <span className="inline-flex items-center gap-1">
+                            <ArrowRight className="w-2.5 h-2.5 text-slate-400" />
+                            <span>Back:</span> <strong className="font-mono text-slate-700">{log.return_time}</strong>
                           </span>
                         )}
                         {log.duration_minutes > 0 && (
-                          <span className="font-bold text-emerald-800 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200 text-[10px]">
-                            ⏱ {formatMinutes(log.duration_minutes)}
+                          <span className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-200 text-[10px]">
+                            <Clock className="w-2.5 h-2.5 text-emerald-700" />
+                            <span>{formatMinutes(log.duration_minutes)}</span>
                           </span>
                         )}
                       </div>
@@ -2323,25 +2355,27 @@ function MeetingTimeDailyContent() {
                     type="button"
                     onClick={() => setFairMode("live")}
                     className={cn(
-                      "flex-1 py-1.5 text-xs font-bold rounded-md transition text-center cursor-pointer",
+                      "inline-flex items-center justify-center gap-1.5 flex-1 py-1.5 text-xs font-bold rounded-md transition text-center cursor-pointer",
                       fairMode === "live"
                         ? "bg-white text-emerald-800 shadow-xs font-extrabold"
                         : "text-slate-600 hover:text-slate-900"
                     )}
                   >
-                    🚀 Leaving Now (Going to Fair)
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Leaving Now (Going to Fair)</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setFairMode("manual")}
                     className={cn(
-                      "flex-1 py-1.5 text-xs font-bold rounded-md transition text-center cursor-pointer",
+                      "inline-flex items-center justify-center gap-1.5 flex-1 py-1.5 text-xs font-bold rounded-md transition text-center cursor-pointer",
                       fairMode === "manual"
                         ? "bg-white text-emerald-800 shadow-xs font-extrabold"
                         : "text-slate-600 hover:text-slate-900"
                     )}
                   >
-                    📝 Completed (Enter Times)
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>Completed (Enter Times)</span>
                   </button>
                 </div>
 

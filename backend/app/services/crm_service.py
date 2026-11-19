@@ -4,9 +4,12 @@ Fetches lead data through a secure backend proxy with session management, token 
 """
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import re
 import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 import httpx
 
@@ -25,8 +28,52 @@ class CrmService:
     _cookie_timestamp: float = 0
     _dynamic_token: Optional[str] = None
 
+    # Full 50,000+ Lead Pipeline Aggregation Cache & Live Background Task State
+    _cached_full_pipeline: Optional[Dict[str, Any]] = None
+    _sync_state: Dict[str, Any] = {
+        "running": False,
+        "current": 0,
+        "total": 0,
+        "percent": 0,
+        "status": "idle",
+        "started_at": None,
+        "completed_at": None,
+        "error": None,
+    }
+    _sync_cancel_requested: bool = False
+    _sync_task: Optional[asyncio.Task] = None
+
     CACHE_TTL_SECONDS = 300  # 5 minutes cache
     SESSION_TTL_SECONDS = 3600  # 1 hour session cookie validity
+
+    @classmethod
+    def _cache_file_path(cls) -> Path:
+        return Path(__file__).resolve().parent.parent.parent / "crm_pipeline_cache.json"
+
+    @classmethod
+    def _load_pipeline_cache(cls) -> Optional[Dict[str, Any]]:
+        if cls._cached_full_pipeline:
+            return cls._cached_full_pipeline
+        fpath = cls._cache_file_path()
+        if fpath.exists():
+            try:
+                with open(fpath, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    cls._cached_full_pipeline = data
+                    return data
+            except Exception as e:
+                logger.warning("Failed to read crm_pipeline_cache.json: %s", e)
+        return None
+
+    @classmethod
+    def _save_pipeline_cache(cls, data: Dict[str, Any]) -> None:
+        cls._cached_full_pipeline = data
+        fpath = cls._cache_file_path()
+        try:
+            with open(fpath, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.warning("Failed to save crm_pipeline_cache.json: %s", e)
 
     def __init__(self) -> None:
         import os
@@ -487,13 +534,18 @@ class CrmService:
                     "total": 0,
                 }
 
-    async def get_pipeline_summary(self, force_refresh: bool = False, limit: int = 1000) -> Dict[str, Any]:
+    async def get_pipeline_summary(self, force_refresh: bool = False, limit: int = 1500) -> Dict[str, Any]:
         """
         Aggregate leads from Somikoron CRM grouped by assigned executive:
         - HP, Potential, Follow Up counts per executive
         - Unassigned leads count and samples
         - Total CRM leads
         """
+        # If full sync cache exists on disk or in memory and not forcing a fresh live sample
+        cached = self._load_pipeline_cache()
+        if cached and not force_refresh:
+            return cached
+
         fetch_len = min(limit, 5000)
         res = await self.fetch_leads(
             force_refresh=force_refresh,
@@ -503,6 +555,9 @@ class CrmService:
             active_status="Active",
         )
         if not res.get("success", False):
+            # If fetch failed but we have cached data, return cached
+            if cached:
+                return cached
             return res
 
         leads = res.get("leads", [])
@@ -654,7 +709,7 @@ class CrmService:
 
         executives.sort(key=lambda x: (x["total_leads"], x["hp_count"]), reverse=True)
 
-        return {
+        summary_result = {
             "success": True,
             "total_crm_leads": records_total,
             "analyzed_count": len(leads),
@@ -669,7 +724,293 @@ class CrmService:
             "statuses_found": sorted(list(statuses_found)),
             "fetched_at": res.get("fetched_at"),
             "from_cache": res.get("from_cache", False),
+            "is_full_sync": bool(cached and cached.get("is_full_sync")),
         }
+        if not cached:
+            self._save_pipeline_cache(summary_result)
+        return summary_result
+
+    async def start_full_sync(self, batch_size: int = 1000) -> Dict[str, Any]:
+        """Start full CRM lead aggregation in the background across all 50k+ leads."""
+        if CrmService._sync_state.get("running"):
+            return {
+                "started": False,
+                "message": "Full sync is already running.",
+                "status": CrmService._sync_state,
+            }
+
+        CrmService._sync_cancel_requested = False
+        target_total = CrmService._cached_records_total or 53442
+        CrmService._sync_state = {
+            "running": True,
+            "current": 0,
+            "total": target_total,
+            "percent": 0,
+            "status": "Connecting to Somikoron CRM...",
+            "started_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "completed_at": None,
+            "error": None,
+        }
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.get_event_loop()
+
+        CrmService._sync_task = loop.create_task(self._run_full_sync_loop(batch_size=batch_size))
+        return {
+            "started": True,
+            "message": "Full CRM lead sync started.",
+            "status": CrmService._sync_state,
+        }
+
+    def get_sync_status(self) -> Dict[str, Any]:
+        """Return current status and progress of the background full sync."""
+        st = dict(CrmService._sync_state)
+        cached = self._load_pipeline_cache()
+        if cached:
+            st["last_synced_at"] = cached.get("synced_at") or cached.get("fetched_at")
+            st["has_cache"] = True
+            st["cached_total"] = cached.get("analyzed_count")
+            st["is_full_sync"] = cached.get("is_full_sync", False)
+        else:
+            st["has_cache"] = False
+        return st
+
+    def cancel_sync(self) -> Dict[str, Any]:
+        """Cancel ongoing sync."""
+        if CrmService._sync_state.get("running"):
+            CrmService._sync_cancel_requested = True
+            CrmService._sync_state["status"] = "Cancelling sync..."
+            return {"cancelled": True, "message": "Cancellation requested."}
+        return {"cancelled": False, "message": "No sync is currently running."}
+
+    async def _run_full_sync_loop(self, batch_size: int = 1000) -> None:
+        """Background worker that streams and aggregates all leads in batches of 1,000."""
+        try:
+            # 1. Probe first batch to detect exact total leads in CRM
+            probe_res = await self.fetch_leads(
+                force_refresh=True,
+                length=batch_size,
+                start=0,
+                from_date="1971-01-01",
+                active_status="Active",
+            )
+            if not probe_res.get("success", False):
+                raise RuntimeError(probe_res.get("error", "Failed to connect to Somikoron CRM"))
+
+            total_records = probe_res.get("records_total") or probe_res.get("records_filtered") or 53442
+            CrmService._sync_state["total"] = total_records
+
+            exec_map: Dict[str, Dict[str, Any]] = {}
+            unassigned_leads: List[Dict[str, Any]] = []
+            statuses_found: set[str] = set()
+            status_counts: Dict[str, int] = {}
+            total_hp = 0
+            total_p = 0
+            total_fup = 0
+            total_other = 0
+            fetched_count = 0
+            start = 0
+
+            while start < total_records:
+                if CrmService._sync_cancel_requested:
+                    logger.info("CRM full sync cancelled by user request at %d leads.", fetched_count)
+                    break
+
+                if start == 0:
+                    b_res = probe_res
+                else:
+                    b_res = await self.fetch_leads(
+                        force_refresh=False,
+                        length=batch_size,
+                        start=start,
+                        from_date="1971-01-01",
+                        active_status="Active",
+                    )
+                    if not b_res.get("success", False):
+                        await asyncio.sleep(1.5)
+                        b_res = await self.fetch_leads(
+                            force_refresh=True,
+                            length=batch_size,
+                            start=start,
+                            from_date="1971-01-01",
+                            active_status="Active",
+                        )
+                        if not b_res.get("success", False):
+                            logger.error("CRM batch failed at start=%d: %s", start, b_res.get("error"))
+                            break
+
+                leads = b_res.get("leads", [])
+                if not leads:
+                    break
+
+                for lead in leads:
+                    assigned = (lead.get("assigned_to") or "").strip()
+                    status_val = (lead.get("status") or "").strip()
+                    badge_val = (lead.get("badge") or "").strip()
+                    cat_val = (lead.get("lead_category") or "").strip()
+
+                    if cat_val and cat_val not in ("—", "-"):
+                        raw_status = cat_val
+                    elif status_val and status_val.lower() not in ("active", "—", "-"):
+                        raw_status = status_val
+                    elif badge_val and badge_val.lower() not in ("active", "—", "-"):
+                        raw_status = badge_val
+                    elif status_val and status_val not in ("—", "-"):
+                        raw_status = status_val
+                    elif badge_val:
+                        raw_status = badge_val
+                    else:
+                        raw_status = "Active"
+
+                    st_clean = raw_status.lower()
+                    statuses_found.add(raw_status)
+                    status_counts[raw_status] = status_counts.get(raw_status, 0) + 1
+
+                    is_hp = any(x in st_clean for x in ("high", "hp", "hot", "top", "priority"))
+                    is_p = not is_hp and (any(x in st_clean for x in ("potential", "positive", "pos", "warm", "interested")) or st_clean in ("p", "pot"))
+                    is_fup = not is_hp and not is_p and any(x in st_clean for x in ("follow", "fup", "fub", "call", "next", "scheduled"))
+
+                    if is_hp:
+                        total_hp += 1
+                    elif is_p:
+                        total_p += 1
+                    elif is_fup:
+                        total_fup += 1
+                    else:
+                        total_other += 1
+
+                    is_unassigned = (
+                        not assigned
+                        or assigned in ("—", "-", "Unassigned", "None", "null")
+                        or assigned.lower() in ("unassigned", "not assigned", "none")
+                    )
+
+                    if is_unassigned:
+                        if len(unassigned_leads) < 100:
+                            unassigned_leads.append({
+                                "id": lead.get("id"),
+                                "name": lead.get("name"),
+                                "phone": lead.get("phone"),
+                                "project": lead.get("project"),
+                                "status": raw_status,
+                                "created_at": lead.get("created_at"),
+                                "crm_link": lead.get("crm_link"),
+                            })
+                        continue
+
+                    if assigned not in exec_map:
+                        exec_map[assigned] = {
+                            "name": assigned,
+                            "total_leads": 0,
+                            "hp_count": 0,
+                            "p_count": 0,
+                            "fup_count": 0,
+                            "other_count": 0,
+                            "status_breakdown": {},
+                            "projects": set(),
+                            "lead_samples": [],
+                        }
+
+                    exec_map[assigned]["total_leads"] += 1
+                    exec_map[assigned]["status_breakdown"][raw_status] = (
+                        exec_map[assigned]["status_breakdown"].get(raw_status, 0) + 1
+                    )
+                    if is_hp:
+                        exec_map[assigned]["hp_count"] += 1
+                    elif is_p:
+                        exec_map[assigned]["p_count"] += 1
+                    elif is_fup:
+                        exec_map[assigned]["fup_count"] += 1
+                    else:
+                        exec_map[assigned]["other_count"] += 1
+
+                    proj = lead.get("project")
+                    if proj and proj not in ("—", "-"):
+                        exec_map[assigned]["projects"].add(proj)
+
+                    if len(exec_map[assigned]["lead_samples"]) < 5:
+                        exec_map[assigned]["lead_samples"].append({
+                            "id": lead.get("id"),
+                            "name": lead.get("name"),
+                            "phone": lead.get("phone"),
+                            "project": proj,
+                            "status": raw_status,
+                            "badge": lead.get("badge"),
+                            "lead_cat_id": lead.get("lead_cat_id"),
+                            "created_at": lead.get("created_at"),
+                        })
+
+                fetched_count += len(leads)
+                start += len(leads)
+                pct = min(100, round((fetched_count / max(total_records, 1)) * 100))
+                CrmService._sync_state["current"] = fetched_count
+                CrmService._sync_state["percent"] = pct
+                CrmService._sync_state["status"] = f"Processed {fetched_count:,} of {total_records:,} leads ({pct}%)..."
+
+                # Brief non-blocking sleep to keep Somikoron CRM server healthy
+                await asyncio.sleep(0.04)
+
+            executives = []
+            for name, data in exec_map.items():
+                executives.append({
+                    "name": name,
+                    "total_leads": data["total_leads"],
+                    "hp_count": data["hp_count"],
+                    "p_count": data["p_count"],
+                    "fup_count": data["fup_count"],
+                    "other_count": data["other_count"],
+                    "status_breakdown": data["status_breakdown"],
+                    "projects": sorted(list(data["projects"]))[:6],
+                    "lead_samples": data["lead_samples"],
+                })
+
+            executives.sort(key=lambda x: (x["total_leads"], x["hp_count"]), reverse=True)
+
+            summary_payload = {
+                "success": True,
+                "total_crm_leads": total_records,
+                "analyzed_count": fetched_count,
+                "total_hp": total_hp,
+                "total_p": total_p,
+                "total_fup": total_fup,
+                "total_other": total_other,
+                "status_counts": status_counts,
+                "unassigned_count": len(unassigned_leads),
+                "unassigned_leads": unassigned_leads,
+                "executives": executives,
+                "statuses_found": sorted(list(statuses_found)),
+                "synced_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "is_full_sync": True,
+                "from_cache": True,
+            }
+
+            self._save_pipeline_cache(summary_payload)
+
+            was_cancelled = CrmService._sync_cancel_requested
+            CrmService._sync_state = {
+                "running": False,
+                "success": not was_cancelled,
+                "current": fetched_count,
+                "total": total_records,
+                "percent": 100 if not was_cancelled else pct,
+                "status": f"Completed! All {fetched_count:,} leads aggregated across {len(executives)} executives." if not was_cancelled else f"Stopped at {fetched_count:,} leads.",
+                "completed_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "error": None,
+            }
+        except Exception as e:
+            logger.error("CRM full sync failed: %s", str(e), exc_info=True)
+            CrmService._sync_state = {
+                "running": False,
+                "success": False,
+                "current": CrmService._sync_state.get("current", 0),
+                "total": CrmService._sync_state.get("total", 0),
+                "percent": CrmService._sync_state.get("percent", 0),
+                "status": f"Error: {str(e)}",
+                "completed_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "error": str(e),
+            }
 
     async def debug_connection(self) -> Dict[str, Any]:
         """Diagnostic probe for testing CRM connection step-by-step."""

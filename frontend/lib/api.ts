@@ -1040,6 +1040,28 @@ export const api = {
       const queryStr = q.toString() ? `?${q.toString()}` : "";
       return request(`/crm/pipeline-summary${queryStr}`);
     },
+    startFullSync: async (batchSize = 1000): Promise<{ started: boolean; message: string; status: any }> => {
+      return request(`/crm/full-sync/start?batch_size=${batchSize}`, { method: "POST" });
+    },
+    getFullSyncStatus: async (): Promise<{
+      running: boolean;
+      current: number;
+      total: number;
+      percent: number;
+      status: string;
+      started_at?: string;
+      completed_at?: string;
+      last_synced_at?: string;
+      error?: string;
+      has_cache?: boolean;
+      cached_total?: number;
+      is_full_sync?: boolean;
+    }> => {
+      return request("/crm/full-sync/status");
+    },
+    cancelFullSync: async (): Promise<{ cancelled: boolean; message: string }> => {
+      return request("/crm/full-sync/cancel", { method: "POST" });
+    },
     getDebug: async (): Promise<{
       configured: boolean;
       base_url: string;

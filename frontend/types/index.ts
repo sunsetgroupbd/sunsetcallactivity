@@ -1021,7 +1021,9 @@ export interface CrmPipelineSummaryResponse {
   executives: CrmPipelineExecutive[];
   statuses_found: string[];
   fetched_at?: string;
+  synced_at?: string;
   from_cache?: boolean;
+  is_full_sync?: boolean;
 }
 
 

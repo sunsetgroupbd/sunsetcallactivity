@@ -44,7 +44,7 @@ async def debug_crm_connection(current_user: User = Depends(get_current_user)) -
 @router.get("/pipeline-summary")
 async def get_crm_pipeline_summary(
     force_refresh: bool = Query(False, description="Bypass cache and re-fetch from CRM"),
-    limit: int = Query(1000, ge=100, le=5000, description="Number of leads to analyze"),
+    limit: int = Query(1500, ge=100, le=10000, description="Number of leads to analyze"),
     current_user: User = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """
@@ -55,6 +55,37 @@ async def get_crm_pipeline_summary(
     _require_admin(current_user)
     svc = CrmService()
     return await svc.get_pipeline_summary(force_refresh=force_refresh, limit=limit)
+
+
+@router.post("/full-sync/start")
+async def start_crm_full_sync(
+    batch_size: int = Query(1000, ge=100, le=2000),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Start full background aggregation across all 53,000+ CRM leads."""
+    _require_admin(current_user)
+    svc = CrmService()
+    return await svc.start_full_sync(batch_size=batch_size)
+
+
+@router.get("/full-sync/status")
+async def get_crm_full_sync_status(
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Check live status of the full CRM lead sync."""
+    _require_admin(current_user)
+    svc = CrmService()
+    return svc.get_sync_status()
+
+
+@router.post("/full-sync/cancel")
+async def cancel_crm_full_sync(
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Cancel ongoing full CRM sync."""
+    _require_admin(current_user)
+    svc = CrmService()
+    return svc.cancel_sync()
 
 
 @router.get("/leads")

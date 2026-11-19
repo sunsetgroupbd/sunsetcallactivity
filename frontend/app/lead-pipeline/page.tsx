@@ -103,6 +103,23 @@ export default function LeadPipelinePage() {
 
   const [sampleSize, setSampleSize] = useState<number>(1500);
 
+  // Full 53,000+ Lead Sync Progress State
+  const [syncProgress, setSyncProgress] = useState<{
+    running: boolean;
+    current: number;
+    total: number;
+    percent: number;
+    status: string;
+    completed_at?: string;
+    error?: string;
+  }>({
+    running: false,
+    current: 0,
+    total: 0,
+    percent: 0,
+    status: "idle",
+  });
+
   // Fetch Pipeline Data
   const loadData = useCallback(async (forceRefresh = false, targetLimit = sampleSize) => {
     try {
@@ -119,7 +136,6 @@ export default function LeadPipelinePage() {
       if (crmRes.status === "fulfilled" && crmRes.value.success) {
         setCrmData(crmRes.value);
       } else if (crmRes.status === "fulfilled" && !crmRes.value.success) {
-        // CRM returned error
         console.warn("CRM summary note:", crmRes.value.error);
       }
 
@@ -133,6 +149,84 @@ export default function LeadPipelinePage() {
       setLoading(false);
       setRefreshing(false);
     }
+  }, [sampleSize]);
+
+  // Start Full 53,000+ CRM Lead Sync
+  const handleStartFullSync = async () => {
+    try {
+      const res = await api.crm.startFullSync(1000);
+      if (res.started) {
+        setSyncProgress({
+          running: true,
+          current: 0,
+          total: res.status?.total || 53442,
+          percent: 0,
+          status: "Connecting to Somikoron CRM...",
+        });
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof ApiError ? err.message : "Failed to start full sync";
+      setError(msg);
+    }
+  };
+
+  const handleCancelFullSync = async () => {
+    try {
+      await api.crm.cancelFullSync();
+      setSyncProgress((prev) => ({ ...prev, running: false, status: "Cancelled by user" }));
+    } catch {
+      // ignore
+    }
+  };
+
+  // Poll sync status while running
+  useEffect(() => {
+    if (!syncProgress.running) return;
+
+    const timer = setInterval(async () => {
+      try {
+        const st = await api.crm.getFullSyncStatus();
+        setSyncProgress({
+          running: st.running,
+          current: st.current,
+          total: st.total,
+          percent: st.percent,
+          status: st.status,
+          completed_at: st.completed_at,
+          error: st.error,
+        });
+
+        if (!st.running) {
+          clearInterval(timer);
+          // Reload pipeline data with newly saved full aggregate!
+          loadData(false);
+        }
+      } catch {
+        // ignore polling error
+      }
+    }, 1500);
+
+    return () => clearInterval(timer);
+  }, [syncProgress.running, loadData]);
+
+  // Initial check on mount if sync is already running
+  useEffect(() => {
+    api.crm
+      .getFullSyncStatus()
+      .then((st) => {
+        if (st.running) {
+          setSyncProgress({
+            running: true,
+            current: st.current,
+            total: st.total,
+            percent: st.percent,
+            status: st.status,
+            completed_at: st.completed_at,
+            error: st.error,
+          });
+        }
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -402,40 +496,60 @@ export default function LeadPipelinePage() {
 
   return (
     <DashboardLayout
-      title="Lead Pipeline & Distribution"
-      subtitle="Monitor employee-wise High Potential (HP), Potential (P) lead distribution, workload capacity, and unassigned lead queues."
+      title="Lead Pipeline"
+      subtitle="Executive lead distribution, High Potential (HP), Potential (P), and capacity."
       adminOnly
     >
-      <div className="space-y-6 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div className="space-y-4 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
         {/* Header with Title & Action Toolbar */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-200 pb-5">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 text-white flex items-center justify-center shadow-md">
-                <GitFork className="w-5 h-5" />
-              </div>
-              <div>
-                <h1 className="text-xl md:text-2xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-                  <span>Lead Pipeline & Distribution</span>
-                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                    Step 1: Check First
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 border-b border-slate-200 pb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+              <GitFork className="w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                <span>Lead Pipeline</span>
+                {crmData?.is_full_sync && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    53k Synced
                   </span>
-                </h1>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Monitor employee-wise High Potential (HP), Potential (P) distribution, capacity, and unassigned queues.
-                </p>
-              </div>
+                )}
+              </h1>
+              <p className="text-xs text-slate-500">
+                Employee HP/P breakdown, stages, and workload.
+              </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
+            {activeTab === "crm" && (
+              <Button
+                variant={syncProgress.running ? "outline" : "primary"}
+                size="sm"
+                onClick={handleStartFullSync}
+                disabled={loading || syncProgress.running}
+                className={cn(
+                  "text-xs h-8.5 font-bold shadow-2xs",
+                  !syncProgress.running && "bg-indigo-600 hover:bg-indigo-700 text-white"
+                )}
+              >
+                <Database className={cn("w-3.5 h-3.5 mr-1.5", syncProgress.running && "animate-spin")} />
+                {syncProgress.running
+                  ? `Syncing (${syncProgress.percent}%)`
+                  : crmData?.is_full_sync
+                  ? "Re-Sync (53k)"
+                  : "Full Sync (53k Leads)"}
+              </Button>
+            )}
+
             <Button
               variant="outline"
               size="sm"
               onClick={() => loadData(true)}
               loading={refreshing}
-              disabled={loading}
-              className="text-xs h-9 shadow-2xs"
+              disabled={loading || syncProgress.running}
+              className="text-xs h-8.5 shadow-2xs"
             >
               <RefreshCw className={cn("w-3.5 h-3.5 mr-1.5", refreshing && "animate-spin")} />
               Sync Data
@@ -446,15 +560,15 @@ export default function LeadPipelinePage() {
               size="sm"
               onClick={handleExportCsv}
               disabled={loading}
-              className="text-xs h-9 shadow-2xs"
+              className="text-xs h-8.5 shadow-2xs"
             >
               <Download className="w-3.5 h-3.5 mr-1.5" />
-              Export CSV
+              CSV
             </Button>
 
             {isAdmin && (
               <Button
-                variant="primary"
+                variant="outline"
                 size="sm"
                 onClick={() => {
                   setFromEmployeeId("");
@@ -464,32 +578,63 @@ export default function LeadPipelinePage() {
                   setTransferErrorMsg(null);
                   setTransferModalOpen(true);
                 }}
-                className="text-xs h-9 bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs flex items-center gap-1.5"
+                className="text-xs h-8.5 text-slate-700 hover:text-slate-900 shadow-2xs flex items-center gap-1.5"
               >
                 <ArrowRightLeft className="w-3.5 h-3.5" />
-                <span>Transfer Leads (Admin)</span>
+                <span>Transfer</span>
               </Button>
             )}
           </div>
         </div>
 
-        {/* View Switcher Tabs (CRM vs Sunset Telemarketing) */}
-        <div className="flex items-center justify-between flex-wrap gap-3 bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
-          <div className="flex items-center gap-1.5">
+        {/* Live Full Sync Progress Banner */}
+        {syncProgress.running && (
+          <div className="bg-slate-900 text-white p-3.5 rounded-xl shadow-md border border-slate-800 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <RefreshCw className="w-4 h-4 animate-spin text-indigo-400 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between text-xs mb-1.5">
+                  <span className="font-semibold text-slate-200">Syncing Somikoron CRM Database...</span>
+                  <span className="font-mono font-bold text-white text-[11px]">
+                    {syncProgress.current.toLocaleString()} / {syncProgress.total.toLocaleString()} ({syncProgress.percent}%)
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-indigo-500 to-sky-400 transition-all duration-300"
+                    style={{ width: `${Math.min(syncProgress.percent, 100)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCancelFullSync}
+              className="text-xs h-7 px-2.5 bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700 shrink-0"
+            >
+              Cancel
+            </Button>
+          </div>
+        )}
+
+        {/* View Switcher Tabs */}
+        <div className="flex items-center justify-between flex-wrap gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200">
+          <div className="flex items-center gap-1">
             <button
               type="button"
               onClick={() => setActiveTab("crm")}
               className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer",
+                "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer",
                 activeTab === "crm"
-                  ? "bg-white text-indigo-700 shadow-sm border border-slate-200"
-                  : "text-slate-600 hover:text-slate-900 hover:bg-white/60"
+                  ? "bg-white text-indigo-700 shadow-xs border border-slate-200"
+                  : "text-slate-600 hover:text-slate-900"
               )}
             >
-              <Database className="w-4 h-4 text-indigo-600" />
-              <span>Somikoron CRM Pipeline</span>
+              <Database className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Somikoron CRM</span>
               {crmData?.total_crm_leads && (
-                <span className="text-[10px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded-full font-mono">
+                <span className="text-[10px] bg-indigo-50 text-indigo-700 px-1.5 py-0.2 rounded-full font-mono">
                   {crmData.total_crm_leads.toLocaleString()}
                 </span>
               )}
@@ -499,28 +644,32 @@ export default function LeadPipelinePage() {
               type="button"
               onClick={() => setActiveTab("internal")}
               className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer",
+                "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer",
                 activeTab === "internal"
-                  ? "bg-white text-emerald-800 shadow-sm border border-slate-200"
-                  : "text-slate-600 hover:text-slate-900 hover:bg-white/60"
+                  ? "bg-white text-emerald-800 shadow-xs border border-slate-200"
+                  : "text-slate-600 hover:text-slate-900"
               )}
             >
-              <PhoneCall className="w-4 h-4 text-emerald-700" />
-              <span>Sunset Calling Pipeline</span>
+              <PhoneCall className="w-3.5 h-3.5 text-emerald-700" />
+              <span>Sunset Calling</span>
               {internalData?.overview && (
-                <span className="text-[10px] bg-emerald-50 text-emerald-800 px-1.5 py-0.5 rounded-full font-mono">
+                <span className="text-[10px] bg-emerald-50 text-emerald-800 px-1.5 py-0.2 rounded-full font-mono">
                   {internalData.overview.total_leads.toLocaleString()}
                 </span>
               )}
             </button>
           </div>
 
-          <div className="text-[11px] text-slate-500 px-3 py-1 flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <div className="text-[11px] text-slate-500 px-2 flex items-center gap-1.5 font-mono">
+            <span className={cn("w-2 h-2 rounded-full", crmData?.is_full_sync ? "bg-emerald-500" : "bg-indigo-400")} />
             <span>
               {activeTab === "crm"
-                ? crmData?.fetched_at ? `Live CRM sync • ${crmData.fetched_at}` : "Connecting to CRM..."
-                : "Internal Sunset telemarketing database"}
+                ? crmData?.is_full_sync
+                  ? `53k Synced • ${crmData.synced_at || crmData.fetched_at || ""}`
+                  : crmData?.analyzed_count
+                  ? `Sampled ${crmData.analyzed_count.toLocaleString()} leads`
+                  : "Connecting..."
+                : `${internalData?.overview.total_executives || 0} Executives`}
             </span>
           </div>
         </div>
@@ -528,139 +677,121 @@ export default function LeadPipelinePage() {
         {/* KPI Cards Row */}
         {activeTab === "crm" ? (
           <>
-            {/* CRM KPI Row */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3.5">
-            <Card className="border-slate-200 shadow-2xs hover:shadow-md transition">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
-                  <span>Total CRM Leads</span>
-                  <Database className="w-4 h-4 text-slate-400" />
-                </div>
-                <div className="mt-2 flex items-baseline gap-2">
-                  <span className="text-2xl font-extrabold text-slate-900">
-                    {crmData?.total_crm_leads?.toLocaleString() || "—"}
-                  </span>
-                  <span className="text-[11px] text-slate-400 font-mono">
-                    ({crmData?.analyzed_count || 0} sampled)
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-500 mt-1">Across Somikoron CRM database</p>
-              </CardContent>
-            </Card>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <Card className="border-slate-200 shadow-2xs">
+                <CardContent className="p-3.5">
+                  <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
+                    <span>Total Leads</span>
+                    <Database className="w-3.5 h-3.5 text-slate-400" />
+                  </div>
+                  <div className="mt-1 flex items-baseline gap-1.5">
+                    <span className="text-2xl font-extrabold text-slate-900">
+                      {crmData?.total_crm_leads?.toLocaleString() || "—"}
+                    </span>
+                    {crmData?.is_full_sync ? (
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded-full">
+                        Full Sync
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        ({crmData?.analyzed_count || 0})
+                      </span>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
 
-            <Card className="border-amber-200 bg-gradient-to-br from-amber-50/50 to-white shadow-2xs hover:shadow-md transition">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between text-amber-800 text-xs font-bold">
-                  <span>High Potential (HP)</span>
-                  <Flame className="w-4 h-4 text-amber-600" />
-                </div>
-                <div className="mt-2 flex items-baseline gap-2">
-                  <span className="text-2xl font-extrabold text-amber-950">
-                    {crmData?.total_hp?.toLocaleString() || 0}
-                  </span>
-                  <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full">
-                    Top Priority
-                  </span>
-                </div>
-                <p className="text-[11px] text-amber-700/80 mt-1">High conversion propensity</p>
-              </CardContent>
-            </Card>
+              <Card className="border-amber-200 bg-amber-50/20 shadow-2xs">
+                <CardContent className="p-3.5">
+                  <div className="flex items-center justify-between text-amber-800 text-xs font-bold">
+                    <span>High Potential (HP)</span>
+                    <Flame className="w-3.5 h-3.5 text-amber-600" />
+                  </div>
+                  <div className="mt-1 flex items-baseline gap-1.5">
+                    <span className="text-2xl font-extrabold text-amber-950">
+                      {crmData?.total_hp?.toLocaleString() || 0}
+                    </span>
+                    <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.2 rounded-full">
+                      Top Priority
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
 
-            <Card className="border-indigo-200 bg-gradient-to-br from-indigo-50/50 to-white shadow-2xs hover:shadow-md transition">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between text-indigo-800 text-xs font-bold">
-                  <span>Potential (P)</span>
-                  <Target className="w-4 h-4 text-indigo-600" />
-                </div>
-                <div className="mt-2 flex items-baseline gap-2">
-                  <span className="text-2xl font-extrabold text-indigo-950">
-                    {crmData?.total_p?.toLocaleString() || 0}
-                  </span>
-                  <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 px-1.5 py-0.5 rounded-full">
-                    Warm
-                  </span>
-                </div>
-                <p className="text-[11px] text-indigo-700/80 mt-1">Active prospective buyers</p>
-              </CardContent>
-            </Card>
+              <Card className="border-indigo-200 bg-indigo-50/20 shadow-2xs">
+                <CardContent className="p-3.5">
+                  <div className="flex items-center justify-between text-indigo-800 text-xs font-bold">
+                    <span>Potential (P)</span>
+                    <Target className="w-3.5 h-3.5 text-indigo-600" />
+                  </div>
+                  <div className="mt-1 flex items-baseline gap-1.5">
+                    <span className="text-2xl font-extrabold text-indigo-950">
+                      {crmData?.total_p?.toLocaleString() || 0}
+                    </span>
+                    <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 px-1.5 py-0.2 rounded-full">
+                      Warm
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
 
-            <Card className="border-sky-200 bg-gradient-to-br from-sky-50/50 to-white shadow-2xs hover:shadow-md transition">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between text-sky-800 text-xs font-bold">
-                  <span>Follow Up (FUP)</span>
-                  <Clock className="w-4 h-4 text-sky-600" />
-                </div>
-                <div className="mt-2 flex items-baseline gap-2">
-                  <span className="text-2xl font-extrabold text-sky-950">
-                    {crmData?.total_fup?.toLocaleString() || 0}
-                  </span>
-                  <span className="text-[10px] font-bold text-sky-700 bg-sky-100 px-1.5 py-0.5 rounded-full">
-                    In Pipeline
-                  </span>
-                </div>
-                <p className="text-[11px] text-sky-700/80 mt-1">Scheduled call-back leads</p>
-              </CardContent>
-            </Card>
+              <Card className="border-sky-200 bg-sky-50/20 shadow-2xs">
+                <CardContent className="p-3.5">
+                  <div className="flex items-center justify-between text-sky-800 text-xs font-bold">
+                    <span>Follow Up (FUP)</span>
+                    <Clock className="w-3.5 h-3.5 text-sky-600" />
+                  </div>
+                  <div className="mt-1 flex items-baseline gap-1.5">
+                    <span className="text-2xl font-extrabold text-sky-950">
+                      {crmData?.total_fup?.toLocaleString() || 0}
+                    </span>
+                    <span className="text-[10px] font-bold text-sky-700 bg-sky-100 px-1.5 py-0.2 rounded-full">
+                      Scheduled
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
 
-            <Card
-              onClick={() => handleInspectUnassigned("crm")}
-              className="border-rose-200 bg-gradient-to-br from-rose-50 to-white shadow-2xs hover:shadow-md transition cursor-pointer group"
-            >
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between text-rose-800 text-xs font-bold">
-                  <span>Unassigned Pool</span>
-                  <AlertTriangle className="w-4 h-4 text-rose-600 group-hover:scale-110 transition" />
-                </div>
-                <div className="mt-2 flex items-baseline gap-2">
-                  <span className="text-2xl font-extrabold text-rose-950">
-                    {crmData?.unassigned_count?.toLocaleString() || 0}
-                  </span>
-                  <span className="text-[10px] font-bold text-rose-700 bg-rose-100 px-1.5 py-0.5 rounded-full">
-                    Ready to Assign
-                  </span>
-                </div>
-                <p className="text-[11px] text-rose-700/80 mt-1 flex items-center gap-1 group-hover:underline">
-                  <span>Click to inspect pool</span>
-                  <ChevronRight className="w-3 h-3" />
-                </p>
-              </CardContent>
-            </Card>
-          </div>
+              <Card
+                onClick={() => handleInspectUnassigned("crm")}
+                className="border-rose-200 bg-rose-50/30 shadow-2xs hover:shadow-xs transition cursor-pointer group"
+              >
+                <CardContent className="p-3.5">
+                  <div className="flex items-center justify-between text-rose-800 text-xs font-bold">
+                    <span>Unassigned Pool</span>
+                    <AlertTriangle className="w-3.5 h-3.5 text-rose-600 group-hover:scale-110 transition" />
+                  </div>
+                  <div className="mt-1 flex items-baseline justify-between">
+                    <span className="text-2xl font-extrabold text-rose-950">
+                      {crmData?.unassigned_count?.toLocaleString() || 0}
+                    </span>
+                    <span className="text-[10px] font-bold text-rose-700 flex items-center group-hover:underline">
+                      Inspect <ChevronRight className="w-3 h-3" />
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
 
-          {/* Dynamic Pipeline Stages in Somikoron CRM */}
-          {crmData?.status_counts && Object.keys(crmData.status_counts).length > 0 && (
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-2.5">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-indigo-600" />
-                  <span className="text-xs font-bold text-slate-900">
-                    All Pipeline Stages Found in CRM ({Object.keys(crmData.status_counts).length} stages):
-                  </span>
-                  <span className="text-[10px] text-slate-400">Click any stage badge to filter</span>
+            {/* Stages Row */}
+            {crmData?.status_counts && Object.keys(crmData.status_counts).length > 0 && (
+              <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 mr-1">
+                  <Layers className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Stages:</span>
                 </div>
-                {statusFilter !== "all" && (
-                  <button
-                    type="button"
-                    onClick={() => setStatusFilter("all")}
-                    className="text-[11px] text-indigo-600 hover:text-indigo-800 font-bold underline cursor-pointer"
-                  >
-                    Reset to all stages ({crmData.analyzed_count})
-                  </button>
-                )}
-              </div>
 
-              <div className="flex items-center gap-2 flex-wrap">
                 <button
                   type="button"
                   onClick={() => setStatusFilter("all")}
                   className={cn(
-                    "px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs",
+                    "px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer",
                     statusFilter === "all"
                       ? "bg-slate-900 text-white"
                       : "bg-slate-100 text-slate-700 hover:bg-slate-200"
                   )}
                 >
-                  <span>All Stages</span>
+                  <span>All</span>
                   <span
                     className={cn(
                       "text-[10px] px-1.5 py-0.2 rounded-full font-mono",
@@ -702,7 +833,7 @@ export default function LeadPipelinePage() {
                       type="button"
                       onClick={() => setStatusFilter(isSelected ? "all" : stName)}
                       className={cn(
-                        "px-3 py-1.5 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 cursor-pointer shadow-2xs",
+                        "px-2.5 py-1 rounded-lg text-xs font-bold border transition flex items-center gap-1.5 cursor-pointer shadow-2xs",
                         badgeTheme
                       )}
                     >
@@ -719,154 +850,116 @@ export default function LeadPipelinePage() {
                   );
                 })}
               </div>
-            </div>
-          )}
-        </>
+            )}
+          </>
         ) : (
           /* Internal Calling KPI Row */
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3.5">
-            <Card className="border-slate-200 shadow-2xs hover:shadow-md transition">
-              <CardContent className="p-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <Card className="border-slate-200 shadow-2xs">
+              <CardContent className="p-3.5">
                 <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
                   <span>Total Calling Leads</span>
-                  <PhoneCall className="w-4 h-4 text-slate-400" />
+                  <PhoneCall className="w-3.5 h-3.5 text-slate-400" />
                 </div>
-                <div className="mt-2 flex items-baseline gap-2">
+                <div className="mt-1 flex items-baseline gap-1.5">
                   <span className="text-2xl font-extrabold text-slate-900">
                     {internalData?.overview.total_leads.toLocaleString() || 0}
                   </span>
-                  <span className="text-[11px] text-slate-400 font-mono">
+                  <span className="text-[10px] text-slate-400 font-mono">
                     ({internalData?.overview.total_executives || 0} team)
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-500 mt-1">Active telemarketing leads</p>
               </CardContent>
             </Card>
 
-            <Card className="border-amber-200 bg-gradient-to-br from-amber-50/50 to-white shadow-2xs hover:shadow-md transition">
-              <CardContent className="p-4">
+            <Card className="border-amber-200 bg-amber-50/20 shadow-2xs">
+              <CardContent className="p-3.5">
                 <div className="flex items-center justify-between text-amber-800 text-xs font-bold">
                   <span>High Potential (HP)</span>
-                  <Flame className="w-4 h-4 text-amber-600" />
+                  <Flame className="w-3.5 h-3.5 text-amber-600" />
                 </div>
-                <div className="mt-2 flex items-baseline gap-2">
+                <div className="mt-1 flex items-baseline gap-1.5">
                   <span className="text-2xl font-extrabold text-amber-950">
                     {internalData?.overview.hp_count.toLocaleString() || 0}
                   </span>
-                  <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full">
+                  <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.2 rounded-full">
                     Top Priority
                   </span>
                 </div>
-                <p className="text-[11px] text-amber-700/80 mt-1">High priority closures</p>
               </CardContent>
             </Card>
 
-            <Card className="border-indigo-200 bg-gradient-to-br from-indigo-50/50 to-white shadow-2xs hover:shadow-md transition">
-              <CardContent className="p-4">
+            <Card className="border-indigo-200 bg-indigo-50/20 shadow-2xs">
+              <CardContent className="p-3.5">
                 <div className="flex items-center justify-between text-indigo-800 text-xs font-bold">
                   <span>Potential (P)</span>
-                  <Target className="w-4 h-4 text-indigo-600" />
+                  <Target className="w-3.5 h-3.5 text-indigo-600" />
                 </div>
-                <div className="mt-2 flex items-baseline gap-2">
+                <div className="mt-1 flex items-baseline gap-1.5">
                   <span className="text-2xl font-extrabold text-indigo-950">
                     {internalData?.overview.p_count.toLocaleString() || 0}
                   </span>
-                  <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 px-1.5 py-0.5 rounded-full">
+                  <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 px-1.5 py-0.2 rounded-full">
                     Warm
                   </span>
                 </div>
-                <p className="text-[11px] text-indigo-700/80 mt-1">Interested prospect pool</p>
               </CardContent>
             </Card>
 
-            <Card className="border-sky-200 bg-gradient-to-br from-sky-50/50 to-white shadow-2xs hover:shadow-md transition">
-              <CardContent className="p-4">
+            <Card className="border-sky-200 bg-sky-50/20 shadow-2xs">
+              <CardContent className="p-3.5">
                 <div className="flex items-center justify-between text-sky-800 text-xs font-bold">
                   <span>Follow Up (FUP)</span>
-                  <Clock className="w-4 h-4 text-sky-600" />
+                  <Clock className="w-3.5 h-3.5 text-sky-600" />
                 </div>
-                <div className="mt-2 flex items-baseline gap-2">
+                <div className="mt-1 flex items-baseline gap-1.5">
                   <span className="text-2xl font-extrabold text-sky-950">
                     {internalData?.overview.fup_count.toLocaleString() || 0}
                   </span>
-                  <span className="text-[10px] font-bold text-sky-700 bg-sky-100 px-1.5 py-0.5 rounded-full">
+                  <span className="text-[10px] font-bold text-sky-700 bg-sky-100 px-1.5 py-0.2 rounded-full">
                     Scheduled
                   </span>
                 </div>
-                <p className="text-[11px] text-sky-700/80 mt-1">Active follow-up queue</p>
               </CardContent>
             </Card>
 
             <Card
               onClick={() => handleInspectUnassigned("internal")}
-              className="border-rose-200 bg-gradient-to-br from-rose-50 to-white shadow-2xs hover:shadow-md transition cursor-pointer group"
+              className="border-rose-200 bg-rose-50/30 shadow-2xs hover:shadow-xs transition cursor-pointer group"
             >
-              <CardContent className="p-4">
+              <CardContent className="p-3.5">
                 <div className="flex items-center justify-between text-rose-800 text-xs font-bold">
-                  <span>Unassigned Leads</span>
-                  <AlertTriangle className="w-4 h-4 text-rose-600 group-hover:scale-110 transition" />
+                  <span>Unassigned Pool</span>
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-600 group-hover:scale-110 transition" />
                 </div>
-                <div className="mt-2 flex items-baseline gap-2">
+                <div className="mt-1 flex items-baseline justify-between">
                   <span className="text-2xl font-extrabold text-rose-950">
                     {internalData?.overview.unassigned_leads.toLocaleString() || 0}
                   </span>
-                  <span className="text-[10px] font-bold text-rose-700 bg-rose-100 px-1.5 py-0.5 rounded-full">
-                    Ready to Assign
+                  <span className="text-[10px] font-bold text-rose-700 flex items-center group-hover:underline">
+                    Inspect <ChevronRight className="w-3 h-3" />
                   </span>
                 </div>
-                <p className="text-[11px] text-rose-700/80 mt-1 flex items-center gap-1 group-hover:underline">
-                  <span>Click to inspect pool</span>
-                  <ChevronRight className="w-3 h-3" />
-                </p>
               </CardContent>
             </Card>
           </div>
         )}
 
-        {/* Step 2 Roadmap Banner */}
-        <div className="bg-gradient-to-r from-indigo-50 via-sky-50 to-white border border-indigo-200/80 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-2xs">
-          <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-indigo-950 flex items-center gap-2">
-                <span>Phase 1 Active: Visual Pipeline & Employee Workload Audit</span>
-                <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
-                  Step 1 Complete
-                </span>
-              </p>
-              <p className="text-[11px] text-slate-600 mt-0.5">
-                Review employee High Potential & Potential distribution below. When you are satisfied with the audit, we can activate <strong>Step 2: Auto-Assign Engine</strong> (Round-Robin & Workload-balanced lead routing).
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 self-end md:self-center shrink-0">
-            <Link
-              href="/calls"
-              className="text-xs font-semibold text-indigo-700 hover:text-indigo-900 px-3 py-1.5 rounded-lg hover:bg-indigo-100/60 transition flex items-center gap-1"
-            >
-              <span>Daily Call Board</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-        </div>
-
         {/* Search, Filter & Sort Controls */}
-        <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5 flex-1 min-w-[240px] max-w-md">
+        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 flex-1 min-w-[220px] max-w-md">
             <div className="relative w-full">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 placeholder={
                   activeTab === "crm"
-                    ? "Search CRM executive name or project..."
-                    : "Search employee name, team, designation..."
+                    ? "Search executive name or project..."
+                    : "Search employee, team, designation..."
                 }
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-600"
+                className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-600"
               />
               {searchQuery && (
                 <button
@@ -880,7 +973,7 @@ export default function LeadPipelinePage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
             {activeTab === "internal" && (
               <>
                 {/* Workload Filter */}
@@ -889,9 +982,9 @@ export default function LeadPipelinePage() {
                   <select
                     value={workloadFilter}
                     onChange={(e) => setWorkloadFilter(e.target.value)}
-                    className="border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600"
+                    className="border border-slate-200 rounded-lg px-2 py-1 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600"
                   >
-                    <option value="all">All Capacities</option>
+                    <option value="all">All</option>
                     <option value="available">Available (&lt; 30)</option>
                     <option value="optimal">Optimal (30 - 80)</option>
                     <option value="heavy">Heavy (80 - 150)</option>
@@ -906,7 +999,7 @@ export default function LeadPipelinePage() {
                     <select
                       value={teamFilter}
                       onChange={(e) => setTeamFilter(e.target.value)}
-                      className="border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600 max-w-[150px] truncate"
+                      className="border border-slate-200 rounded-lg px-2 py-1 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600 max-w-[140px] truncate"
                     >
                       <option value="all">All Teams</option>
                       {uniqueTeams.map((t) => (
@@ -927,7 +1020,7 @@ export default function LeadPipelinePage() {
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600 max-w-[170px] truncate"
+                  className="border border-slate-200 rounded-lg px-2 py-1 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600 max-w-[160px] truncate"
                 >
                   <option value="all">All Stages ({crmData.analyzed_count})</option>
                   {crmData.statuses_found.map((st) => (
@@ -941,15 +1034,15 @@ export default function LeadPipelinePage() {
 
             {/* Sort Order */}
             <div className="flex items-center gap-1 text-xs text-slate-600">
-              <span className="font-semibold text-slate-500">Sort by:</span>
+              <span className="font-semibold text-slate-500">Sort:</span>
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
-                className="border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600"
+                className="border border-slate-200 rounded-lg px-2 py-1 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600"
               >
-                <option value="total">Most Total Leads</option>
-                <option value="hp">Most High Potential (HP)</option>
-                <option value="p">Most Potential (P)</option>
+                <option value="total">Total Leads</option>
+                <option value="hp">High Potential (HP)</option>
+                <option value="p">Potential (P)</option>
                 <option value="name">Name (A-Z)</option>
               </select>
             </div>
@@ -972,35 +1065,39 @@ export default function LeadPipelinePage() {
 
         {/* TAB 1: Somikoron CRM Pipeline Table */}
         {activeTab === "crm" && (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+            <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
               <div>
-                <h2 className="text-sm font-extrabold text-slate-900 tracking-tight">
-                  Somikoron CRM — Employee Lead Breakdown
+                <h2 className="text-sm font-bold text-slate-900 tracking-tight">
+                  CRM Executives Lead Breakdown
                 </h2>
                 <p className="text-[11px] text-slate-500">
-                  Aggregated from external Somikoron CRM. Showing individual High Potential (HP), Potential (P), and project distribution.
+                  {crmData?.is_full_sync
+                    ? `Full database sync (${crmData.total_crm_leads?.toLocaleString()} leads aggregated)`
+                    : `Showing sample of ${crmData?.analyzed_count || 0} leads`}
                 </p>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
-                <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg">
-                  <span className="font-semibold text-slate-500 text-[11px]">Analysis Depth:</span>
-                  <select
-                    value={sampleSize}
-                    onChange={(e) => {
-                      const sz = Number(e.target.value);
-                      setSampleSize(sz);
-                      loadData(true, sz);
-                    }}
-                    disabled={loading || refreshing}
-                    className="font-mono text-xs font-bold text-slate-800 bg-transparent focus:outline-none cursor-pointer"
-                  >
-                    <option value={1500}>1,500 Leads (Fast)</option>
-                    <option value={3000}>3,000 Leads (Deep)</option>
-                    <option value={5000}>5,000 Leads (Maximum Sample)</option>
-                  </select>
-                </div>
-                <span className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-lg font-mono">
+                {!crmData?.is_full_sync && (
+                  <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-lg">
+                    <span className="font-semibold text-slate-500 text-[11px]">Sample:</span>
+                    <select
+                      value={sampleSize}
+                      onChange={(e) => {
+                        const sz = Number(e.target.value);
+                        setSampleSize(sz);
+                        loadData(true, sz);
+                      }}
+                      disabled={loading || refreshing}
+                      className="font-mono text-xs font-bold text-slate-800 bg-transparent focus:outline-none cursor-pointer"
+                    >
+                      <option value={1500}>1,500 Leads</option>
+                      <option value={3000}>3,000 Leads</option>
+                      <option value={5000}>5,000 Leads</option>
+                    </select>
+                  </div>
+                )}
+                <span className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-lg font-mono">
                   {filteredCrmExecutives.length} Executives
                 </span>
               </div>
@@ -1010,19 +1107,19 @@ export default function LeadPipelinePage() {
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
-                    <th className="py-3 px-4 w-12 text-center">#</th>
-                    <th className="py-3 px-4 min-w-[200px]">Executive Name</th>
-                    <th className="py-3 px-4 min-w-[130px] text-center bg-amber-50/60 text-amber-900">
+                    <th className="py-2.5 px-4 w-12 text-center">#</th>
+                    <th className="py-2.5 px-4 min-w-[180px]">Executive</th>
+                    <th className="py-2.5 px-4 min-w-[120px] text-center bg-amber-50/60 text-amber-900">
                       High Potential (HP)
                     </th>
-                    <th className="py-3 px-4 min-w-[120px] text-center bg-indigo-50/60 text-indigo-900">
+                    <th className="py-2.5 px-4 min-w-[110px] text-center bg-indigo-50/60 text-indigo-900">
                       Potential (P)
                     </th>
-                    <th className="py-3 px-4 min-w-[120px] text-center">Follow Up (FUP)</th>
-                    <th className="py-3 px-4 min-w-[200px]">Pipeline Stages Breakdown</th>
-                    <th className="py-3 px-4 min-w-[120px] text-center font-extrabold">Total Leads</th>
-                    <th className="py-3 px-4 min-w-[180px]">Assigned Projects</th>
-                    <th className="py-3 px-4 w-28 text-center">Actions</th>
+                    <th className="py-2.5 px-4 min-w-[110px] text-center">Follow Up (FUP)</th>
+                    <th className="py-2.5 px-4 min-w-[180px]">Stages Breakdown</th>
+                    <th className="py-2.5 px-4 min-w-[110px] text-center font-extrabold">Total Leads</th>
+                    <th className="py-2.5 px-4 min-w-[160px]">Projects</th>
+                    <th className="py-2.5 px-4 w-28 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-800">
@@ -1030,7 +1127,7 @@ export default function LeadPipelinePage() {
                     <tr>
                       <td colSpan={9} className="py-16 text-center text-slate-400">
                         <RefreshCw className="w-6 h-6 mx-auto animate-spin mb-2 text-indigo-600" />
-                        Connecting to Somikoron CRM and aggregating employee pipeline...
+                        Aggregating executive pipeline...
                       </td>
                     </tr>
                   ) : filteredCrmExecutives.length === 0 ? (
@@ -1047,28 +1144,23 @@ export default function LeadPipelinePage() {
                           key={exec.name}
                           className="hover:bg-indigo-50/30 transition group"
                         >
-                          <td className="py-3 px-4 text-center font-mono text-slate-400 text-[11px]">
+                          <td className="py-2.5 px-4 text-center font-mono text-slate-400 text-[11px]">
                             {idx + 1}
                           </td>
-                          <td className="py-3 px-4">
-                            <div className="flex items-center gap-2.5">
-                              <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-xs shrink-0">
+                          <td className="py-2.5 px-4">
+                            <div className="flex items-center gap-2">
+                              <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-xs shrink-0">
                                 {exec.name.charAt(0).toUpperCase()}
                               </div>
-                              <div>
-                                <p className="font-bold text-slate-900 group-hover:text-indigo-600 transition">
-                                  {exec.name}
-                                </p>
-                                <p className="text-[10px] text-slate-400 font-mono">
-                                  Somikoron CRM Account
-                                </p>
-                              </div>
+                              <p className="font-semibold text-slate-900 group-hover:text-indigo-600 transition">
+                                {exec.name}
+                              </p>
                             </div>
                           </td>
 
                           {/* HP Count */}
-                          <td className="py-3 px-4 text-center bg-amber-50/30 font-bold">
-                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 text-xs font-mono">
+                          <td className="py-2.5 px-4 text-center bg-amber-50/20 font-bold">
+                            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-xs font-mono">
                               <Flame className="w-3 h-3 text-amber-600 fill-amber-500" />
                               <span>{exec.hp_count}</span>
                               <span className="text-[9px] text-amber-700 font-normal">
@@ -1078,7 +1170,7 @@ export default function LeadPipelinePage() {
                           </td>
 
                           {/* Potential Count */}
-                          <td className="py-3 px-4 text-center bg-indigo-50/30 font-bold">
+                          <td className="py-2.5 px-4 text-center bg-indigo-50/20 font-bold">
                             <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-900 text-xs font-mono">
                               <Target className="w-3 h-3 text-indigo-600" />
                               <span>{exec.p_count}</span>
@@ -1086,9 +1178,9 @@ export default function LeadPipelinePage() {
                           </td>
 
                           {/* Follow Up Count */}
-                          <td className="py-3 px-4 text-center font-mono text-slate-700">
+                          <td className="py-2.5 px-4 text-center font-mono text-slate-700">
                             {exec.fup_count > 0 ? (
-                              <span className="px-2 py-0.5 rounded bg-slate-100 font-semibold">
+                              <span className="px-1.5 py-0.5 rounded bg-slate-100 font-semibold">
                                 {exec.fup_count}
                               </span>
                             ) : (
@@ -1097,8 +1189,8 @@ export default function LeadPipelinePage() {
                           </td>
 
                           {/* Pipeline Stages Breakdown */}
-                          <td className="py-3 px-4">
-                            <div className="flex flex-wrap gap-1 max-w-[240px]">
+                          <td className="py-2.5 px-4">
+                            <div className="flex flex-wrap gap-1 max-w-[220px]">
                               {exec.status_breakdown && Object.keys(exec.status_breakdown).length > 0 ? (
                                 Object.entries(exec.status_breakdown).map(([st, cnt]) => (
                                   <button
@@ -1108,7 +1200,7 @@ export default function LeadPipelinePage() {
                                       e.stopPropagation();
                                       setStatusFilter(st);
                                     }}
-                                    className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-800 border border-slate-200 transition cursor-pointer"
+                                    className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-800 border border-slate-200 transition cursor-pointer"
                                     title={`Filter by ${st}`}
                                   >
                                     {st}: <strong className="font-mono text-slate-900">{cnt}</strong>
@@ -1121,20 +1213,20 @@ export default function LeadPipelinePage() {
                           </td>
 
                           {/* Total Leads */}
-                          <td className="py-3 px-4 text-center">
+                          <td className="py-2.5 px-4 text-center">
                             <span className="text-sm font-extrabold text-slate-900 font-mono">
                               {exec.total_leads}
                             </span>
                           </td>
 
                           {/* Projects */}
-                          <td className="py-3 px-4">
-                            <div className="flex flex-wrap gap-1 max-w-[240px]">
+                          <td className="py-2.5 px-4">
+                            <div className="flex flex-wrap gap-1 max-w-[220px]">
                               {exec.projects.length > 0 ? (
-                                exec.projects.slice(0, 3).map((p) => (
+                                exec.projects.slice(0, 2).map((p) => (
                                   <span
                                     key={p}
-                                    className="text-[10px] px-2 py-0.5 rounded bg-slate-100 text-slate-700 truncate max-w-[140px]"
+                                    className="text-[10px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 truncate max-w-[130px]"
                                     title={p}
                                   >
                                     {p}
@@ -1143,23 +1235,23 @@ export default function LeadPipelinePage() {
                               ) : (
                                 <span className="text-slate-400 text-[11px]">—</span>
                               )}
-                              {exec.projects.length > 3 && (
+                              {exec.projects.length > 2 && (
                                 <span className="text-[9px] text-slate-400 self-center">
-                                  +{exec.projects.length - 3} more
+                                  +{exec.projects.length - 2}
                                 </span>
                               )}
                             </div>
                           </td>
 
                           {/* Actions */}
-                          <td className="py-3 px-4 text-center">
+                          <td className="py-2.5 px-4 text-center">
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={() => handleInspectCrmExecutive(exec)}
-                              className="text-[11px] h-7 px-2.5 text-indigo-700 hover:text-indigo-900 hover:bg-indigo-50 border-indigo-200"
+                              className="text-[11px] h-6.5 px-2 text-indigo-700 hover:text-indigo-900 hover:bg-indigo-50 border-indigo-200"
                             >
-                              <span>Inspect Leads</span>
+                              <span>Inspect</span>
                               <ChevronRight className="w-3 h-3 ml-0.5" />
                             </Button>
                           </td>
@@ -1175,18 +1267,18 @@ export default function LeadPipelinePage() {
 
         {/* TAB 2: Sunset Telemarketing Database Pipeline Table */}
         {activeTab === "internal" && (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+            <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
               <div>
-                <h2 className="text-sm font-extrabold text-slate-900 tracking-tight">
-                  Sunset Telemarketing — Employee Lead Distribution
+                <h2 className="text-sm font-bold text-slate-900 tracking-tight">
+                  Sunset Calling Pipeline
                 </h2>
                 <p className="text-[11px] text-slate-500">
-                  Individual High Potential (HP), Potential (P), and capacity workload per sales employee.
+                  Calling metrics and workload capacity per executive.
                 </p>
               </div>
-              <span className="text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg font-mono">
-                {filteredInternalEmployees.length} Registered Employees
+              <span className="text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg font-mono">
+                {filteredInternalEmployees.length} Executives
               </span>
             </div>
 
@@ -1194,19 +1286,19 @@ export default function LeadPipelinePage() {
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
-                    <th className="py-3 px-4 w-12 text-center">#</th>
-                    <th className="py-3 px-4 min-w-[220px]">Employee / Executive</th>
-                    <th className="py-3 px-4 min-w-[160px]">Team & Hierarchy</th>
-                    <th className="py-3 px-4 min-w-[120px] text-center bg-amber-50/60 text-amber-900">
+                    <th className="py-2.5 px-4 w-12 text-center">#</th>
+                    <th className="py-2.5 px-4 min-w-[200px]">Executive</th>
+                    <th className="py-2.5 px-4 min-w-[150px]">Team & Hierarchy</th>
+                    <th className="py-2.5 px-4 min-w-[110px] text-center bg-amber-50/60 text-amber-900">
                       High Potential (HP)
                     </th>
-                    <th className="py-3 px-4 min-w-[110px] text-center bg-indigo-50/60 text-indigo-900">
+                    <th className="py-2.5 px-4 min-w-[100px] text-center bg-indigo-50/60 text-indigo-900">
                       Potential (P)
                     </th>
-                    <th className="py-3 px-4 min-w-[110px] text-center">Follow Up (FUP)</th>
-                    <th className="py-3 px-4 min-w-[120px] text-center font-extrabold">Total Leads</th>
-                    <th className="py-3 px-4 min-w-[150px] text-center">Workload Capacity</th>
-                    <th className="py-3 px-4 w-36 text-center">Actions</th>
+                    <th className="py-2.5 px-4 min-w-[100px] text-center">Follow Up (FUP)</th>
+                    <th className="py-2.5 px-4 min-w-[100px] text-center font-extrabold">Total Leads</th>
+                    <th className="py-2.5 px-4 min-w-[130px] text-center">Workload Capacity</th>
+                    <th className="py-2.5 px-4 w-32 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-800">

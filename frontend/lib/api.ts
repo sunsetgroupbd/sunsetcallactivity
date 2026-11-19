@@ -43,6 +43,10 @@ import {
   LeadTransferLog,
   LeadPipelineSummaryResponse,
   CrmPipelineSummaryResponse,
+  OutdoorVisitLog,
+  FairStartPayload,
+  FairReturnPayload,
+  OutdoorVisitCreatePayload,
 } from "@/types";
 
 const API_BASE =
@@ -591,6 +595,39 @@ export const api = {
       return request<MeetingActivityResponse>(`/reports/${reportId}/meetings`, {
         method: "PUT",
         body: JSON.stringify({ entries: payload }),
+      });
+    },
+    getOutdoorLogs: async (dateStr: string, employeeId?: number): Promise<OutdoorVisitLog[]> => {
+      const q = new URLSearchParams({ visit_date: dateStr });
+      if (employeeId) q.append("employee_id", String(employeeId));
+      return request<OutdoorVisitLog[]>(`/outdoor-logs?${q.toString()}`);
+    },
+    getActiveFair: async (dateStr: string, employeeId?: number): Promise<OutdoorVisitLog | null> => {
+      const q = new URLSearchParams({ visit_date: dateStr });
+      if (employeeId) q.append("employee_id", String(employeeId));
+      return request<OutdoorVisitLog | null>(`/fair/active?${q.toString()}`);
+    },
+    startFair: async (payload: FairStartPayload): Promise<OutdoorVisitLog> => {
+      return request<OutdoorVisitLog>("/fair/start", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    },
+    returnFair: async (payload: FairReturnPayload): Promise<OutdoorVisitLog> => {
+      return request<OutdoorVisitLog>("/fair/return", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    },
+    createOutdoorLog: async (payload: OutdoorVisitCreatePayload): Promise<OutdoorVisitLog> => {
+      return request<OutdoorVisitLog>("/outdoor-logs", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    },
+    deleteOutdoorLog: async (logId: number): Promise<{ success: boolean }> => {
+      return request<{ success: boolean }>(`/outdoor-logs/${logId}`, {
+        method: "DELETE",
       });
     },
   },

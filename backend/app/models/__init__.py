@@ -12,6 +12,7 @@ from app.models.notice import Notice, NoticeType, NoticeStatus, NoticePriority
 from app.models.milestone_checkpoint import MilestoneCheckpoint
 from app.models.team import Team
 from app.models.lead import Lead, LeadCallLog
+from app.models.outdoor_visit import OutdoorVisitLog
 
 __all__ = [
     "User",
@@ -31,4 +32,5 @@ __all__ = [
     "Team",
     "Lead",
     "LeadCallLog",
+    "OutdoorVisitLog",
 ]

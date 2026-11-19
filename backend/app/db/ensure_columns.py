@@ -161,6 +161,28 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
                             await conn.execute(text(f"ALTER TABLE milestone_checkpoints ADD COLUMN {col_name} {col_type}"))
                         except Exception:
                             pass
+                # Ensure outdoor_visit_logs table exists
+                await conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS outdoor_visit_logs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        report_id INTEGER REFERENCES daily_activity_reports(id) ON DELETE CASCADE,
+                        employee_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        visit_date DATE NOT NULL,
+                        visit_type VARCHAR(50) NOT NULL DEFAULT 'client_site',
+                        title VARCHAR(255),
+                        departure_time VARCHAR(20),
+                        return_time VARCHAR(20),
+                        duration_minutes INTEGER NOT NULL DEFAULT 0,
+                        status VARCHAR(50) NOT NULL DEFAULT 'completed',
+                        is_present BOOLEAN NOT NULL DEFAULT 1,
+                        notes TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_ovl_date ON outdoor_visit_logs(visit_date)"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_ovl_emp ON outdoor_visit_logs(employee_id)"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_ovl_type ON outdoor_visit_logs(visit_type)"))
         except Exception as exc:
             logger.warning("ensure_schema_updates sqlite warning: %s", exc)
     else:
@@ -449,5 +471,27 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_lead_transfer_logs_to_id ON lead_transfer_logs(to_employee_id);"))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_lead_transfer_logs_by_id ON lead_transfer_logs(transferred_by_id);"))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_lead_transfer_logs_at ON lead_transfer_logs(transferred_at);"))
+
+                await conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS outdoor_visit_logs (
+                        id SERIAL PRIMARY KEY,
+                        report_id INTEGER REFERENCES daily_activity_reports(id) ON DELETE CASCADE,
+                        employee_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        visit_date DATE NOT NULL,
+                        visit_type VARCHAR(50) NOT NULL DEFAULT 'client_site',
+                        title VARCHAR(255),
+                        departure_time VARCHAR(20),
+                        return_time VARCHAR(20),
+                        duration_minutes INTEGER NOT NULL DEFAULT 0,
+                        status VARCHAR(50) NOT NULL DEFAULT 'completed',
+                        is_present BOOLEAN NOT NULL DEFAULT TRUE,
+                        notes TEXT,
+                        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+                    );
+                """))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_ovl_date ON outdoor_visit_logs(visit_date);"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_ovl_emp ON outdoor_visit_logs(employee_id);"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_ovl_type ON outdoor_visit_logs(visit_type);"))
     except Exception as e:
         logger.warning("Could not ensure leads tables: %s", e)

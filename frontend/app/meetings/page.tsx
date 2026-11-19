@@ -25,6 +25,8 @@ import {
   Trash2,
   Edit2,
   Check,
+  Building,
+  Tent,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import {
@@ -45,8 +47,55 @@ import {
   MeetingMetricType,
   MeetingActivityEntry,
   Report,
+  OutdoorVisitLog,
+  OutdoorVisitType,
 } from "@/types";
-import { getDhakaToday, formatReadableDate, formatMinutes, formatEmployeeId } from "@/lib/utils";
+import { getDhakaToday, formatReadableDate, formatMinutes, formatEmployeeId, cn } from "@/lib/utils";
+
+/**
+ * Get current time in Dhaka formatted as "hh:mm AM/PM".
+ */
+function getDhakaCurrentTimeStr(): string {
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Dhaka",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }).format(new Date());
+  } catch {
+    return "11:00 AM";
+  }
+}
+
+/**
+ * Parse time string ("11:30 AM", "4:30 PM", "16:30") to minutes from midnight.
+ */
+function parseTimeStringToMinutes(str: string): number | null {
+  if (!str) return null;
+  const cleaned = str.trim().toUpperCase();
+  const m = cleaned.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/);
+  if (!m) return null;
+  let h = parseInt(m[1], 10);
+  const min = parseInt(m[2], 10);
+  const ampm = m[3];
+  if (ampm === "PM" && h < 12) h += 12;
+  if (ampm === "AM" && h === 12) h = 0;
+  return h * 60 + min;
+}
+
+/**
+ * Calculate difference in minutes between start time and end time.
+ */
+function calculateDuration(startStr: string, endStr: string): number {
+  const m1 = parseTimeStringToMinutes(startStr);
+  const m2 = parseTimeStringToMinutes(endStr);
+  if (m1 !== null && m2 !== null) {
+    if (m2 >= m1) return m2 - m1;
+    return 24 * 60 - m1 + m2;
+  }
+  return 0;
+}
 
 /**
  * Determine default time slot based on current Dhaka local hour.
@@ -270,6 +319,20 @@ function MeetingTimeDailyContent() {
   const [quickSaving, setQuickSaving] = useState(false);
   const [showDetailedCards, setShowDetailedCards] = useState(false);
 
+  // Outdoor & Fair Visit States
+  const [outdoorLogs, setOutdoorLogs] = useState<OutdoorVisitLog[]>([]);
+  const [activeFair, setActiveFair] = useState<OutdoorVisitLog | null>(null);
+  const [fairActionLoading, setFairActionLoading] = useState(false);
+
+  // Quick Modal Outdoor Subtype State
+  const [outdoorType, setOutdoorType] = useState<"client_site" | "fair">("client_site");
+  const [fairMode, setFairMode] = useState<"live" | "manual">("manual");
+  const [fairTitle, setFairTitle] = useState<string>("REHAB Housing Fair");
+  const [fairDepartureTime, setFairDepartureTime] = useState<string>("10:30 AM");
+  const [fairReturnTime, setFairReturnTime] = useState<string>("04:30 PM");
+  const [fairNotes, setFairNotes] = useState<string>("");
+  const [clientSiteName, setClientSiteName] = useState<string>("");
+
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -334,6 +397,18 @@ function MeetingTimeDailyContent() {
           };
         }
         setEntries(reset as Record<MeetingMetricType, MeetingActivityEntry>);
+      }
+
+      // Fetch outdoor and fair logs for this date & employee
+      try {
+        const [logs, activeF] = await Promise.all([
+          api.meetings.getOutdoorLogs(dateStr, empId),
+          api.meetings.getActiveFair(dateStr, empId),
+        ]);
+        setOutdoorLogs(logs);
+        setActiveFair(activeF);
+      } catch (errLogs) {
+        console.warn("Could not load outdoor logs:", errLogs);
       }
     } catch (err: unknown) {
       if (err instanceof ApiError) {
@@ -546,12 +621,61 @@ function MeetingTimeDailyContent() {
   };
 
   // Quick Log Handlers
-  const handleOpenQuickModal = (category: "outdoor" | "indoor" | "team" | "mg" = "outdoor") => {
+  const handleOpenQuickModal = (
+    category: "outdoor" | "indoor" | "team" | "mg" = "outdoor",
+    subType: "client_site" | "fair" = "client_site"
+  ) => {
     setQuickCategory(category);
+    setOutdoorType(subType);
     setQuickSlot(getDefaultDhakaSlot());
-    setQuickDuration(category === "outdoor" ? 60 : 30);
+    setQuickDuration(category === "outdoor" ? (subType === "fair" ? 180 : 60) : 30);
     setQuickCount(1);
+    setFairTitle("REHAB Housing Fair");
+    const nowTime = getDhakaCurrentTimeStr();
+    setFairDepartureTime(nowTime);
+    setFairReturnTime("05:00 PM");
+    setFairNotes("");
+    setClientSiteName("");
+    setFairMode("manual");
     setIsQuickModalOpen(true);
+  };
+
+  // Return From Fair Action (Easy 1-Tap: "I am Back (Mark Present)")
+  const handleReturnFromFair = async () => {
+    if (!activeFair) return;
+    setFairActionLoading(true);
+    try {
+      const nowTime = getDhakaCurrentTimeStr();
+      const res = await api.meetings.returnFair({
+        log_id: activeFair.id,
+        return_time: nowTime,
+        notes: "Returned to office - marked present",
+      });
+      setStatusMessage({
+        type: "success",
+        text: `Welcome back! Fair duty recorded (${formatMinutes(res.duration_minutes)}). You are marked Present!`,
+      });
+      setActiveFair(null);
+      await loadMeetingData(reportDate, selectedEmpId);
+    } catch (err: unknown) {
+      const msg = err instanceof ApiError ? err.message : "Failed to record return.";
+      setStatusMessage({ type: "error", text: msg });
+    } finally {
+      setFairActionLoading(false);
+    }
+  };
+
+  // Delete an outdoor visit log
+  const handleDeleteOutdoorLog = async (logId: number) => {
+    if (isLocked) return;
+    try {
+      await api.meetings.deleteOutdoorLog(logId);
+      setStatusMessage({ type: "info", text: "Outdoor visit record removed." });
+      await loadMeetingData(reportDate, selectedEmpId);
+    } catch (err: unknown) {
+      const msg = err instanceof ApiError ? err.message : "Failed to delete log.";
+      setStatusMessage({ type: "error", text: msg });
+    }
   };
 
   const handleEditActivity = (act: {
@@ -571,6 +695,71 @@ function MeetingTimeDailyContent() {
     if (isLocked || !report) return;
 
     setQuickSaving(true);
+
+    // Branch 1: Fair Visit Entry
+    if (quickCategory === "outdoor" && outdoorType === "fair") {
+      try {
+        if (fairMode === "live") {
+          const res = await api.meetings.startFair({
+            visit_date: reportDate,
+            title: fairTitle || "Fair Duty",
+            departure_time: fairDepartureTime || getDhakaCurrentTimeStr(),
+            notes: fairNotes,
+            employee_id: selectedEmpId,
+          });
+          setActiveFair(res);
+          setStatusMessage({
+            type: "success",
+            text: `Fair duty started at ${res.departure_time}! When you return, tap "I am Back (Mark Present)".`,
+          });
+        } else {
+          const calculatedMins = calculateDuration(fairDepartureTime, fairReturnTime) || quickDuration || 180;
+          await api.meetings.createOutdoorLog({
+            visit_date: reportDate,
+            visit_type: "fair",
+            title: fairTitle || "Fair Duty",
+            departure_time: fairDepartureTime,
+            return_time: fairReturnTime,
+            duration_minutes: calculatedMins,
+            status: "completed",
+            is_present: true,
+            notes: fairNotes,
+            employee_id: selectedEmpId,
+          });
+          setStatusMessage({
+            type: "success",
+            text: `Fair duty recorded (${formatMinutes(calculatedMins)}). Marked Present!`,
+          });
+        }
+        setIsQuickModalOpen(false);
+        await loadMeetingData(reportDate, selectedEmpId);
+      } catch (err: unknown) {
+        const msg = err instanceof ApiError ? err.message : "Failed to save fair duty.";
+        setStatusMessage({ type: "error", text: msg });
+      } finally {
+        setQuickSaving(false);
+      }
+      return;
+    }
+
+    // Branch 2: Client / Site Visit Entry (Log detailed visit log as well)
+    if (quickCategory === "outdoor" && outdoorType === "client_site") {
+      try {
+        await api.meetings.createOutdoorLog({
+          visit_date: reportDate,
+          visit_type: "client_site",
+          title: clientSiteName || "Client / Site Visit",
+          duration_minutes: quickDuration > 0 ? quickDuration : 60,
+          status: "completed",
+          is_present: true,
+          notes: clientSiteName ? `Site: ${clientSiteName}` : undefined,
+          employee_id: selectedEmpId,
+        });
+      } catch (e) {
+        console.warn("Could not log client site visit record:", e);
+      }
+    }
+
     const nextEntries = { ...entries };
 
     if (quickCategory === "outdoor") {
@@ -620,7 +809,7 @@ function MeetingTimeDailyContent() {
       );
       const catLabel =
         quickCategory === "outdoor"
-          ? "Outdoor Visit"
+          ? outdoorType === "fair" ? "Fair Visit" : "Outdoor Client Visit"
           : quickCategory === "indoor"
           ? "Indoor CX Meeting"
           : quickCategory === "team"
@@ -631,6 +820,7 @@ function MeetingTimeDailyContent() {
         text: `Saved ${catLabel} (${quickDuration}m) successfully!`,
       });
       setIsQuickModalOpen(false);
+      await loadMeetingData(reportDate, selectedEmpId);
     } catch (err: unknown) {
       setAutoSaveStatus("error");
       if (err instanceof ApiError) {
@@ -993,6 +1183,41 @@ function MeetingTimeDailyContent() {
           </Alert>
         )}
 
+        {/* ── Active Fair Duty Live Banner (Prominent 1-Tap Check-In) ── */}
+        {activeFair && (
+          <div className="bg-gradient-to-r from-amber-600 via-amber-500 to-amber-600 text-white p-4 sm:p-5 rounded-2xl shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in fade-in">
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center shrink-0 shadow-xs">
+                <Tent className="w-6 h-6 text-white animate-pulse" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-extrabold text-base tracking-tight">
+                    Active Fair Duty: {activeFair.title || "Real Estate Fair"}
+                  </span>
+                  <span className="text-[10px] font-bold bg-white text-amber-900 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                    Currently at Fair
+                  </span>
+                </div>
+                <p className="text-xs text-amber-100 mt-1">
+                  Departed at: <strong>{activeFair.departure_time || "—"}</strong> • When you get back to the office, press the button to mark yourself present.
+                </p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              onClick={handleReturnFromFair}
+              loading={fairActionLoading}
+              className="w-full sm:w-auto font-extrabold bg-white text-emerald-900 hover:bg-emerald-50 text-xs sm:text-sm h-11 px-5 shadow-md shrink-0 flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <CheckCircle2 className="w-4 h-4 text-emerald-700 stroke-[2.5]" />
+              <span>I am Back (Mark Present)</span>
+            </Button>
+          </div>
+        )}
+
         {/* ═══════════════════════════════════════════════════════════════════
             MOBILE APP-STYLE CARD VIEW (Optimized for fast phone data entry)
            ═══════════════════════════════════════════════════════════════════ */}
@@ -1001,21 +1226,33 @@ function MeetingTimeDailyContent() {
             {/* Quick Entry Hero Banner */}
             <div className="bg-emerald-800 text-white rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="space-y-1">
-                <h3 className="text-base sm:text-lg font-extrabold tracking-tight">Record Meeting or Client Visit</h3>
+                <h3 className="text-base sm:text-lg font-extrabold tracking-tight">Record Meeting, Site Visit or Fair</h3>
                 <p className="text-xs text-emerald-100">
-                  Log visits & meetings in seconds.
+                  Log client visits, fair duties, and meetings in seconds.
                 </p>
               </div>
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={isLocked || loading}
-                onClick={() => handleOpenQuickModal("outdoor")}
-                className="w-full sm:w-auto font-bold bg-white text-emerald-900 hover:bg-emerald-50 shadow-xs text-xs sm:text-sm py-2.5 px-4 shrink-0 rounded-xl"
-              >
-                <Plus className="w-4 h-4 mr-1.5 stroke-[2.5]" />
-                Log Meeting / Field Visit
-              </Button>
+              <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={isLocked || loading}
+                  onClick={() => handleOpenQuickModal("outdoor", "fair")}
+                  className="w-full sm:w-auto font-bold bg-amber-400 hover:bg-amber-300 text-amber-950 shadow-xs text-xs sm:text-sm py-2 px-3.5 shrink-0 rounded-xl"
+                >
+                  <Tent className="w-4 h-4 mr-1.5" />
+                  Fair Duty Log
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={isLocked || loading}
+                  onClick={() => handleOpenQuickModal("outdoor", "client_site")}
+                  className="w-full sm:w-auto font-bold bg-white text-emerald-900 hover:bg-emerald-50 shadow-xs text-xs sm:text-sm py-2 px-3.5 shrink-0 rounded-xl"
+                >
+                  <Plus className="w-4 h-4 mr-1.5 stroke-[2.5]" />
+                  Log Visit / Meeting
+                </Button>
+              </div>
             </div>
 
             {/* ── Key Metric Summary Cards (Live Overview) ────────────────── */}
@@ -1080,6 +1317,121 @@ function MeetingTimeDailyContent() {
                 </p>
               </Card>
             </div>
+
+            {/* ── Outdoor & Fair Visit Logs (Client & Real Estate Fair) ── */}
+            {outdoorLogs.length > 0 && (
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <MapPin className="w-4 h-4 text-emerald-600" />
+                    <span>Outdoor & Fair Logs ({outdoorLogs.length})</span>
+                  </span>
+                  {!isLocked && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenQuickModal("outdoor", "fair")}
+                      className="text-xs font-bold text-amber-700 hover:text-amber-800 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Log Fair Visit</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 gap-2">
+                  {outdoorLogs.map((log) => (
+                    <div
+                      key={log.id}
+                      className="bg-white border border-slate-200 rounded-xl p-3 shadow-2xs flex items-center justify-between gap-3 hover:border-slate-300 transition-all"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div
+                          className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                            log.visit_type === "fair"
+                              ? "bg-amber-100 text-amber-800"
+                              : "bg-emerald-100 text-emerald-800"
+                          }`}
+                        >
+                          {log.visit_type === "fair" ? (
+                            <Tent className="w-4.5 h-4.5 text-amber-700" />
+                          ) : (
+                            <Building className="w-4.5 h-4.5 text-emerald-700" />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-slate-900 text-xs sm:text-sm truncate">
+                              {log.title || (log.visit_type === "fair" ? "Fair Duty" : "Client / Site Visit")}
+                            </span>
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.2 rounded-full border ${
+                                log.visit_type === "fair"
+                                  ? "bg-amber-50 text-amber-900 border-amber-200"
+                                  : "bg-emerald-50 text-emerald-900 border-emerald-200"
+                              }`}
+                            >
+                              {log.visit_type === "fair" ? "🎪 Fair Duty" : "🏢 Client / Site"}
+                            </span>
+                            {log.status === "in_progress" ? (
+                              <span className="text-[10px] font-bold px-2 py-0.2 rounded-full bg-amber-500 text-white animate-pulse">
+                                At Fair (Out)
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold px-2 py-0.2 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                ✓ Present
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-500 flex-wrap">
+                            {log.departure_time && (
+                              <span>
+                                Left: <strong className="font-mono text-slate-700">{log.departure_time}</strong>
+                              </span>
+                            )}
+                            {log.return_time && (
+                              <span>
+                                → Back: <strong className="font-mono text-slate-700">{log.return_time}</strong>
+                              </span>
+                            )}
+                            {log.duration_minutes > 0 && (
+                              <span className="font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200 text-[11px]">
+                                ⏱ {formatMinutes(log.duration_minutes)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        {log.status === "in_progress" && !isLocked && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="primary"
+                            onClick={handleReturnFromFair}
+                            loading={fairActionLoading}
+                            className="text-xs h-7.5 px-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                            Mark Present
+                          </Button>
+                        )}
+                        {!isLocked && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteOutdoorLog(log.id)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all cursor-pointer"
+                            title="Delete log"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* ── Today's Recorded Activities Stream ────────────────────────── */}
             <div className="space-y-3">
@@ -1627,6 +1979,121 @@ function MeetingTimeDailyContent() {
           </Card>
         )}
 
+        {/* ── Outdoor & Fair Visit Logs (Table View) ── */}
+        {viewMode === "table" && outdoorLogs.length > 0 && (
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                <MapPin className="w-4 h-4 text-emerald-600" />
+                <span>Outdoor & Fair Duty Logs ({outdoorLogs.length})</span>
+              </span>
+              {!isLocked && (
+                <button
+                  type="button"
+                  onClick={() => handleOpenQuickModal("outdoor", "fair")}
+                  className="text-xs font-bold text-amber-700 hover:text-amber-800 flex items-center gap-1 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Log Fair Visit</span>
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              {outdoorLogs.map((log) => (
+                <div
+                  key={log.id}
+                  className="bg-white border border-slate-200 rounded-xl p-3 shadow-2xs flex items-center justify-between gap-3"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                        log.visit_type === "fair"
+                          ? "bg-amber-100 text-amber-800"
+                          : "bg-emerald-100 text-emerald-800"
+                      }`}
+                    >
+                      {log.visit_type === "fair" ? (
+                        <Tent className="w-4.5 h-4.5 text-amber-700" />
+                      ) : (
+                        <Building className="w-4.5 h-4.5 text-emerald-700" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-slate-900 text-xs truncate">
+                          {log.title || (log.visit_type === "fair" ? "Fair Duty" : "Client / Site Visit")}
+                        </span>
+                        <span
+                          className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full border ${
+                            log.visit_type === "fair"
+                              ? "bg-amber-50 text-amber-900 border-amber-200"
+                              : "bg-emerald-50 text-emerald-900 border-emerald-200"
+                          }`}
+                        >
+                          {log.visit_type === "fair" ? "🎪 Fair Duty" : "🏢 Client / Site"}
+                        </span>
+                        {log.status === "in_progress" ? (
+                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-amber-500 text-white animate-pulse">
+                            At Fair (Out)
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            ✓ Present
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-500 flex-wrap">
+                        {log.departure_time && (
+                          <span>
+                            Left: <strong className="font-mono text-slate-700">{log.departure_time}</strong>
+                          </span>
+                        )}
+                        {log.return_time && (
+                          <span>
+                            → Back: <strong className="font-mono text-slate-700">{log.return_time}</strong>
+                          </span>
+                        )}
+                        {log.duration_minutes > 0 && (
+                          <span className="font-bold text-emerald-800 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200 text-[10px]">
+                            ⏱ {formatMinutes(log.duration_minutes)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    {log.status === "in_progress" && !isLocked && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="primary"
+                        onClick={handleReturnFromFair}
+                        loading={fairActionLoading}
+                        className="text-xs h-7 px-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold"
+                      >
+                        <CheckCircle2 className="w-3 h-3 mr-1" />
+                        Mark Present
+                      </Button>
+                    )}
+                    {!isLocked && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteOutdoorLog(log.id)}
+                        className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-all cursor-pointer"
+                        title="Delete record"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* ── Key Metric Summary Cards (Shown for Table View) ─────────────── */}
         {viewMode === "table" && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -1787,162 +2254,329 @@ function MeetingTimeDailyContent() {
               </div>
             </div>
 
-            {/* 2. Time Slot */}
-            <div>
-              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-2">
-                2. Shift / Time Slot
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { key: "slot_10_to_1" as const, label: "10am – 1pm", period: "Morning" },
-                  { key: "slot_2_to_5" as const, label: "2pm – 5pm", period: "Afternoon" },
-                  { key: "slot_5_to_6" as const, label: "5pm – 6pm", period: "Evening" },
-                ].map((s) => {
-                  const isSelected = quickSlot === s.key;
-                  return (
-                    <button
-                      key={s.key}
-                      type="button"
-                      onClick={() => setQuickSlot(s.key)}
-                      className={`py-2 px-2 rounded-xl text-center border text-xs font-bold transition-all ${
-                        isSelected
-                          ? "bg-green-800 text-white border-green-800 shadow-xs ring-2 ring-green-600/30"
-                          : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-                      }`}
-                    >
-                      <span className="block text-[10px] opacity-75 uppercase font-medium">{s.period}</span>
-                      <span className="block mt-0.5">{s.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* 3. Duration */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  3. Duration: <span className="text-green-800 font-extrabold text-sm">{formatMinutes(quickDuration)} ({quickDuration} min)</span>
-                </label>
-                <span className="text-[10px] text-slate-500">Tap preset or adjust</span>
-              </div>
-
-              {/* Preset Duration Chips */}
-              <div className="flex flex-wrap gap-1.5 mb-2.5">
-                {[15, 30, 45, 60, 90, 120, 180].map((mins) => {
-                  const isSelected = quickDuration === mins;
-                  return (
-                    <button
-                      key={mins}
-                      type="button"
-                      onClick={() => setQuickDuration(mins)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                        isSelected
-                          ? "bg-green-700 text-white shadow-2xs"
-                          : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                      }`}
-                    >
-                      {mins >= 60 ? `${mins / 60}h` : `${mins}m`}
-                      {mins === 60 ? " (1 hr)" : mins === 120 ? " (2 hrs)" : ""}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Custom Duration Stepper */}
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setQuickDuration((prev) => Math.max(0, prev - 15))}
-                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-lg text-sm active:scale-95 transition-all"
-                >
-                  −15m
-                </button>
-                <div className="relative flex-1">
-                  <input
-                    type="number"
-                    min="0"
-                    step="5"
-                    value={quickDuration}
-                    onChange={(e) => setQuickDuration(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                    className="w-full text-center py-2 px-3 bg-white border border-slate-300 rounded-lg text-sm font-bold text-slate-900 focus:ring-2 focus:ring-green-600 focus:outline-none"
-                  />
-                  <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-medium pointer-events-none">
-                    mins
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setQuickDuration((prev) => prev + 15)}
-                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-lg text-sm active:scale-95 transition-all"
-                >
-                  +15m
-                </button>
-              </div>
-            </div>
-
-            {/* 4. Number of Visits (Only for Outdoor & Indoor) */}
-            {(quickCategory === "outdoor" || quickCategory === "indoor") && (
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    4. Number of {quickCategory === "outdoor" ? "Visits" : "Customers"}
+            {/* 1b. Outdoor Sub-Type Selector: Client Visit vs Fair Visit */}
+            {quickCategory === "outdoor" && (
+              <div className="bg-emerald-50/80 border border-emerald-200/90 rounded-xl p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-emerald-950 uppercase tracking-wider flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>Outdoor Visit Purpose:</span>
                   </label>
-                  <span className="text-green-800 font-extrabold text-sm">{quickCount} {quickCount === 1 ? "Visit" : "Visits"}</span>
+                  <span className="text-[10px] text-emerald-800 font-semibold">Select Destination</span>
                 </div>
-
-                <div className="grid grid-cols-4 gap-2 mb-2">
-                  {[1, 2, 3, 4].map((cnt) => {
-                    const isSelected = quickCount === cnt;
-                    return (
-                      <button
-                        key={cnt}
-                        type="button"
-                        onClick={() => setQuickCount(cnt)}
-                        className={`py-2 rounded-lg text-xs font-bold transition-all text-center ${
-                          isSelected
-                            ? "bg-green-700 text-white shadow-2xs"
-                            : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                        }`}
-                      >
-                        {cnt} {cnt === 1 ? "Visit" : "Visits"}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="flex items-center gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    onClick={() => setQuickCount((prev) => Math.max(1, prev - 1))}
-                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-lg text-xs active:scale-95 transition-all"
+                    onClick={() => {
+                      setOutdoorType("client_site");
+                      if (quickDuration === 180) setQuickDuration(60);
+                    }}
+                    className={cn(
+                      "py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer border",
+                      outdoorType === "client_site"
+                        ? "bg-white text-emerald-900 border-emerald-600 shadow-xs ring-1 ring-emerald-500 font-extrabold"
+                        : "bg-emerald-100/60 text-emerald-800 border-transparent hover:bg-white/80"
+                    )}
                   >
-                    −1
+                    <Building className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>Client / Site Visit</span>
                   </button>
-                  <input
-                    type="number"
-                    min="1"
-                    value={quickCount}
-                    onChange={(e) => setQuickCount(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                    className="w-full text-center py-1.5 px-3 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:ring-2 focus:ring-green-600 focus:outline-none"
-                  />
                   <button
                     type="button"
-                    onClick={() => setQuickCount((prev) => prev + 1)}
-                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-lg text-xs active:scale-95 transition-all"
+                    onClick={() => {
+                      setOutdoorType("fair");
+                      if (quickDuration === 60) setQuickDuration(180);
+                    }}
+                    className={cn(
+                      "py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer border",
+                      outdoorType === "fair"
+                        ? "bg-white text-amber-950 border-amber-600 shadow-xs ring-1 ring-amber-500 font-extrabold"
+                        : "bg-amber-100/60 text-amber-900 border-transparent hover:bg-white/80"
+                    )}
                   >
-                    +1
+                    <Tent className="w-3.5 h-3.5 text-amber-700" />
+                    <span>Fair Visit (Stall)</span>
                   </button>
                 </div>
               </div>
+            )}
+
+            {/* If Fair Visit: Dedicated Easy-Word Flow */}
+            {quickCategory === "outdoor" && outdoorType === "fair" ? (
+              <div className="space-y-3.5 bg-slate-50 border border-slate-200 rounded-xl p-3.5">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-1">
+                    Fair Name / Venue
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. REHAB Housing Fair - Stall 4B"
+                    value={fairTitle}
+                    onChange={(e) => setFairTitle(e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-green-600 focus:outline-none"
+                  />
+                </div>
+
+                {/* Mode Selector */}
+                <div className="flex items-center gap-1.5 bg-slate-200/70 p-1 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => setFairMode("live")}
+                    className={cn(
+                      "flex-1 py-1.5 text-xs font-bold rounded-md transition text-center cursor-pointer",
+                      fairMode === "live"
+                        ? "bg-white text-emerald-800 shadow-xs font-extrabold"
+                        : "text-slate-600 hover:text-slate-900"
+                    )}
+                  >
+                    🚀 Leaving Now (Going to Fair)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFairMode("manual")}
+                    className={cn(
+                      "flex-1 py-1.5 text-xs font-bold rounded-md transition text-center cursor-pointer",
+                      fairMode === "manual"
+                        ? "bg-white text-emerald-800 shadow-xs font-extrabold"
+                        : "text-slate-600 hover:text-slate-900"
+                    )}
+                  >
+                    📝 Completed (Enter Times)
+                  </button>
+                </div>
+
+                {fairMode === "live" ? (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
+                    <p className="text-xs text-amber-900 leading-relaxed">
+                      Leaving for the fair right now? Tap below to record your departure. When you get back to the office, just press the <strong>"I am Back (Mark Present)"</strong> button!
+                    </p>
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-xs text-slate-600 font-semibold">Departure Time:</span>
+                      <input
+                        type="text"
+                        value={fairDepartureTime}
+                        onChange={(e) => setFairDepartureTime(e.target.value)}
+                        className="px-2.5 py-1 text-xs border border-slate-300 rounded-lg font-mono font-bold text-slate-900 w-28 text-center bg-white"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5 bg-white border border-slate-200 p-3 rounded-xl">
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-600 block mb-1">
+                          When did you go? (Departure)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. 10:30 AM"
+                          value={fairDepartureTime}
+                          onChange={(e) => setFairDepartureTime(e.target.value)}
+                          className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg font-mono font-bold text-slate-900 text-center"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-600 block mb-1">
+                          When did you get back? (Return)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. 04:30 PM"
+                          value={fairReturnTime}
+                          onChange={(e) => setFairReturnTime(e.target.value)}
+                          className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg font-mono font-bold text-slate-900 text-center"
+                        />
+                      </div>
+                    </div>
+                    {/* Duration preview */}
+                    <div className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg flex items-center justify-between font-semibold">
+                      <span>Calculated Fair Duty Time:</span>
+                      <span className="font-mono text-sm font-extrabold text-emerald-950">
+                        {formatMinutes(calculateDuration(fairDepartureTime, fairReturnTime) || 180)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                {/* Optional Client / Project Site Name for Client Visits */}
+                {quickCategory === "outdoor" && outdoorType === "client_site" && (
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-1">
+                      Project Site / Client Name (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Uttara Project Site / Mr. Rahman"
+                      value={clientSiteName}
+                      onChange={(e) => setClientSiteName(e.target.value)}
+                      className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-green-600 focus:outline-none"
+                    />
+                  </div>
+                )}
+
+                {/* 2. Time Slot */}
+                <div>
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-2">
+                    2. Shift / Time Slot
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { key: "slot_10_to_1" as const, label: "10am – 1pm", period: "Morning" },
+                      { key: "slot_2_to_5" as const, label: "2pm – 5pm", period: "Afternoon" },
+                      { key: "slot_5_to_6" as const, label: "5pm – 6pm", period: "Evening" },
+                    ].map((s) => {
+                      const isSelected = quickSlot === s.key;
+                      return (
+                        <button
+                          key={s.key}
+                          type="button"
+                          onClick={() => setQuickSlot(s.key)}
+                          className={`py-2 px-2 rounded-xl text-center border text-xs font-bold transition-all ${
+                            isSelected
+                              ? "bg-green-800 text-white border-green-800 shadow-xs ring-2 ring-green-600/30"
+                              : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                          }`}
+                        >
+                          <span className="block text-[10px] opacity-75 uppercase font-medium">{s.period}</span>
+                          <span className="block mt-0.5">{s.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 3. Duration */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      3. Duration: <span className="text-green-800 font-extrabold text-sm">{formatMinutes(quickDuration)} ({quickDuration} min)</span>
+                    </label>
+                    <span className="text-[10px] text-slate-500">Tap preset or adjust</span>
+                  </div>
+
+                  {/* Preset Duration Chips */}
+                  <div className="flex flex-wrap gap-1.5 mb-2.5">
+                    {[15, 30, 45, 60, 90, 120, 180].map((mins) => {
+                      const isSelected = quickDuration === mins;
+                      return (
+                        <button
+                          key={mins}
+                          type="button"
+                          onClick={() => setQuickDuration(mins)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                            isSelected
+                              ? "bg-green-700 text-white shadow-2xs"
+                              : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                          }`}
+                        >
+                          {mins >= 60 ? `${mins / 60}h` : `${mins}m`}
+                          {mins === 60 ? " (1 hr)" : mins === 120 ? " (2 hrs)" : ""}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Custom Duration Stepper */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setQuickDuration((prev) => Math.max(0, prev - 15))}
+                      className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-lg text-sm active:scale-95 transition-all"
+                    >
+                      −15m
+                    </button>
+                    <div className="relative flex-1">
+                      <input
+                        type="number"
+                        min="0"
+                        step="5"
+                        value={quickDuration}
+                        onChange={(e) => setQuickDuration(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                        className="w-full text-center py-2 px-3 bg-white border border-slate-300 rounded-lg text-sm font-bold text-slate-900 focus:ring-2 focus:ring-green-600 focus:outline-none"
+                      />
+                      <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-medium pointer-events-none">
+                        mins
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setQuickDuration((prev) => prev + 15)}
+                      className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-lg text-sm active:scale-95 transition-all"
+                    >
+                      +15m
+                    </button>
+                  </div>
+                </div>
+
+                {/* 4. Number of Visits (Only for Outdoor & Indoor) */}
+                {(quickCategory === "outdoor" || quickCategory === "indoor") && (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                        4. Number of {quickCategory === "outdoor" ? "Visits" : "Customers"}
+                      </label>
+                      <span className="text-green-800 font-extrabold text-sm">{quickCount} {quickCount === 1 ? "Visit" : "Visits"}</span>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-2 mb-2">
+                      {[1, 2, 3, 4].map((cnt) => {
+                        const isSelected = quickCount === cnt;
+                        return (
+                          <button
+                            key={cnt}
+                            type="button"
+                            onClick={() => setQuickCount(cnt)}
+                            className={`py-2 rounded-lg text-xs font-bold transition-all text-center ${
+                              isSelected
+                                ? "bg-green-700 text-white shadow-2xs"
+                                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                            }`}
+                          >
+                            {cnt} {cnt === 1 ? "Visit" : "Visits"}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setQuickCount((prev) => Math.max(1, prev - 1))}
+                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-lg text-xs active:scale-95 transition-all"
+                      >
+                        −1
+                      </button>
+                      <input
+                        type="number"
+                        min="1"
+                        value={quickCount}
+                        onChange={(e) => setQuickCount(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                        className="w-full text-center py-1.5 px-3 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:ring-2 focus:ring-green-600 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setQuickCount((prev) => prev + 1)}
+                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-lg text-xs active:scale-95 transition-all"
+                      >
+                        +1
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
 
             {/* Live Preview Summary */}
             <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs flex items-center justify-between text-slate-700">
               <span className="text-slate-500">Summary:</span>
               <span className="font-bold text-slate-900">
-                {quickCategory === "outdoor" ? "Outdoor Visit" : quickCategory === "indoor" ? "Indoor CX" : quickCategory === "team" ? "Team Meeting" : "Management Meeting"} · {quickSlot === "slot_10_to_1" ? "10am–1pm" : quickSlot === "slot_2_to_5" ? "2pm–5pm" : "5pm–6pm"} · {formatMinutes(quickDuration)}
-                {(quickCategory === "outdoor" || quickCategory === "indoor") ? ` (${quickCount} visits)` : ""}
+                {quickCategory === "outdoor"
+                  ? outdoorType === "fair"
+                    ? `Fair Duty · ${fairMode === "live" ? `Leaving at ${fairDepartureTime}` : `${formatMinutes(calculateDuration(fairDepartureTime, fairReturnTime) || 180)}`}`
+                    : `Client Visit · ${quickSlot === "slot_10_to_1" ? "10am–1pm" : quickSlot === "slot_2_to_5" ? "2pm–5pm" : "5pm–6pm"} · ${formatMinutes(quickDuration)} (${quickCount} visits)`
+                  : `${quickCategory === "indoor" ? "Indoor CX" : quickCategory === "team" ? "Team Meeting" : "Management Meeting"} · ${quickSlot === "slot_10_to_1" ? "10am–1pm" : quickSlot === "slot_2_to_5" ? "2pm–5pm" : "5pm–6pm"} · ${formatMinutes(quickDuration)}`}
               </span>
             </div>
 
@@ -1964,7 +2598,11 @@ function MeetingTimeDailyContent() {
                 className="font-bold bg-green-700 hover:bg-green-800 text-white px-5"
               >
                 <Check className="w-4 h-4 mr-1.5 stroke-[2.5]" />
-                Save & Record Activity
+                {quickCategory === "outdoor" && outdoorType === "fair"
+                  ? fairMode === "live"
+                    ? "Start Fair Duty"
+                    : "Save Fair & Mark Present"
+                  : "Save & Record Activity"}
               </Button>
             </div>
           </div>

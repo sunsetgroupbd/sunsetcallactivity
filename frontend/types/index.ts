@@ -1026,7 +1026,50 @@ export interface CrmPipelineSummaryResponse {
   is_full_sync?: boolean;
 }
 
+export type OutdoorVisitType = "client_site" | "fair";
 
+export interface OutdoorVisitLog {
+  id: number;
+  report_id?: number | null;
+  employee_id: number;
+  employee_name?: string | null;
+  visit_date: string;
+  visit_type: OutdoorVisitType;
+  title?: string | null;
+  departure_time?: string | null;
+  return_time?: string | null;
+  duration_minutes: number;
+  status: "in_progress" | "completed";
+  is_present: boolean;
+  notes?: string | null;
+  created_at?: string;
+}
 
+export interface FairStartPayload {
+  visit_date?: string;
+  title?: string;
+  departure_time?: string;
+  notes?: string;
+  employee_id?: number;
+}
+
+export interface FairReturnPayload {
+  log_id?: number;
+  return_time?: string;
+  notes?: string;
+}
+
+export interface OutdoorVisitCreatePayload {
+  visit_date?: string;
+  visit_type: OutdoorVisitType;
+  title?: string;
+  departure_time?: string;
+  return_time?: string;
+  duration_minutes?: number;
+  status?: string;
+  is_present?: boolean;
+  notes?: string;
+  employee_id?: number;
+}
 
 

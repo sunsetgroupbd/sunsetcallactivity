@@ -24,12 +24,12 @@ class PerformanceIntervalSummary(BaseModel):
     outdoor_visits: int = 0
     indoor_cx: int = 0
     total_calls: int = 0
-    sold_fair: Decimal = Decimal("0")
-    sold_fb: Decimal = Decimal("0")
-    sold_other: Decimal = Decimal("0")
+    sold_fair: int = 0
+    sold_fb: int = 0
+    sold_other: int = 0
     gl: Optional[str] = None
-    hold: Decimal = Decimal("0")
-    cancel: Decimal = Decimal("0")
+    hold: int = 0
+    cancel: int = 0
     total_lead_hp_p: int = 0
     is_manual: bool = False
     admin_notes: Optional[str] = None
@@ -60,12 +60,12 @@ class EmployeeMonthlyPerformance(BaseModel):
     
     # Predictions from Employee / Committed Pipeline
     total_calls: int = 0
-    prediction_sold_fair: Decimal = Decimal("0")
-    prediction_sold_fb: Decimal = Decimal("0")
-    prediction_sold_other: Decimal = Decimal("0")
+    prediction_sold_fair: int = 0
+    prediction_sold_fb: int = 0
+    prediction_sold_other: int = 0
     gl: Optional[str] = None
-    prediction_hold: Decimal = Decimal("0")
-    prediction_cancel: Decimal = Decimal("0")
+    prediction_hold: int = 0
+    prediction_cancel: int = 0
     total_lead_hp_p: int = 0
     outdoor_visits: int = 0
     indoor_cx: int = 0
@@ -174,12 +174,12 @@ class MilestoneCheckpointItem(BaseModel):
     outdoor_visits: int = 0
     indoor_cx: int = 0
     total_calls: int = 0
-    sold_fair: Decimal = Decimal("0")
-    sold_fb: Decimal = Decimal("0")
-    sold_other: Decimal = Decimal("0")
+    sold_fair: int = 0
+    sold_fb: int = 0
+    sold_other: int = 0
     gl: Optional[str] = None
-    hold: Decimal = Decimal("0")
-    cancel: Decimal = Decimal("0")
+    hold: int = 0
+    cancel: int = 0
     admin_notes: Optional[str] = None
 
 

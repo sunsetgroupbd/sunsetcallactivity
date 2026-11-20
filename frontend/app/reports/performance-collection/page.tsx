@@ -1036,13 +1036,13 @@ function PerformanceCollectionReportContent() {
                                 <td className="py-2.5 px-2 text-right text-amber-700 font-bold">{hm.p}</td>
                                 <td className="py-2.5 px-2 text-right text-sky-700 font-bold">{hm.fup}</td>
                                 <td className="py-2.5 px-2 text-center font-bold text-slate-800">{hm.total_calls || 0}</td>
-                                <td className="py-2.5 px-2 text-center text-amber-700 font-bold">{hm.prediction_hold ? "৳" + formatMoney(hm.prediction_hold) : 0}</td>
-                                <td className="py-2.5 px-2 text-center text-rose-700 font-bold">{hm.prediction_cancel ? "৳" + formatMoney(hm.prediction_cancel) : 0}</td>
+                                <td className="py-2.5 px-2 text-center text-amber-700 font-bold">{Number(hm.prediction_hold) || 0}</td>
+                                <td className="py-2.5 px-2 text-center text-rose-700 font-bold">{Number(hm.prediction_cancel) || 0}</td>
                                 <td className="py-2.5 px-2 text-center font-bold text-indigo-700">{hm.indoor_cx || 0}</td>
                                 <td className="py-2.5 px-2 text-center font-bold text-teal-700">{hm.outdoor_visits || 0}</td>
-                                <td className="py-2.5 px-2 text-right text-emerald-700 font-bold">{hm.prediction_sold_fair ? "৳" + formatMoney(hm.prediction_sold_fair) : 0}</td>
-                                <td className="py-2.5 px-2 text-right text-sky-700 font-bold">{hm.prediction_sold_fb ? "৳" + formatMoney(hm.prediction_sold_fb) : 0}</td>
-                                <td className="py-2.5 px-2 text-right text-purple-700 font-bold">{hm.prediction_sold_other ? "৳" + formatMoney(hm.prediction_sold_other) : 0}</td>
+                                <td className="py-2.5 px-2 text-right text-emerald-700 font-bold">{Number(hm.prediction_sold_fair) || 0}</td>
+                                <td className="py-2.5 px-2 text-right text-sky-700 font-bold">{Number(hm.prediction_sold_fb) || 0}</td>
+                                <td className="py-2.5 px-2 text-right text-purple-700 font-bold">{Number(hm.prediction_sold_other) || 0}</td>
                               </tr>
                             ))}
 
@@ -1062,13 +1062,13 @@ function PerformanceCollectionReportContent() {
                               <td className="py-2.5 px-2 text-right text-amber-700 font-extrabold">{emp.p}</td>
                               <td className="py-2.5 px-2 text-right text-sky-700 font-extrabold">{emp.fup}</td>
                               <td className="py-2.5 px-2 text-center font-extrabold text-slate-900">{emp.total_calls || 0}</td>
-                              <td className="py-2.5 px-2 text-center text-amber-700 font-bold">{emp.prediction_hold ? "৳" + formatMoney(emp.prediction_hold) : 0}</td>
-                              <td className="py-2.5 px-2 text-center text-rose-700 font-bold">{emp.prediction_cancel ? "৳" + formatMoney(emp.prediction_cancel) : 0}</td>
+                              <td className="py-2.5 px-2 text-center text-amber-700 font-bold">{Number(emp.prediction_hold) || 0}</td>
+                              <td className="py-2.5 px-2 text-center text-rose-700 font-bold">{Number(emp.prediction_cancel) || 0}</td>
                               <td className="py-2.5 px-2 text-center font-extrabold text-indigo-700">{emp.indoor_cx || 0}</td>
                               <td className="py-2.5 px-2 text-center font-extrabold text-teal-700">{emp.outdoor_visits || 0}</td>
-                              <td className="py-2.5 px-2 text-right text-emerald-700 font-extrabold">{emp.prediction_sold_fair ? "৳" + formatMoney(emp.prediction_sold_fair) : 0}</td>
-                              <td className="py-2.5 px-2 text-right text-sky-700 font-extrabold">{emp.prediction_sold_fb ? "৳" + formatMoney(emp.prediction_sold_fb) : 0}</td>
-                              <td className="py-2.5 px-2 text-right text-purple-700 font-extrabold">{emp.prediction_sold_other ? "৳" + formatMoney(emp.prediction_sold_other) : 0}</td>
+                              <td className="py-2.5 px-2 text-right text-emerald-700 font-extrabold">{Number(emp.prediction_sold_fair) || 0}</td>
+                              <td className="py-2.5 px-2 text-right text-sky-700 font-extrabold">{Number(emp.prediction_sold_fb) || 0}</td>
+                              <td className="py-2.5 px-2 text-right text-purple-700 font-extrabold">{Number(emp.prediction_sold_other) || 0}</td>
                             </tr>
 
                             {/* 3. The 6 Milestone Rows: Till 5th, Till 10th, ..., Till 30/31th */}
@@ -1095,13 +1095,13 @@ function PerformanceCollectionReportContent() {
                                 <td className="py-2 px-2 text-right text-amber-700 font-bold">{inv.p}</td>
                                 <td className="py-2 px-2 text-right text-sky-700 font-bold">{inv.fup}</td>
                                 <td className="py-2 px-2 text-center font-bold text-slate-800">{inv.total_calls || 0}</td>
-                                <td className="py-2 px-2 text-center text-amber-700">{inv.hold ? "৳" + formatMoney(inv.hold) : 0}</td>
-                                <td className="py-2 px-2 text-center text-rose-700">{inv.cancel ? "৳" + formatMoney(inv.cancel) : 0}</td>
+                                <td className="py-2 px-2 text-center text-amber-700">{Number(inv.hold) || 0}</td>
+                                <td className="py-2 px-2 text-center text-rose-700">{Number(inv.cancel) || 0}</td>
                                 <td className="py-2 px-2 text-center text-indigo-700 font-medium">{inv.indoor_cx || 0}</td>
                                 <td className="py-2 px-2 text-center text-teal-700 font-medium">{inv.outdoor_visits || 0}</td>
-                                <td className="py-2 px-2 text-right text-emerald-700">{inv.sold_fair ? "৳" + formatMoney(inv.sold_fair) : 0}</td>
-                                <td className="py-2 px-2 text-right text-sky-700">{inv.sold_fb ? "৳" + formatMoney(inv.sold_fb) : 0}</td>
-                                <td className="py-2 px-2 text-right text-purple-700">{inv.sold_other ? "৳" + formatMoney(inv.sold_other) : 0}</td>
+                                <td className="py-2 px-2 text-right text-emerald-700">{Number(inv.sold_fair) || 0}</td>
+                                <td className="py-2 px-2 text-right text-sky-700">{Number(inv.sold_fb) || 0}</td>
+                                <td className="py-2 px-2 text-right text-purple-700">{Number(inv.sold_other) || 0}</td>
                               </tr>
                             ))}
                           </tbody>

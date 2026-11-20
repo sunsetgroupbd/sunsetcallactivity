@@ -576,13 +576,13 @@ function PrintablePerformanceCollectionContent() {
                         <td className="py-0.5 px-0.5 border border-slate-300 text-right text-amber-700 font-bold">{hm.p}</td>
                         <td className="py-0.5 px-0.5 border border-slate-300 text-right text-sky-700 font-bold">{hm.fup}</td>
                         <td className="py-0.5 px-0.5 border border-slate-300 text-center font-bold">{hm.total_calls || 0}</td>
-                        <td className="py-0.5 px-0.5 border border-slate-300 text-center text-amber-800">{hm.prediction_hold ? "৳" + formatMoney(hm.prediction_hold) : 0}</td>
-                        <td className="py-0.5 px-0.5 border border-slate-300 text-center text-rose-800">{hm.prediction_cancel ? "৳" + formatMoney(hm.prediction_cancel) : 0}</td>
+                        <td className="py-0.5 px-0.5 border border-slate-300 text-center text-amber-800">{Number(hm.prediction_hold) || 0}</td>
+                        <td className="py-0.5 px-0.5 border border-slate-300 text-center text-rose-800">{Number(hm.prediction_cancel) || 0}</td>
                         <td className="py-0.5 px-0.5 border border-slate-300 text-center text-indigo-800">{hm.indoor_cx || 0}</td>
                         <td className="py-0.5 px-0.5 border border-slate-300 text-center text-teal-800">{hm.outdoor_visits || 0}</td>
-                        <td className="py-0.5 px-0.5 border border-slate-300 text-right text-emerald-800">{hm.prediction_sold_fair ? "৳" + formatMoney(hm.prediction_sold_fair) : 0}</td>
-                        <td className="py-0.5 px-0.5 border border-slate-300 text-right text-sky-800">{hm.prediction_sold_fb ? "৳" + formatMoney(hm.prediction_sold_fb) : 0}</td>
-                        <td className="py-0.5 px-0.5 border border-slate-300 text-right text-purple-800">{hm.prediction_sold_other ? "৳" + formatMoney(hm.prediction_sold_other) : 0}</td>
+                        <td className="py-0.5 px-0.5 border border-slate-300 text-right text-emerald-800">{Number(hm.prediction_sold_fair) || 0}</td>
+                        <td className="py-0.5 px-0.5 border border-slate-300 text-right text-sky-800">{Number(hm.prediction_sold_fb) || 0}</td>
+                        <td className="py-0.5 px-0.5 border border-slate-300 text-right text-purple-800">{Number(hm.prediction_sold_other) || 0}</td>
                       </tr>
                     ))}
 
@@ -600,13 +600,13 @@ function PrintablePerformanceCollectionContent() {
                       <td className="py-0.5 px-0.5 border border-slate-300 text-right text-amber-700 font-extrabold">{emp.p}</td>
                       <td className="py-0.5 px-0.5 border border-slate-300 text-right text-sky-700 font-extrabold">{emp.fup}</td>
                       <td className="py-0.5 px-0.5 border border-slate-300 text-center font-extrabold">{emp.total_calls || 0}</td>
-                      <td className="py-0.5 px-0.5 border border-slate-300 text-center text-amber-800 font-bold">{emp.prediction_hold ? "৳" + formatMoney(emp.prediction_hold) : 0}</td>
-                      <td className="py-0.5 px-0.5 border border-slate-300 text-center text-rose-800 font-bold">{emp.prediction_cancel ? "৳" + formatMoney(emp.prediction_cancel) : 0}</td>
+                      <td className="py-0.5 px-0.5 border border-slate-300 text-center text-amber-800 font-bold">{Number(emp.prediction_hold) || 0}</td>
+                      <td className="py-0.5 px-0.5 border border-slate-300 text-center text-rose-800 font-bold">{Number(emp.prediction_cancel) || 0}</td>
                       <td className="py-0.5 px-0.5 border border-slate-300 text-center text-indigo-800 font-bold">{emp.indoor_cx || 0}</td>
                       <td className="py-0.5 px-0.5 border border-slate-300 text-center text-teal-800 font-bold">{emp.outdoor_visits || 0}</td>
-                      <td className="py-0.5 px-0.5 border border-slate-300 text-right text-emerald-800 font-extrabold">{emp.prediction_sold_fair ? "৳" + formatMoney(emp.prediction_sold_fair) : 0}</td>
-                      <td className="py-0.5 px-0.5 border border-slate-300 text-right text-sky-800 font-extrabold">{emp.prediction_sold_fb ? "৳" + formatMoney(emp.prediction_sold_fb) : 0}</td>
-                      <td className="py-0.5 px-0.5 border border-slate-300 text-right text-purple-800 font-extrabold">{emp.prediction_sold_other ? "৳" + formatMoney(emp.prediction_sold_other) : 0}</td>
+                      <td className="py-0.5 px-0.5 border border-slate-300 text-right text-emerald-800 font-extrabold">{Number(emp.prediction_sold_fair) || 0}</td>
+                      <td className="py-0.5 px-0.5 border border-slate-300 text-right text-sky-800 font-extrabold">{Number(emp.prediction_sold_fb) || 0}</td>
+                      <td className="py-0.5 px-0.5 border border-slate-300 text-right text-purple-800 font-extrabold">{Number(emp.prediction_sold_other) || 0}</td>
                     </tr>
 
                     {/* 3. Checkpoints (Till 5th ... Till 30/31th) */}
@@ -627,13 +627,13 @@ function PrintablePerformanceCollectionContent() {
                         <td className="py-0.5 px-0.5 border border-slate-300 text-right text-amber-700 font-bold">{inv.p}</td>
                         <td className="py-0.5 px-0.5 border border-slate-300 text-right text-sky-700 font-bold">{inv.fup}</td>
                         <td className="py-0.5 px-0.5 border border-slate-300 text-center font-bold">{inv.total_calls || 0}</td>
-                        <td className="py-0.5 px-0.5 border border-slate-300 text-center text-amber-800">{inv.hold ? "৳" + formatMoney(inv.hold) : 0}</td>
-                        <td className="py-0.5 px-0.5 border border-slate-300 text-center text-rose-800">{inv.cancel ? "৳" + formatMoney(inv.cancel) : 0}</td>
+                        <td className="py-0.5 px-0.5 border border-slate-300 text-center text-amber-800">{Number(inv.hold) || 0}</td>
+                        <td className="py-0.5 px-0.5 border border-slate-300 text-center text-rose-800">{Number(inv.cancel) || 0}</td>
                         <td className="py-0.5 px-0.5 border border-slate-300 text-center text-indigo-800">{inv.indoor_cx || 0}</td>
                         <td className="py-0.5 px-0.5 border border-slate-300 text-center text-teal-800">{inv.outdoor_visits || 0}</td>
-                        <td className="py-0.5 px-0.5 border border-slate-300 text-right text-emerald-800">{inv.sold_fair ? "৳" + formatMoney(inv.sold_fair) : 0}</td>
-                        <td className="py-0.5 px-0.5 border border-slate-300 text-right text-sky-800">{inv.sold_fb ? "৳" + formatMoney(inv.sold_fb) : 0}</td>
-                        <td className="py-0.5 px-0.5 border border-slate-300 text-right text-purple-800">{inv.sold_other ? "৳" + formatMoney(inv.sold_other) : 0}</td>
+                        <td className="py-0.5 px-0.5 border border-slate-300 text-right text-emerald-800">{Number(inv.sold_fair) || 0}</td>
+                        <td className="py-0.5 px-0.5 border border-slate-300 text-right text-sky-800">{Number(inv.sold_fb) || 0}</td>
+                        <td className="py-0.5 px-0.5 border border-slate-300 text-right text-purple-800">{Number(inv.sold_other) || 0}</td>
                       </tr>
                     ))}
                   </tbody>

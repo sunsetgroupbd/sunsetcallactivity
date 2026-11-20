@@ -54,11 +54,11 @@ class PerformanceCollectionService:
         calls_total = 0
         outdoor_total = 0
         indoor_total = 0
-        pred_fair = Decimal("0")
-        pred_fb = Decimal("0")
-        pred_other = Decimal("0")
-        pred_hold = Decimal("0")
-        pred_cancel = Decimal("0")
+        pred_fair = 0
+        pred_fb = 0
+        pred_other = 0
+        pred_hold = 0
+        pred_cancel = 0
 
         for r in rep_list:
             for se in r.sales_collection_entries:
@@ -69,11 +69,11 @@ class PerformanceCollectionService:
                 if "new_sales" in cat:
                     if "commit" in cat or "payment" in cat:
                         if "fair" in desc:
-                            pred_fair += amt
+                            pred_fair += 1
                         elif "fb" in desc or "facebook" in desc:
-                            pred_fb += amt
+                            pred_fb += 1
                         else:
-                            pred_other += amt
+                            pred_other += 1
                     else:
                         act_new_sales += amt
                 elif "emi" in cat:
@@ -82,9 +82,9 @@ class PerformanceCollectionService:
                     act_tb += amt
 
                 if "hold" in desc:
-                    pred_hold += amt
+                    pred_hold += 1
                 if "cancel" in desc:
-                    pred_cancel += amt
+                    pred_cancel += 1
 
             for ce in r.call_entries:
                 cat_name = (ce.lead_category or "").lower()
@@ -563,12 +563,12 @@ class PerformanceCollectionService:
                             outdoor_visits=rec.outdoor_visits,
                             indoor_cx=rec.indoor_cx,
                             total_calls=getattr(rec, "total_calls", 0) or sub_m["total_calls"],
-                            sold_fair=getattr(rec, "sold_fair", Decimal("0")) or sub_m["prediction_sold_fair"],
-                            sold_fb=getattr(rec, "sold_fb", Decimal("0")) or sub_m["prediction_sold_fb"],
-                            sold_other=getattr(rec, "sold_other", Decimal("0")) or sub_m["prediction_sold_other"],
+                            sold_fair=int(getattr(rec, "sold_fair", 0) or sub_m["prediction_sold_fair"] or 0),
+                            sold_fb=int(getattr(rec, "sold_fb", 0) or sub_m["prediction_sold_fb"] or 0),
+                            sold_other=int(getattr(rec, "sold_other", 0) or sub_m["prediction_sold_other"] or 0),
                             gl=getattr(rec, "gl", None) or gl_title,
-                            hold=getattr(rec, "hold", Decimal("0")) or sub_m["prediction_hold"],
-                            cancel=getattr(rec, "cancel", Decimal("0")) or sub_m["prediction_cancel"],
+                            hold=int(getattr(rec, "hold", 0) or sub_m["prediction_hold"] or 0),
+                            cancel=int(getattr(rec, "cancel", 0) or sub_m["prediction_cancel"] or 0),
                             total_lead_hp_p=rec.hp + rec.p,
                             is_manual=True,
                             admin_notes=rec.admin_notes,
@@ -592,12 +592,12 @@ class PerformanceCollectionService:
                             outdoor_visits=sub_m["outdoor_visits"],
                             indoor_cx=sub_m["indoor_cx"],
                             total_calls=sub_m["total_calls"],
-                            sold_fair=sub_m["prediction_sold_fair"],
-                            sold_fb=sub_m["prediction_sold_fb"],
-                            sold_other=sub_m["prediction_sold_other"],
+                            sold_fair=int(sub_m["prediction_sold_fair"] or 0),
+                            sold_fb=int(sub_m["prediction_sold_fb"] or 0),
+                            sold_other=int(sub_m["prediction_sold_other"] or 0),
                             gl=gl_title,
-                            hold=sub_m["prediction_hold"],
-                            cancel=sub_m["prediction_cancel"],
+                            hold=int(sub_m["prediction_hold"] or 0),
+                            cancel=int(sub_m["prediction_cancel"] or 0),
                             total_lead_hp_p=sub_m["total_lead_hp_p"],
                             is_manual=False,
                         )
@@ -622,12 +622,12 @@ class PerformanceCollectionService:
                     p=curr_metrics["p"],
                     fup=curr_metrics["fup"],
                     total_calls=curr_metrics["total_calls"],
-                    prediction_sold_fair=curr_metrics["prediction_sold_fair"],
-                    prediction_sold_fb=curr_metrics["prediction_sold_fb"],
-                    prediction_sold_other=curr_metrics["prediction_sold_other"],
+                    prediction_sold_fair=int(curr_metrics["prediction_sold_fair"] or 0),
+                    prediction_sold_fb=int(curr_metrics["prediction_sold_fb"] or 0),
+                    prediction_sold_other=int(curr_metrics["prediction_sold_other"] or 0),
                     gl=gl_title,
-                    prediction_hold=curr_metrics["prediction_hold"],
-                    prediction_cancel=curr_metrics["prediction_cancel"],
+                    prediction_hold=int(curr_metrics["prediction_hold"] or 0),
+                    prediction_cancel=int(curr_metrics["prediction_cancel"] or 0),
                     total_lead_hp_p=curr_metrics["total_lead_hp_p"],
                     outdoor_visits=curr_metrics["outdoor_visits"],
                     indoor_cx=curr_metrics["indoor_cx"],
@@ -681,12 +681,12 @@ class PerformanceCollectionService:
                         outdoor_visits=rec.outdoor_visits,
                         indoor_cx=rec.indoor_cx,
                         total_calls=getattr(rec, "total_calls", 0),
-                        sold_fair=getattr(rec, "sold_fair", Decimal("0")),
-                        sold_fb=getattr(rec, "sold_fb", Decimal("0")),
-                        sold_other=getattr(rec, "sold_other", Decimal("0")),
+                        sold_fair=int(getattr(rec, "sold_fair", 0) or 0),
+                        sold_fb=int(getattr(rec, "sold_fb", 0) or 0),
+                        sold_other=int(getattr(rec, "sold_other", 0) or 0),
                         gl=getattr(rec, "gl", None) or "Company GL",
-                        hold=getattr(rec, "hold", Decimal("0")),
-                        cancel=getattr(rec, "cancel", Decimal("0")),
+                        hold=int(getattr(rec, "hold", 0) or 0),
+                        cancel=int(getattr(rec, "cancel", 0) or 0),
                         total_lead_hp_p=rec.hp + rec.p,
                         is_manual=True,
                         admin_notes=rec.admin_notes,
@@ -746,24 +746,24 @@ class PerformanceCollectionService:
                     0,
                 )
                 c_sold_fair = sum(
-                    (p.intervals[idx].sold_fair for p in monthly_performances if len(p.intervals) > idx),
-                    Decimal("0"),
+                    (int(p.intervals[idx].sold_fair or 0) for p in monthly_performances if len(p.intervals) > idx),
+                    0,
                 )
                 c_sold_fb = sum(
-                    (p.intervals[idx].sold_fb for p in monthly_performances if len(p.intervals) > idx),
-                    Decimal("0"),
+                    (int(p.intervals[idx].sold_fb or 0) for p in monthly_performances if len(p.intervals) > idx),
+                    0,
                 )
                 c_sold_other = sum(
-                    (p.intervals[idx].sold_other for p in monthly_performances if len(p.intervals) > idx),
-                    Decimal("0"),
+                    (int(p.intervals[idx].sold_other or 0) for p in monthly_performances if len(p.intervals) > idx),
+                    0,
                 )
                 c_hold = sum(
-                    (p.intervals[idx].hold for p in monthly_performances if len(p.intervals) > idx),
-                    Decimal("0"),
+                    (int(p.intervals[idx].hold or 0) for p in monthly_performances if len(p.intervals) > idx),
+                    0,
                 )
                 c_cancel = sum(
-                    (p.intervals[idx].cancel for p in monthly_performances if len(p.intervals) > idx),
-                    Decimal("0"),
+                    (int(p.intervals[idx].cancel or 0) for p in monthly_performances if len(p.intervals) > idx),
+                    0,
                 )
                 company_intervals.append(
                     PerformanceIntervalSummary(
@@ -1101,12 +1101,12 @@ class PerformanceCollectionService:
                     outdoor_visits=target_rec.outdoor_visits,
                     indoor_cx=target_rec.indoor_cx,
                     total_calls=getattr(target_rec, "total_calls", 0),
-                    sold_fair=getattr(target_rec, "sold_fair", Decimal("0")),
-                    sold_fb=getattr(target_rec, "sold_fb", Decimal("0")),
-                    sold_other=getattr(target_rec, "sold_other", Decimal("0")),
+                    sold_fair=int(getattr(target_rec, "sold_fair", 0) or 0),
+                    sold_fb=int(getattr(target_rec, "sold_fb", 0) or 0),
+                    sold_other=int(getattr(target_rec, "sold_other", 0) or 0),
                     gl=getattr(target_rec, "gl", None),
-                    hold=getattr(target_rec, "hold", Decimal("0")),
-                    cancel=getattr(target_rec, "cancel", Decimal("0")),
+                    hold=int(getattr(target_rec, "hold", 0) or 0),
+                    cancel=int(getattr(target_rec, "cancel", 0) or 0),
                     admin_notes=target_rec.admin_notes,
                     is_manual=True,
                     updated_by_id=target_rec.updated_by_id,
@@ -1150,12 +1150,12 @@ class PerformanceCollectionService:
                 outdoor_visits=r.outdoor_visits,
                 indoor_cx=r.indoor_cx,
                 total_calls=getattr(r, "total_calls", 0),
-                sold_fair=getattr(r, "sold_fair", Decimal("0")),
-                sold_fb=getattr(r, "sold_fb", Decimal("0")),
-                sold_other=getattr(r, "sold_other", Decimal("0")),
+                sold_fair=int(getattr(r, "sold_fair", 0) or 0),
+                sold_fb=int(getattr(r, "sold_fb", 0) or 0),
+                sold_other=int(getattr(r, "sold_other", 0) or 0),
                 gl=getattr(r, "gl", None),
-                hold=getattr(r, "hold", Decimal("0")),
-                cancel=getattr(r, "cancel", Decimal("0")),
+                hold=int(getattr(r, "hold", 0) or 0),
+                cancel=int(getattr(r, "cancel", 0) or 0),
                 admin_notes=r.admin_notes,
                 is_manual=True,
                 updated_by_id=r.updated_by_id,

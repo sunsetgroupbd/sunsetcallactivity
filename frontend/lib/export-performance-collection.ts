@@ -77,13 +77,13 @@ export function exportPerformanceCollectionToCSV(
             hm.p,
             hm.fup,
             hm.total_calls || 0,
-            hm.prediction_hold,
-            hm.prediction_cancel,
+            Number(hm.prediction_hold) || 0,
+            Number(hm.prediction_cancel) || 0,
             hm.indoor_cx || 0,
             hm.outdoor_visits || 0,
-            hm.prediction_sold_fair,
-            hm.prediction_sold_fb,
-            hm.prediction_sold_other,
+            Number(hm.prediction_sold_fair) || 0,
+            Number(hm.prediction_sold_fb) || 0,
+            Number(hm.prediction_sold_other) || 0,
           ]
             .map(escapeCsv)
             .join(",")
@@ -111,13 +111,13 @@ export function exportPerformanceCollectionToCSV(
         emp.p,
         emp.fup,
         emp.total_calls || 0,
-        emp.prediction_hold,
-        emp.prediction_cancel,
+        Number(emp.prediction_hold) || 0,
+        Number(emp.prediction_cancel) || 0,
         emp.indoor_cx || 0,
         emp.outdoor_visits || 0,
-        emp.prediction_sold_fair,
-        emp.prediction_sold_fb,
-        emp.prediction_sold_other,
+        Number(emp.prediction_sold_fair) || 0,
+        Number(emp.prediction_sold_fb) || 0,
+        Number(emp.prediction_sold_other) || 0,
       ]
         .map(escapeCsv)
         .join(",")

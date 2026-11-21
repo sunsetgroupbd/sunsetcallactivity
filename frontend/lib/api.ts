@@ -1122,6 +1122,50 @@ export const api = {
     }> => {
       return request("/crm/debug");
     },
+    getPhoneIndexStatus: async (): Promise<{
+      total_indexed: number;
+      is_syncing: boolean;
+      running: boolean;
+      progress?: number;
+      percent?: number;
+      current?: number;
+      total?: number;
+      last_synced?: string;
+      status?: string;
+    }> => {
+      return request("/crm/phone-index-status");
+    },
+    syncPhoneIndex: async (batchSize = 5000): Promise<{ started: boolean; message: string; status?: any }> => {
+      return request(`/crm/sync-phone-index?batch_size=${batchSize}`, { method: "POST" });
+    },
+    cancelPhoneIndexSync: async (): Promise<{ cancelled: boolean; message: string }> => {
+      return request("/crm/cancel-phone-index-sync", { method: "POST" });
+    },
+    deduplicatePhones: async (phones: string[]): Promise<{
+      total_input: number;
+      unique_input_phones: number;
+      clean_count: number;
+      duplicates_count: number;
+      clean_numbers: string[];
+      duplicates: Array<{
+        input_phone: string;
+        phone_normalized: string;
+        matched_phone: string;
+        lead_name: string;
+        assigned_to: string;
+        status: string;
+        project: string;
+        source: string;
+        created_at: string;
+      }>;
+      index_total: number;
+      is_syncing: boolean;
+    }> => {
+      return request("/crm/deduplicate", {
+        method: "POST",
+        body: JSON.stringify({ phones }),
+      });
+    },
   },
 
   leadWorkflow: {

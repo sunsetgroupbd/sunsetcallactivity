@@ -1,14 +1,21 @@
 """CRM integration endpoints — Admin only."""
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import get_current_user
+from app.db.session import get_db
 from app.models.user import User, UserRole
 from app.services.crm_service import CrmService
 
 router = APIRouter(prefix="/crm", tags=["CRM Integration"])
+
+
+class PhoneDeduplicatePayload(BaseModel):
+    phones: List[str]
 
 
 def _require_admin(user: User) -> None:
@@ -149,4 +156,52 @@ async def get_crm_leads(
         "from_cache": result.get("from_cache", False),
         "fetched_at": result.get("fetched_at"),
     }
+
+
+@router.get("/phone-index-status")
+async def get_crm_phone_index_status(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Check how many leads are indexed and whether background sync is currently running."""
+    _require_admin(current_user)
+    svc = CrmService()
+    return await svc.get_phone_index_status(db)
+
+
+@router.post("/sync-phone-index")
+async def sync_crm_phone_index(
+    batch_size: int = Query(5000, ge=500, le=5000),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Start background sync of all 53k+ Somikoron CRM leads into crm_phone_index."""
+    _require_admin(current_user)
+    svc = CrmService()
+    return await svc.start_phone_index_sync(batch_size=batch_size)
+
+
+@router.post("/cancel-phone-index-sync")
+async def cancel_crm_phone_index_sync(
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Cancel running CRM phone index sync."""
+    _require_admin(current_user)
+    svc = CrmService()
+    return svc.cancel_phone_index_sync()
+
+
+@router.post("/deduplicate")
+async def deduplicate_crm_phones(
+    payload: PhoneDeduplicatePayload,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """
+    Check uploaded phone numbers against the CRM phone index.
+    Filters out any numbers that already exist in Somikoron CRM.
+    Returns clean (fresh) numbers and details of matched duplicate leads.
+    """
+    _require_admin(current_user)
+    svc = CrmService()
+    return await svc.deduplicate_phones(payload.phones, db)
 

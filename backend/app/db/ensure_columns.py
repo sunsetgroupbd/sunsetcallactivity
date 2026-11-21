@@ -183,6 +183,24 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_ovl_date ON outdoor_visit_logs(visit_date)"))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_ovl_emp ON outdoor_visit_logs(employee_id)"))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_ovl_type ON outdoor_visit_logs(visit_type)"))
+
+                # Ensure crm_phone_index table exists for high-speed lead deduplication
+                await conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS crm_phone_index (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        phone_normalized VARCHAR(20) NOT NULL UNIQUE,
+                        phone_raw VARCHAR(50),
+                        lead_id VARCHAR(50),
+                        lead_name VARCHAR(200),
+                        assigned_to VARCHAR(150),
+                        status VARCHAR(100),
+                        project VARCHAR(150),
+                        source VARCHAR(100),
+                        created_at_crm VARCHAR(50),
+                        synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_cpi_phone_norm ON crm_phone_index(phone_normalized)"))
         except Exception as exc:
             logger.warning("ensure_schema_updates sqlite warning: %s", exc)
     else:
@@ -493,5 +511,23 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_ovl_date ON outdoor_visit_logs(visit_date);"))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_ovl_emp ON outdoor_visit_logs(employee_id);"))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_ovl_type ON outdoor_visit_logs(visit_type);"))
+
+                # Ensure crm_phone_index exists in PostgreSQL
+                await conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS crm_phone_index (
+                        id SERIAL PRIMARY KEY,
+                        phone_normalized VARCHAR(20) NOT NULL UNIQUE,
+                        phone_raw VARCHAR(50),
+                        lead_id VARCHAR(50),
+                        lead_name VARCHAR(200),
+                        assigned_to VARCHAR(150),
+                        status VARCHAR(100),
+                        project VARCHAR(150),
+                        source VARCHAR(100),
+                        created_at_crm VARCHAR(50),
+                        synced_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+                    );
+                """))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_cpi_phone_norm ON crm_phone_index(phone_normalized);"))
     except Exception as e:
         logger.warning("Could not ensure leads tables: %s", e)

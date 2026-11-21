@@ -28,6 +28,12 @@ import {
   ChevronRight,
   Layers,
   Loader2,
+  Upload,
+  Filter,
+  Check,
+  Copy,
+  FileText,
+  CheckCircle,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, Button, Modal } from "@/components/ui";
@@ -102,6 +108,187 @@ export default function CrmLeadsPage() {
 
   // Lead Detail Modal
   const [selectedLead, setSelectedLead] = useState<CrmLead | null>(null);
+
+  // CSV Deduplication State
+  const [dedupModalOpen, setDedupModalOpen] = useState(false);
+  const [dedupLoading, setDedupLoading] = useState(false);
+  const [dedupTab, setDedupTab] = useState<"file" | "paste">("file");
+  const [dedupRawText, setDedupRawText] = useState("");
+  const [dedupFileName, setDedupFileName] = useState<string | null>(null);
+  const [dedupParsedPhones, setDedupParsedPhones] = useState<string[]>([]);
+  const [dedupResult, setDedupResult] = useState<{
+    total_input: number;
+    unique_input_phones: number;
+    clean_count: number;
+    duplicates_count: number;
+    clean_numbers: string[];
+    duplicates: Array<{
+      input_phone: string;
+      phone_normalized: string;
+      matched_phone: string;
+      lead_name: string;
+      assigned_to: string;
+      status: string;
+      project: string;
+      source: string;
+      created_at: string;
+    }>;
+    index_total: number;
+    is_syncing: boolean;
+  } | null>(null);
+  const [phoneIndexStatus, setPhoneIndexStatus] = useState<any>(null);
+  const [syncingPhoneIndex, setSyncingPhoneIndex] = useState(false);
+  const [duplicateListTab, setDuplicateListTab] = useState<"clean" | "duplicates">("clean");
+  const [copiedClean, setCopiedClean] = useState(false);
+
+  // Fetch Phone Index Status when modal opens
+  const loadPhoneIndexStatus = useCallback(async () => {
+    try {
+      const st = await api.crm.getPhoneIndexStatus();
+      setPhoneIndexStatus(st);
+      if (st.running || st.is_syncing) {
+        setSyncingPhoneIndex(true);
+      } else {
+        setSyncingPhoneIndex(false);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    if (dedupModalOpen) {
+      loadPhoneIndexStatus();
+      const interval = setInterval(() => {
+        loadPhoneIndexStatus();
+      }, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [dedupModalOpen, loadPhoneIndexStatus]);
+
+  const handleStartPhoneSync = async () => {
+    try {
+      setSyncingPhoneIndex(true);
+      await api.crm.syncPhoneIndex(5000);
+      loadPhoneIndexStatus();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to start sync");
+      setSyncingPhoneIndex(false);
+    }
+  };
+
+  const parsePhoneContent = (content: string, fileName?: string) => {
+    if (fileName) setDedupFileName(fileName);
+    const lines = content.split(/[\r\n,;]+/);
+    const phones: string[] = [];
+    const seen = new Set<string>();
+    for (const line of lines) {
+      const clean = line.trim().replace(/^["']|["']$/g, "").replace(/\s+/g, "");
+      if (!clean) continue;
+      if (
+        clean.toLowerCase().includes("phone") ||
+        clean.toLowerCase().includes("mobile") ||
+        clean.toLowerCase().includes("number")
+      ) {
+        continue;
+      }
+      const digits = clean.replace(/\D/g, "");
+      if (digits.length >= 7 && !seen.has(clean)) {
+        seen.add(clean);
+        phones.push(clean);
+      }
+    }
+    setDedupParsedPhones(phones);
+    setDedupResult(null);
+  };
+
+  const handleCsvFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const text = (evt.target?.result as string) || "";
+      parsePhoneContent(text, file.name);
+    };
+    reader.readAsText(file);
+  };
+
+  const handleRunDeduplication = async () => {
+    if (dedupParsedPhones.length === 0) return;
+    setDedupLoading(true);
+    try {
+      const res = await api.crm.deduplicatePhones(dedupParsedPhones);
+      setDedupResult(res);
+      setDuplicateListTab(res.clean_count > 0 ? "clean" : "duplicates");
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to deduplicate");
+    } finally {
+      setDedupLoading(false);
+    }
+  };
+
+  const handleDownloadCleanCSV = () => {
+    if (!dedupResult || !dedupResult.clean_numbers) return;
+    const csvContent =
+      "data:text/csv;charset=utf-8," +
+      ["Phone Number", ...dedupResult.clean_numbers].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute(
+      "download",
+      `Clean_Fresh_Leads_${new Date().toISOString().split("T")[0]}.csv`
+    );
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleDownloadDuplicatesReport = () => {
+    if (!dedupResult || !dedupResult.duplicates) return;
+    const headers = [
+      "Uploaded Phone",
+      "Matched CRM Phone",
+      "Lead Name",
+      "Assigned To",
+      "Status",
+      "Project",
+      "Source",
+      "Created Date",
+    ];
+    const rows = dedupResult.duplicates.map((d) =>
+      [
+        `"${d.input_phone}"`,
+        `"${d.matched_phone}"`,
+        `"${d.lead_name}"`,
+        `"${d.assigned_to}"`,
+        `"${d.status}"`,
+        `"${d.project}"`,
+        `"${d.source}"`,
+        `"${d.created_at}"`,
+      ].join(",")
+    );
+    const csvContent =
+      "data:text/csv;charset=utf-8," +
+      [headers.join(","), ...rows].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute(
+      "download",
+      `CRM_Duplicate_Leads_Report_${new Date().toISOString().split("T")[0]}.csv`
+    );
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleCopyCleanNumbers = () => {
+    if (!dedupResult || !dedupResult.clean_numbers) return;
+    navigator.clipboard.writeText(dedupResult.clean_numbers.join("\n"));
+    setCopiedClean(true);
+    setTimeout(() => setCopiedClean(false), 2000);
+  };
 
   // Diagnostic state
   const [debugInfo, setDebugInfo] = useState<any>(null);
@@ -516,6 +703,21 @@ export default function CrmLeadsPage() {
           </div>
 
           <div className="flex items-center gap-2 self-start md:self-center">
+            {/* Deduplicate CSV Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setDedupModalOpen(true);
+                loadPhoneIndexStatus();
+              }}
+              className="text-xs h-8 shadow-2xs border-indigo-200 text-indigo-700 hover:bg-indigo-50 hover:border-indigo-300 font-semibold flex items-center gap-1.5"
+              title="Upload a CSV with phone numbers to filter out numbers that already exist in CRM"
+            >
+              <Filter className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Deduplicate CSV</span>
+            </Button>
+
             <Button
               variant="outline"
               size="sm"
@@ -1494,6 +1696,310 @@ export default function CrmLeadsPage() {
                 </Button>
               )}
             </div>
+          </div>
+        </Modal>
+
+        {/* CSV Deduplication & Phone Checker Modal */}
+        <Modal
+          isOpen={dedupModalOpen}
+          onClose={() => setDedupModalOpen(false)}
+          title="Filter & Deduplicate Phone Numbers Against CRM"
+          description="Upload a CSV or paste phone numbers to detect and remove any numbers that already exist in Somikoron CRM."
+        >
+          <div className="space-y-4 py-1 max-h-[80vh] overflow-y-auto pr-1">
+            {/* Phone Index Status Bar */}
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2">
+                <Database className="w-4 h-4 text-indigo-600 shrink-0" />
+                <div>
+                  <div className="font-semibold text-slate-800 flex items-center gap-1.5">
+                    <span>CRM Phone Index:</span>
+                    <span className="font-bold text-indigo-700 font-mono">
+                      {phoneIndexStatus?.total_indexed
+                        ? Number(phoneIndexStatus.total_indexed).toLocaleString()
+                        : "0"}{" "}
+                      leads indexed
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-500">
+                    {syncingPhoneIndex
+                      ? phoneIndexStatus?.status ||
+                        "Synchronizing whole CRM lead database in background..."
+                      : phoneIndexStatus?.last_synced
+                      ? `Last synced: ${new Date(
+                          phoneIndexStatus.last_synced
+                        ).toLocaleString()}`
+                      : "Indexes all 53,000+ Somikoron CRM leads for instant deduplication."}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
+                {syncingPhoneIndex ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-lg animate-pulse">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Syncing ({phoneIndexStatus?.percent || 0}%)</span>
+                  </span>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleStartPhoneSync}
+                    className="text-xs h-7 shadow-2xs border-slate-300 hover:border-indigo-400 hover:text-indigo-700 flex items-center gap-1"
+                    title="Refresh index from all 53,000+ leads in Somikoron CRM"
+                  >
+                    <RefreshCw className="w-3 h-3 text-slate-600" />
+                    <span>Sync Whole CRM</span>
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Input Selection Tabs */}
+            <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+              <button
+                type="button"
+                onClick={() => setDedupTab("file")}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-semibold rounded-lg transition flex items-center gap-1.5",
+                  dedupTab === "file"
+                    ? "bg-indigo-50 text-indigo-700 border border-indigo-200"
+                    : "text-slate-600 hover:bg-slate-100"
+                )}
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>Upload CSV / TXT</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDedupTab("paste")}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-semibold rounded-lg transition flex items-center gap-1.5",
+                  dedupTab === "paste"
+                    ? "bg-indigo-50 text-indigo-700 border border-indigo-200"
+                    : "text-slate-600 hover:bg-slate-100"
+                )}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Paste Phone Numbers</span>
+              </button>
+            </div>
+
+            {/* File Upload Tab */}
+            {dedupTab === "file" && (
+              <div className="space-y-3">
+                <label className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-200 hover:border-indigo-400 rounded-2xl cursor-pointer bg-slate-50/50 hover:bg-indigo-50/30 transition group">
+                  <div className="flex flex-col items-center justify-center text-center">
+                    <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs group-hover:scale-105 transition mb-2">
+                      <FileSpreadsheet className="w-6 h-6 text-indigo-600" />
+                    </div>
+                    <span className="text-xs font-bold text-slate-800">
+                      {dedupFileName
+                        ? dedupFileName
+                        : "Click to select or drag & drop CSV file"}
+                    </span>
+                    <span className="text-[11px] text-slate-400 mt-0.5">
+                      Accepts .csv, .txt files with phone numbers in any format
+                    </span>
+                  </div>
+                  <input
+                    type="file"
+                    accept=".csv,.txt"
+                    onChange={handleCsvFileUpload}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            )}
+
+            {/* Paste Numbers Tab */}
+            {dedupTab === "paste" && (
+              <div className="space-y-2">
+                <textarea
+                  rows={5}
+                  value={dedupRawText}
+                  onChange={(e) => {
+                    setDedupRawText(e.target.value);
+                    parsePhoneContent(e.target.value);
+                  }}
+                  placeholder="Paste phone numbers here, one per line or separated by commas (e.g. 01712345678, +8801812345678)..."
+                  className="w-full text-xs font-mono p-3 border border-slate-300 rounded-xl focus:border-indigo-500 focus:outline-none"
+                />
+              </div>
+            )}
+
+            {/* Detected Numbers Bar */}
+            {dedupParsedPhones.length > 0 && (
+              <div className="flex items-center justify-between p-2.5 bg-indigo-50/70 border border-indigo-200 rounded-xl text-xs">
+                <span className="font-semibold text-indigo-900">
+                  Detected{" "}
+                  <span className="font-bold font-mono">
+                    {dedupParsedPhones.length.toLocaleString()}
+                  </span>{" "}
+                  valid phone numbers
+                </span>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleRunDeduplication}
+                  loading={dedupLoading}
+                  className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs font-bold"
+                >
+                  <Filter className="w-3.5 h-3.5 mr-1" />
+                  Check & Deduplicate
+                </Button>
+              </div>
+            )}
+
+            {/* Results Section */}
+            {dedupResult && (
+              <div className="space-y-4 pt-2 border-t border-slate-200 animate-in fade-in duration-200">
+                {/* 3 Metric Summary Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      Total Uploaded
+                    </div>
+                    <div className="text-xl font-extrabold text-slate-800 font-mono mt-0.5">
+                      {dedupResult.total_input.toLocaleString()}
+                    </div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">
+                      Input numbers
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-rose-700">
+                      Already in CRM (Removed)
+                    </div>
+                    <div className="text-xl font-extrabold text-rose-700 font-mono mt-0.5">
+                      {dedupResult.duplicates_count.toLocaleString()}
+                    </div>
+                    <div className="text-[11px] text-rose-600 mt-0.5">
+                      Filtered out
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">
+                      Clean & Fresh Leads (New)
+                    </div>
+                    <div className="text-xl font-extrabold text-emerald-700 font-mono mt-0.5">
+                      {dedupResult.clean_count.toLocaleString()}
+                    </div>
+                    <div className="text-[11px] text-emerald-700 font-medium mt-0.5">
+                      Ready for dialing
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action Buttons for Download */}
+                <div className="flex flex-wrap items-center gap-2 justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={handleDownloadCleanCSV}
+                      disabled={dedupResult.clean_count === 0}
+                      className="text-xs bg-emerald-700 hover:bg-emerald-800 text-white font-bold shadow-xs flex items-center gap-1.5"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>
+                        Download Clean CSV (
+                        {dedupResult.clean_count.toLocaleString()} Fresh Leads)
+                      </span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleCopyCleanNumbers}
+                      disabled={dedupResult.clean_count === 0}
+                      className="text-xs border-slate-300 text-slate-700 hover:bg-slate-100 flex items-center gap-1.5"
+                    >
+                      {copiedClean ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5" />
+                      )}
+                      <span>
+                        {copiedClean ? "Copied!" : "Copy Clean Numbers"}
+                      </span>
+                    </Button>
+                  </div>
+
+                  {dedupResult.duplicates_count > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDownloadDuplicatesReport}
+                      className="text-xs border-rose-300 text-rose-700 hover:bg-rose-50 flex items-center gap-1.5"
+                    >
+                      <Download className="w-3.5 h-3.5 text-rose-600" />
+                      <span>
+                        Download Duplicates Report (
+                        {dedupResult.duplicates_count.toLocaleString()})
+                      </span>
+                    </Button>
+                  )}
+                </div>
+
+                {/* Duplicate Inspector Details Table */}
+                {dedupResult.duplicates_count > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-800">
+                      <span>
+                        Existing CRM Leads Found (
+                        {dedupResult.duplicates_count})
+                      </span>
+                      <span className="text-[11px] text-slate-400 font-normal">
+                        These numbers are already in Somikoron CRM
+                      </span>
+                    </div>
+
+                    <div className="max-h-56 overflow-y-auto border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead className="bg-slate-100 text-slate-700 uppercase text-[10px] tracking-wider border-b border-slate-200 sticky top-0 z-10">
+                          <tr>
+                            <th className="py-2 px-3">Phone</th>
+                            <th className="py-2 px-3">Lead Name</th>
+                            <th className="py-2 px-3">Assigned Executive</th>
+                            <th className="py-2 px-3">Status</th>
+                            <th className="py-2 px-3">Project</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 bg-white font-medium text-slate-700">
+                          {dedupResult.duplicates
+                            .slice(0, 100)
+                            .map((d, dIdx) => (
+                              <tr key={dIdx} className="hover:bg-slate-50">
+                                <td className="py-2 px-3 font-mono font-bold text-rose-700">
+                                  {d.input_phone}
+                                </td>
+                                <td className="py-2 px-3 text-slate-900 font-semibold">
+                                  {d.lead_name}
+                                </td>
+                                <td className="py-2 px-3">
+                                  <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 font-semibold">
+                                    {d.assigned_to}
+                                  </span>
+                                </td>
+                                <td className="py-2 px-3">
+                                  <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 text-[11px]">
+                                    {d.status}
+                                  </span>
+                                </td>
+                                <td className="py-2 px-3 text-slate-500 text-[11px]">
+                                  {d.project}
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </Modal>
       </div>

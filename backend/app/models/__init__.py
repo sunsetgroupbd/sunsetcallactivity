@@ -13,6 +13,7 @@ from app.models.milestone_checkpoint import MilestoneCheckpoint
 from app.models.team import Team
 from app.models.lead import Lead, LeadCallLog
 from app.models.outdoor_visit import OutdoorVisitLog
+from app.models.crm_lead_index import CrmPhoneIndex
 
 __all__ = [
     "User",
@@ -33,4 +34,5 @@ __all__ = [
     "Lead",
     "LeadCallLog",
     "OutdoorVisitLog",
+    "CrmPhoneIndex",
 ]

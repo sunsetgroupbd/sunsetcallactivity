@@ -43,6 +43,20 @@ class CrmService:
     _sync_cancel_requested: bool = False
     _sync_task: Optional[asyncio.Task] = None
 
+    # Fast Phone Index Sync State (for instant CSV deduplication across all 53k+ leads)
+    _phone_sync_state: Dict[str, Any] = {
+        "running": False,
+        "current": 0,
+        "total": 0,
+        "percent": 0,
+        "status": "idle",
+        "started_at": None,
+        "completed_at": None,
+        "error": None,
+    }
+    _phone_sync_cancel_requested: bool = False
+    _phone_sync_task: Optional[asyncio.Task] = None
+
     CACHE_TTL_SECONDS = 300  # 5 minutes cache
     SESSION_TTL_SECONDS = 3600  # 1 hour session cookie validity
 
@@ -1586,4 +1600,305 @@ class CrmService:
             "last_activity": last_activity,
             "next_activity": next_activity,
             "raw": raw,
+        }
+
+    # =========================================================================
+    # FAST PHONE DEDUPLICATION & CRM PHONE INDEXING
+    # =========================================================================
+
+    @classmethod
+    def normalize_phone(cls, phone_str: Any) -> str:
+        """
+        Normalize any Bangladeshi or international phone number to clean comparable format.
+        - Strips all non-digit characters.
+        - Converts +88017XXXXXXXX / 88017XXXXXXXX to 017XXXXXXXX.
+        - Prepends '0' to 10-digit BD mobile (e.g. 17XXXXXXXX -> 017XXXXXXXX).
+        """
+        if not phone_str:
+            return ""
+        digits = re.sub(r"\D", "", str(phone_str).strip())
+        if not digits:
+            return ""
+        if digits.startswith("880") and len(digits) >= 13:
+            digits = digits[2:]
+        elif digits.startswith("88") and len(digits) >= 12:
+            digits = digits[2:]
+        elif not digits.startswith("0") and len(digits) == 10 and digits.startswith("1"):
+            digits = "0" + digits
+        return digits
+
+    async def get_phone_index_status(self, db: Any) -> Dict[str, Any]:
+        """Return status of CRM phone index and count of indexed leads."""
+        from sqlalchemy import text, select, func
+        from app.models.crm_lead_index import CrmPhoneIndex
+
+        count = 0
+        last_synced = None
+        try:
+            res = await db.execute(select(func.count(CrmPhoneIndex.id)))
+            count = res.scalar() or 0
+            if count > 0:
+                res_max = await db.execute(select(func.max(CrmPhoneIndex.synced_at)))
+                last_synced_dt = res_max.scalar()
+                if last_synced_dt:
+                    last_synced = str(last_synced_dt)
+        except Exception as e:
+            logger.warning("Could not query crm_phone_index: %s", e)
+
+        st = dict(CrmService._phone_sync_state)
+        st["total_indexed"] = count
+        st["last_synced"] = last_synced
+        return st
+
+    async def start_phone_index_sync(self, batch_size: int = 5000) -> Dict[str, Any]:
+        """Trigger background synchronization of all CRM leads into local crm_phone_index."""
+        if CrmService._phone_sync_state.get("running"):
+            return {
+                "started": False,
+                "message": "Phone index sync is already running.",
+                "status": CrmService._phone_sync_state,
+            }
+
+        CrmService._phone_sync_cancel_requested = False
+        target_total = CrmService._cached_records_total or 53862
+        CrmService._phone_sync_state = {
+            "running": True,
+            "current": 0,
+            "total": target_total,
+            "percent": 0,
+            "status": "Connecting to Somikoron CRM...",
+            "started_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "completed_at": None,
+            "error": None,
+        }
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.get_event_loop()
+
+        CrmService._phone_sync_task = loop.create_task(self._run_phone_index_sync_loop(batch_size=batch_size))
+        return {
+            "started": True,
+            "message": "CRM Phone Index background sync started.",
+            "status": CrmService._phone_sync_state,
+        }
+
+    def cancel_phone_index_sync(self) -> Dict[str, Any]:
+        """Cancel ongoing phone index sync."""
+        if CrmService._phone_sync_state.get("running"):
+            CrmService._phone_sync_cancel_requested = True
+            CrmService._phone_sync_state["status"] = "Cancelling phone index sync..."
+            return {"cancelled": True, "message": "Cancellation requested."}
+        return {"cancelled": False, "message": "No phone index sync running."}
+
+    async def _run_phone_index_sync_loop(self, batch_size: int = 5000) -> None:
+        """Stream Somikoron CRM leads and batch-insert into crm_phone_index."""
+        from app.db.session import AsyncSessionFactory
+        from sqlalchemy import text
+
+        try:
+            probe_res = await self.fetch_leads(
+                force_refresh=True,
+                length=batch_size,
+                start=0,
+                from_date="1971-01-01",
+                active_status="all",
+            )
+            if not probe_res.get("success", False):
+                raise RuntimeError(probe_res.get("error", "Failed to connect to Somikoron CRM"))
+
+            total_records = probe_res.get("records_total") or probe_res.get("records_filtered") or 53862
+            CrmService._phone_sync_state["total"] = total_records
+            fetched_count = 0
+            start = 0
+
+            while start < total_records:
+                if CrmService._phone_sync_cancel_requested:
+                    logger.info("CRM phone index sync cancelled at %d leads.", fetched_count)
+                    break
+
+                if start == 0:
+                    b_res = probe_res
+                else:
+                    b_res = await self.fetch_leads(
+                        force_refresh=False,
+                        length=batch_size,
+                        start=start,
+                        from_date="1971-01-01",
+                        active_status="all",
+                    )
+                    if not b_res.get("success", False):
+                        await asyncio.sleep(1.5)
+                        b_res = await self.fetch_leads(
+                            force_refresh=True,
+                            length=batch_size,
+                            start=start,
+                            from_date="1971-01-01",
+                            active_status="all",
+                        )
+                        if not b_res.get("success", False):
+                            logger.error("CRM batch failed at start=%d: %s", start, b_res.get("error"))
+                            break
+
+                leads = b_res.get("leads", [])
+                if not leads:
+                    break
+
+                # Prepare insert batch
+                insert_rows = []
+                for lead in leads:
+                    raw_ph = (lead.get("phone") or "").strip()
+                    norm_ph = self.normalize_phone(raw_ph)
+                    if not norm_ph or len(norm_ph) < 6 or norm_ph == "—":
+                        continue
+
+                    insert_rows.append({
+                        "phone_normalized": norm_ph,
+                        "phone_raw": raw_ph[:50],
+                        "lead_id": str(lead.get("id") or "")[:50],
+                        "lead_name": str(lead.get("name") or "")[:200],
+                        "assigned_to": str(lead.get("assigned_to") or "")[:150],
+                        "status": str(lead.get("status") or "")[:100],
+                        "project": str(lead.get("project") or "")[:150],
+                        "source": str(lead.get("source") or "")[:100],
+                        "created_at_crm": str(lead.get("created_at") or "")[:50],
+                    })
+
+                if insert_rows:
+                    async with AsyncSessionFactory() as session:
+                        # Deduplicate within this batch by phone_normalized
+                        deduped_batch = {r["phone_normalized"]: r for r in insert_rows}
+                        sql = text("""
+                            INSERT INTO crm_phone_index (
+                                phone_normalized, phone_raw, lead_id, lead_name, assigned_to, status, project, source, created_at_crm
+                            ) VALUES (
+                                :phone_normalized, :phone_raw, :lead_id, :lead_name, :assigned_to, :status, :project, :source, :created_at_crm
+                            )
+                            ON CONFLICT(phone_normalized) DO UPDATE SET
+                                phone_raw=excluded.phone_raw,
+                                lead_name=excluded.lead_name,
+                                assigned_to=excluded.assigned_to,
+                                status=excluded.status,
+                                project=excluded.project,
+                                source=excluded.source
+                        """)
+                        await session.execute(sql, list(deduped_batch.values()))
+                        await session.commit()
+
+                fetched_count += len(leads)
+                start += len(leads)
+                pct = min(100, round((fetched_count / max(total_records, 1)) * 100))
+                CrmService._phone_sync_state["current"] = fetched_count
+                CrmService._phone_sync_state["percent"] = pct
+                CrmService._phone_sync_state["status"] = f"Indexed {fetched_count:,} of {total_records:,} CRM leads ({pct}%)..."
+
+                await asyncio.sleep(0.02)
+
+            was_cancelled = CrmService._phone_sync_cancel_requested
+            CrmService._phone_sync_state = {
+                "running": False,
+                "current": fetched_count,
+                "total": total_records,
+                "percent": 100 if not was_cancelled else pct,
+                "status": f"Completed: {fetched_count:,} leads indexed." if not was_cancelled else "Cancelled by user.",
+                "started_at": CrmService._phone_sync_state.get("started_at"),
+                "completed_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "error": None,
+            }
+        except Exception as e:
+            logger.exception("Error in _run_phone_index_sync_loop: %s", e)
+            CrmService._phone_sync_state["running"] = False
+            CrmService._phone_sync_state["error"] = str(e)
+            CrmService._phone_sync_state["status"] = f"Failed: {str(e)}"
+
+    async def deduplicate_phones(self, phones: List[str], db: Any) -> Dict[str, Any]:
+        """
+        Check uploaded phone numbers against the CRM phone index.
+        Returns:
+            - clean_numbers: numbers not found in CRM
+            - duplicates: list of numbers with matching lead details
+            - summary stats
+        """
+        from sqlalchemy import text
+        from app.models.crm_lead_index import CrmPhoneIndex
+
+        if not phones:
+            return {
+                "total_input": 0,
+                "unique_input_phones": 0,
+                "clean_count": 0,
+                "duplicates_count": 0,
+                "clean_numbers": [],
+                "duplicates": [],
+                "index_total": 0,
+                "is_syncing": CrmService._phone_sync_state.get("running", False),
+            }
+
+        # Normalize input numbers while preserving mapping to original strings
+        norm_map: Dict[str, str] = {}  # norm -> original
+        clean_norm_list: List[str] = []
+        for p in phones:
+            p_str = str(p).strip()
+            if not p_str:
+                continue
+            norm = self.normalize_phone(p_str)
+            if not norm or len(norm) < 6:
+                clean_norm_list.append(p_str)
+                continue
+            if norm not in norm_map:
+                norm_map[norm] = p_str
+
+        # Get total indexed count
+        count_res = await db.execute(text("SELECT COUNT(id) FROM crm_phone_index"))
+        index_total = count_res.scalar() or 0
+
+        # Query in chunks of 500 to stay well within SQL variable limits
+        all_norms = list(norm_map.keys())
+        chunk_size = 500
+        found_records: Dict[str, Dict[str, Any]] = {}
+
+        for i in range(0, len(all_norms), chunk_size):
+            chunk = all_norms[i : i + chunk_size]
+            placeholders = ",".join(f":p_{idx}" for idx in range(len(chunk)))
+            params = {f"p_{idx}": val for idx, val in enumerate(chunk)}
+            sql = text(f"""
+                SELECT phone_normalized, phone_raw, lead_name, assigned_to, status, project, source, created_at_crm
+                FROM crm_phone_index
+                WHERE phone_normalized IN ({placeholders})
+            """)
+            rows = await db.execute(sql, params)
+            for r in rows.mappings():
+                found_records[r["phone_normalized"]] = {
+                    "matched_phone": r["phone_raw"] or r["phone_normalized"],
+                    "lead_name": r["lead_name"] or "—",
+                    "assigned_to": r["assigned_to"] or "Unassigned",
+                    "status": r["status"] or "Active",
+                    "project": r["project"] or "—",
+                    "source": r["source"] or "—",
+                    "created_at": r["created_at_crm"] or "—",
+                }
+
+        # Separate into clean vs duplicate
+        clean_numbers: List[str] = list(clean_norm_list)
+        duplicates: List[Dict[str, Any]] = []
+
+        for norm, orig in norm_map.items():
+            if norm in found_records:
+                match_info = dict(found_records[norm])
+                match_info["input_phone"] = orig
+                match_info["phone_normalized"] = norm
+                duplicates.append(match_info)
+            else:
+                clean_numbers.append(orig)
+
+        return {
+            "total_input": len(phones),
+            "unique_input_phones": len(norm_map) + len(clean_norm_list),
+            "clean_count": len(clean_numbers),
+            "duplicates_count": len(duplicates),
+            "clean_numbers": clean_numbers,
+            "duplicates": duplicates,
+            "index_total": index_total,
+            "is_syncing": CrmService._phone_sync_state.get("running", False),
         }

@@ -135,6 +135,7 @@ export default function CrmLeadsPage() {
     }>;
     index_total: number;
     is_syncing: boolean;
+    used_live_search?: boolean;
   } | null>(null);
   const [phoneIndexStatus, setPhoneIndexStatus] = useState<any>(null);
   const [syncingPhoneIndex, setSyncingPhoneIndex] = useState(false);
@@ -142,7 +143,7 @@ export default function CrmLeadsPage() {
   const [copiedClean, setCopiedClean] = useState(false);
 
   // Fetch Phone Index Status when modal opens
-  const loadPhoneIndexStatus = useCallback(async () => {
+  const loadPhoneIndexStatus = useCallback(async (autoTriggerIfEmpty = false) => {
     try {
       const st = await api.crm.getPhoneIndexStatus();
       setPhoneIndexStatus(st);
@@ -150,6 +151,11 @@ export default function CrmLeadsPage() {
         setSyncingPhoneIndex(true);
       } else {
         setSyncingPhoneIndex(false);
+        if (autoTriggerIfEmpty && (!st.total_indexed || st.total_indexed === 0)) {
+          api.crm.syncPhoneIndex(5000).then(() => {
+            setSyncingPhoneIndex(true);
+          }).catch(() => {});
+        }
       }
     } catch {
       // ignore
@@ -158,9 +164,9 @@ export default function CrmLeadsPage() {
 
   useEffect(() => {
     if (dedupModalOpen) {
-      loadPhoneIndexStatus();
+      loadPhoneIndexStatus(true);
       const interval = setInterval(() => {
-        loadPhoneIndexStatus();
+        loadPhoneIndexStatus(false);
       }, 3000);
       return () => clearInterval(interval);
     }
@@ -170,7 +176,7 @@ export default function CrmLeadsPage() {
     try {
       setSyncingPhoneIndex(true);
       await api.crm.syncPhoneIndex(5000);
-      loadPhoneIndexStatus();
+      loadPhoneIndexStatus(false);
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "Failed to start sync");
       setSyncingPhoneIndex(false);
@@ -1729,7 +1735,7 @@ export default function CrmLeadsPage() {
                       ? `Last synced: ${new Date(
                           phoneIndexStatus.last_synced
                         ).toLocaleString()}`
-                      : "Indexes all 53,000+ Somikoron CRM leads for instant deduplication."}
+                      : "Indexes all 54,000+ Somikoron CRM leads for instant deduplication."}
                   </div>
                 </div>
               </div>
@@ -1746,7 +1752,7 @@ export default function CrmLeadsPage() {
                     size="sm"
                     onClick={handleStartPhoneSync}
                     className="text-xs h-7 shadow-2xs border-slate-300 hover:border-indigo-400 hover:text-indigo-700 flex items-center gap-1"
-                    title="Refresh index from all 53,000+ leads in Somikoron CRM"
+                    title="Refresh index from all 54,000+ leads in Somikoron CRM"
                   >
                     <RefreshCw className="w-3 h-3 text-slate-600" />
                     <span>Sync Whole CRM</span>
@@ -1754,6 +1760,20 @@ export default function CrmLeadsPage() {
                 )}
               </div>
             </div>
+
+            {(!phoneIndexStatus?.total_indexed || Number(phoneIndexStatus.total_indexed) === 0) && (
+              <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2 text-xs text-amber-800">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <div className="font-semibold text-amber-900">
+                    ⚡ Live Somikoron CRM Search Active
+                  </div>
+                  <div className="text-[11px] text-amber-700">
+                    Background indexing is currently downloading the CRM database for high-speed matching. In the meantime, your numbers are being searched directly against live Somikoron CRM in real-time.
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Input Selection Tabs */}
             <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
@@ -1854,6 +1874,12 @@ export default function CrmLeadsPage() {
             {/* Results Section */}
             {dedupResult && (
               <div className="space-y-4 pt-2 border-t border-slate-200 animate-in fade-in duration-200">
+                {dedupResult.used_live_search && (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-lg text-xs font-semibold text-indigo-700">
+                    <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <span>Live Verification: Checked in real-time directly against Somikoron CRM database.</span>
+                  </div>
+                )}
                 {/* 3 Metric Summary Cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">

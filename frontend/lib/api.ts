@@ -1160,6 +1160,7 @@ export const api = {
       }>;
       index_total: number;
       is_syncing: boolean;
+      used_live_search?: boolean;
     }> => {
       return request("/crm/deduplicate", {
         method: "POST",

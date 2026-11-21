@@ -1611,21 +1611,70 @@ class CrmService:
         """
         Normalize any Bangladeshi or international phone number to clean comparable format.
         - Strips all non-digit characters.
-        - Converts +88017XXXXXXXX / 88017XXXXXXXX to 017XXXXXXXX.
-        - Prepends '0' to 10-digit BD mobile (e.g. 17XXXXXXXX -> 017XXXXXXXX).
+        - Handles country code prefixes (+880, 880, 88).
+        - Handles extraneous leading zeros (+880017... -> 017...).
+        - Matches standard BD 10-digit mobile subscriber number (1[3-9]\\d{8}) and prepends '0'.
+        - Matches BD IP phone / TSP (9[1-9]\\d{6,8}) and prepends '0'.
         """
         if not phone_str:
             return ""
         digits = re.sub(r"\D", "", str(phone_str).strip())
         if not digits:
             return ""
-        if digits.startswith("880") and len(digits) >= 13:
+        if digits.startswith("880") and len(digits) > 8:
+            digits = digits[3:]
+        elif digits.startswith("88") and len(digits) > 8:
             digits = digits[2:]
-        elif digits.startswith("88") and len(digits) >= 12:
-            digits = digits[2:]
-        elif not digits.startswith("0") and len(digits) == 10 and digits.startswith("1"):
+        while digits.startswith("00"):
+            digits = digits[1:]
+        bd_mobile_m = re.search(r"(1[3-9]\d{8})$", digits)
+        if bd_mobile_m:
+            return "0" + bd_mobile_m.group(1)
+        bd_tsp_m = re.search(r"(9[1-9]\d{6,8})$", digits)
+        if bd_tsp_m:
+            return "0" + bd_tsp_m.group(1)
+        if not digits.startswith("0") and len(digits) >= 6:
             digits = "0" + digits
         return digits
+
+    async def _live_check_single_phone(self, norm_phone: str) -> Optional[Dict[str, Any]]:
+        """Search Somikoron CRM directly for a normalized phone number."""
+        try:
+            res = await self.fetch_leads(search_query=norm_phone, length=3, force_refresh=False)
+            leads = res.get("leads", [])
+            for lead in leads:
+                lead_phone = lead.get("phone") or ""
+                norm_lead_phone = self.normalize_phone(lead_phone)
+                if norm_lead_phone == norm_phone or (norm_phone and norm_phone in norm_lead_phone):
+                    return {
+                        "matched_phone": lead_phone,
+                        "lead_name": lead.get("name") or "—",
+                        "assigned_to": lead.get("assigned_to") or "Unassigned",
+                        "status": lead.get("status") or "Active",
+                        "project": lead.get("project") or "—",
+                        "source": lead.get("source") or "—",
+                        "created_at": lead.get("created_at") or "—",
+                        "lead_id": str(lead.get("id") or ""),
+                    }
+            if not leads and len(norm_phone) == 11 and norm_phone.startswith("0"):
+                short_phone = norm_phone[1:]
+                res2 = await self.fetch_leads(search_query=short_phone, length=3, force_refresh=False)
+                for lead in res2.get("leads", []):
+                    lead_phone = lead.get("phone") or ""
+                    if self.normalize_phone(lead_phone) == norm_phone:
+                        return {
+                            "matched_phone": lead_phone,
+                            "lead_name": lead.get("name") or "—",
+                            "assigned_to": lead.get("assigned_to") or "Unassigned",
+                            "status": lead.get("status") or "Active",
+                            "project": lead.get("project") or "—",
+                            "source": lead.get("source") or "—",
+                            "created_at": lead.get("created_at") or "—",
+                            "lead_id": str(lead.get("id") or ""),
+                        }
+        except Exception as e:
+            logger.warning("Live CRM search failed for %s: %s", norm_phone, e)
+        return None
 
     async def get_phone_index_status(self, db: Any) -> Dict[str, Any]:
         """Return status of CRM phone index and count of indexed leads."""
@@ -1879,6 +1928,54 @@ class CrmService:
                     "created_at": r["created_at_crm"] or "—",
                 }
 
+        # Check if local index had zero results or missing phones
+        missing_norms = [norm for norm in all_norms if norm not in found_records]
+
+        # Auto-start background phone index sync if the local index is empty
+        if index_total == 0 and not CrmService._phone_sync_state.get("running"):
+            logger.info("CRM phone index is empty; auto-initiating background sync across all 54,000+ leads.")
+            try:
+                await self.start_phone_index_sync()
+            except Exception as e:
+                logger.warning("Auto background phone index sync failed to trigger: %s", e)
+
+        # Fallback to direct live CRM search if index is empty OR for small batches of missing numbers
+        used_live_search = False
+        if missing_norms and (index_total == 0 or len(missing_norms) <= 80):
+            used_live_search = True
+            sem = asyncio.Semaphore(8)
+
+            async def check_live(norm: str):
+                async with sem:
+                    lead_info = await self._live_check_single_phone(norm)
+                    if lead_info:
+                        found_records[norm] = lead_info
+                        try:
+                            ins_sql = text("""
+                                INSERT INTO crm_phone_index (
+                                    phone_normalized, phone_raw, lead_id, lead_name, assigned_to, status, project, source, created_at_crm
+                                ) VALUES (
+                                    :p_norm, :p_raw, :l_id, :l_name, :assigned, :status, :proj, :source, :c_at
+                                )
+                                ON CONFLICT(phone_normalized) DO NOTHING
+                            """)
+                            await db.execute(ins_sql, {
+                                "p_norm": norm,
+                                "p_raw": lead_info["matched_phone"][:50],
+                                "l_id": lead_info.get("lead_id", "")[:50],
+                                "l_name": lead_info["lead_name"][:200],
+                                "assigned": lead_info["assigned_to"][:150],
+                                "status": lead_info["status"][:100],
+                                "proj": lead_info["project"][:150],
+                                "source": lead_info["source"][:100],
+                                "c_at": lead_info["created_at"][:50],
+                            })
+                            await db.commit()
+                        except Exception:
+                            pass
+
+            await asyncio.gather(*(check_live(norm) for norm in missing_norms))
+
         # Separate into clean vs duplicate
         clean_numbers: List[str] = list(clean_norm_list)
         duplicates: List[Dict[str, Any]] = []
@@ -1901,4 +1998,5 @@ class CrmService:
             "duplicates": duplicates,
             "index_total": index_total,
             "is_syncing": CrmService._phone_sync_state.get("running", False),
+            "used_live_search": used_live_search,
         }

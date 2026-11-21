@@ -334,7 +334,7 @@ class CrmService:
                 "total": 0,
             }
 
-        async with httpx.AsyncClient(timeout=35.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=15.0), follow_redirects=True) as client:
             # Prepare headers with stateful origin and referer
             req_headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -1699,7 +1699,7 @@ class CrmService:
         st["last_synced"] = last_synced
         return st
 
-    async def start_phone_index_sync(self, batch_size: int = 5000) -> Dict[str, Any]:
+    async def start_phone_index_sync(self, batch_size: int = 2500) -> Dict[str, Any]:
         """Trigger background synchronization of all CRM leads into local crm_phone_index."""
         if CrmService._phone_sync_state.get("running"):
             return {
@@ -1709,7 +1709,7 @@ class CrmService:
             }
 
         CrmService._phone_sync_cancel_requested = False
-        target_total = CrmService._cached_records_total or 53862
+        target_total = CrmService._cached_records_total or 54200
         CrmService._phone_sync_state = {
             "running": True,
             "current": 0,
@@ -1726,7 +1726,8 @@ class CrmService:
         except RuntimeError:
             loop = asyncio.get_event_loop()
 
-        CrmService._phone_sync_task = loop.create_task(self._run_phone_index_sync_loop(batch_size=batch_size))
+        effective_batch = min(batch_size, 2500)
+        CrmService._phone_sync_task = loop.create_task(self._run_phone_index_sync_loop(batch_size=effective_batch))
         return {
             "started": True,
             "message": "CRM Phone Index background sync started.",
@@ -1741,15 +1742,15 @@ class CrmService:
             return {"cancelled": True, "message": "Cancellation requested."}
         return {"cancelled": False, "message": "No phone index sync running."}
 
-    async def _run_phone_index_sync_loop(self, batch_size: int = 5000) -> None:
-        """Stream Somikoron CRM leads and batch-insert into crm_phone_index."""
+    async def _run_phone_index_sync_loop(self, batch_size: int = 2500) -> None:
+        """Stream Somikoron CRM leads and batch-insert into crm_phone_index with auto-resume."""
         from app.db.session import AsyncSessionFactory
         from sqlalchemy import text
 
         try:
             probe_res = await self.fetch_leads(
                 force_refresh=True,
-                length=batch_size,
+                length=min(batch_size, 2500),
                 start=0,
                 from_date="1971-01-01",
                 active_status="all",
@@ -1757,42 +1758,76 @@ class CrmService:
             if not probe_res.get("success", False):
                 raise RuntimeError(probe_res.get("error", "Failed to connect to Somikoron CRM"))
 
-            total_records = probe_res.get("records_total") or probe_res.get("records_filtered") or 53862
+            total_records = probe_res.get("records_total") or probe_res.get("records_filtered") or 54200
             CrmService._phone_sync_state["total"] = total_records
-            fetched_count = 0
+
+            # Check existing records in local crm_phone_index to support resumption
+            existing_count = 0
+            try:
+                async with AsyncSessionFactory() as session:
+                    c_res = await session.execute(text("SELECT COUNT(id) FROM crm_phone_index"))
+                    existing_count = c_res.scalar() or 0
+            except Exception as e:
+                logger.warning("Could not check existing crm_phone_index count: %s", e)
+
+            # If resuming and we already have indexed records, start from the nearest safe batch offset
             start = 0
+            if existing_count > 0 and existing_count < (total_records - 200):
+                # Start slightly before existing count to guarantee zero gaps
+                start = max(0, (existing_count // batch_size) * batch_size)
+                logger.info(
+                    "Resuming CRM phone index sync from offset %d (already indexed: %d of %d)",
+                    start, existing_count, total_records
+                )
+            fetched_count = start
 
             while start < total_records:
                 if CrmService._phone_sync_cancel_requested:
                     logger.info("CRM phone index sync cancelled at %d leads.", fetched_count)
                     break
 
-                if start == 0:
-                    b_res = probe_res
-                else:
+                # Fetch leads with up to 3 retries and adaptive chunk fallback
+                leads = []
+                current_chunk = batch_size
+                success = False
+                last_err = None
+
+                for attempt in range(1, 4):
                     b_res = await self.fetch_leads(
-                        force_refresh=False,
-                        length=batch_size,
+                        force_refresh=(attempt > 1),
+                        length=current_chunk,
                         start=start,
                         from_date="1971-01-01",
                         active_status="all",
                     )
-                    if not b_res.get("success", False):
-                        await asyncio.sleep(1.5)
-                        b_res = await self.fetch_leads(
-                            force_refresh=True,
-                            length=batch_size,
-                            start=start,
-                            from_date="1971-01-01",
-                            active_status="all",
+                    if b_res.get("success", False) and b_res.get("leads"):
+                        leads = b_res.get("leads", [])
+                        success = True
+                        break
+                    else:
+                        last_err = b_res.get("error", "No leads returned")
+                        logger.warning(
+                            "CRM batch at offset %d (size %d) attempt %d failed: %s",
+                            start, current_chunk, attempt, last_err
                         )
-                        if not b_res.get("success", False):
-                            logger.error("CRM batch failed at start=%d: %s", start, b_res.get("error"))
-                            break
+                        await asyncio.sleep(2.0 * attempt)
+                        if current_chunk > 1000:
+                            current_chunk = 1000
 
-                leads = b_res.get("leads", [])
-                if not leads:
-                    break
+                if not success or not leads:
+                    logger.error("Failed to fetch CRM batch at start=%d after retries: %s", start, last_err)
+                    pct = min(99, round((fetched_count / max(total_records, 1)) * 100))
+                    CrmService._phone_sync_state = {
+                        "running": False,
+                        "current": fetched_count,
+                        "total": total_records,
+                        "percent": pct,
+                        "status": f"Paused at {fetched_count:,} leads ({pct}%). Click 'Sync Whole CRM' to resume.",
+                        "started_at": CrmService._phone_sync_state.get("started_at"),
+                        "completed_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                        "error": str(last_err),
+                    }
+                    return
 
                 # Prepare insert batch
                 insert_rows = []
@@ -1858,6 +1893,8 @@ class CrmService:
         except Exception as e:
             logger.exception("Error in _run_phone_index_sync_loop: %s", e)
             CrmService._phone_sync_state["running"] = False
+            CrmService._phone_sync_state["error"] = str(e)
+            CrmService._phone_sync_state["status"] = f"Failed: {str(e)}"
             CrmService._phone_sync_state["error"] = str(e)
             CrmService._phone_sync_state["status"] = f"Failed: {str(e)}"
 

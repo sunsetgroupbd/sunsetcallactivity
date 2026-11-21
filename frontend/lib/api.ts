@@ -1135,7 +1135,7 @@ export const api = {
     }> => {
       return request("/crm/phone-index-status");
     },
-    syncPhoneIndex: async (batchSize = 5000): Promise<{ started: boolean; message: string; status?: any }> => {
+    syncPhoneIndex: async (batchSize = 2500): Promise<{ started: boolean; message: string; status?: any }> => {
       return request(`/crm/sync-phone-index?batch_size=${batchSize}`, { method: "POST" });
     },
     cancelPhoneIndexSync: async (): Promise<{ cancelled: boolean; message: string }> => {

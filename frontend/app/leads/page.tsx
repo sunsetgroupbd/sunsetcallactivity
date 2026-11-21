@@ -143,7 +143,7 @@ export default function CrmLeadsPage() {
   const [copiedClean, setCopiedClean] = useState(false);
 
   // Fetch Phone Index Status when modal opens
-  const loadPhoneIndexStatus = useCallback(async (autoTriggerIfEmpty = false) => {
+  const loadPhoneIndexStatus = useCallback(async (autoTriggerIfIncomplete = false) => {
     try {
       const st = await api.crm.getPhoneIndexStatus();
       setPhoneIndexStatus(st);
@@ -151,8 +151,9 @@ export default function CrmLeadsPage() {
         setSyncingPhoneIndex(true);
       } else {
         setSyncingPhoneIndex(false);
-        if (autoTriggerIfEmpty && (!st.total_indexed || st.total_indexed === 0)) {
-          api.crm.syncPhoneIndex(5000).then(() => {
+        if (autoTriggerIfIncomplete && (!st.total_indexed || Number(st.total_indexed) < 50000)) {
+          // If index is incomplete or was interrupted, auto-resume in background!
+          api.crm.syncPhoneIndex(2500).then(() => {
             setSyncingPhoneIndex(true);
           }).catch(() => {});
         }
@@ -175,7 +176,7 @@ export default function CrmLeadsPage() {
   const handleStartPhoneSync = async () => {
     try {
       setSyncingPhoneIndex(true);
-      await api.crm.syncPhoneIndex(5000);
+      await api.crm.syncPhoneIndex(2500);
       loadPhoneIndexStatus(false);
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "Failed to start sync");
@@ -1755,7 +1756,13 @@ export default function CrmLeadsPage() {
                     title="Refresh index from all 54,000+ leads in Somikoron CRM"
                   >
                     <RefreshCw className="w-3 h-3 text-slate-600" />
-                    <span>Sync Whole CRM</span>
+                    <span>
+                      {phoneIndexStatus?.total_indexed &&
+                      Number(phoneIndexStatus.total_indexed) > 0 &&
+                      Number(phoneIndexStatus.total_indexed) < 50000
+                        ? "Resume / Sync Whole CRM"
+                        : "Sync Whole CRM"}
+                    </span>
                   </Button>
                 )}
               </div>

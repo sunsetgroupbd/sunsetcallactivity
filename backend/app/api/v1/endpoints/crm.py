@@ -171,7 +171,7 @@ async def get_crm_phone_index_status(
 
 @router.post("/sync-phone-index")
 async def sync_crm_phone_index(
-    batch_size: int = Query(5000, ge=500, le=5000),
+    batch_size: int = Query(2500, ge=500, le=5000),
     current_user: User = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """Start background sync of all 53k+ Somikoron CRM leads into crm_phone_index."""

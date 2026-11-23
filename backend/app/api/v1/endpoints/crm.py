@@ -51,17 +51,47 @@ async def debug_crm_connection(current_user: User = Depends(get_current_user)) -
 @router.get("/pipeline-summary")
 async def get_crm_pipeline_summary(
     force_refresh: bool = Query(False, description="Bypass cache and re-fetch from CRM"),
-    limit: int = Query(1500, ge=100, le=10000, description="Number of leads to analyze"),
+    time_range: str = Query("this_month", description="Time window: this_month, last_month, last_90_days, all_time"),
+    from_date: Optional[str] = Query(None, description="Custom start date (YYYY-MM-DD)"),
+    to_date: Optional[str] = Query(None, description="Custom end date (YYYY-MM-DD)"),
+    limit: Optional[int] = Query(None, description="Legacy limit override"),
     current_user: User = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """
-    Aggregate Somikoron CRM leads by assigned executive:
-    HP, Potential, Follow Up counts, project spread, and unassigned leads.
+    Aggregate Somikoron CRM leads by assigned executive for selected time window or full CRM.
     Restricted to Administrators and Sub-Administrators.
     """
     _require_admin(current_user)
     svc = CrmService()
-    return await svc.get_pipeline_summary(force_refresh=force_refresh, limit=limit)
+    return await svc.get_pipeline_summary(
+        force_refresh=force_refresh,
+        limit=limit,
+        time_range=time_range,
+        from_date=from_date,
+        to_date=to_date,
+    )
+
+
+@router.get("/executives/{executive_name}/leads")
+async def get_crm_executive_leads(
+    executive_name: str,
+    time_range: str = Query("this_month", description="Time window"),
+    status: Optional[str] = Query(None, description="Filter by status"),
+    query: Optional[str] = Query(None, description="Search keyword inside executive leads"),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """
+    Executive-Wise Live Drilldown: Return leads for a specific executive.
+    Restricted to Administrators and Sub-Administrators.
+    """
+    _require_admin(current_user)
+    svc = CrmService()
+    return await svc.get_executive_leads(
+        executive_name=executive_name,
+        time_range=time_range,
+        status=status,
+        query=query,
+    )
 
 
 @router.post("/full-sync/start")

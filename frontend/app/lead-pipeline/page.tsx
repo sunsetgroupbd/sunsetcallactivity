@@ -90,6 +90,7 @@ export default function LeadPipelinePage() {
   }>>([]);
   const [drawerLoading, setDrawerLoading] = useState(false);
   const [drawerSearch, setDrawerSearch] = useState("");
+  const [drawerStatusFilter, setDrawerStatusFilter] = useState<string>("all");
   const [copiedPhone, setCopiedPhone] = useState<string | null>(null);
 
   // Lead Transfer Modal
@@ -102,7 +103,7 @@ export default function LeadPipelinePage() {
   const [transferSuccessMsg, setTransferSuccessMsg] = useState<string | null>(null);
   const [transferErrorMsg, setTransferErrorMsg] = useState<string | null>(null);
 
-  const [sampleSize, setSampleSize] = useState<number>(1500);
+  const [timeRange, setTimeRange] = useState<"this_month" | "last_month" | "last_90_days" | "all_time">("this_month");
 
   // Full 53,000+ Lead Sync Progress State
   const [syncProgress, setSyncProgress] = useState<{
@@ -122,7 +123,7 @@ export default function LeadPipelinePage() {
   });
 
   // Fetch Pipeline Data
-  const loadData = useCallback(async (forceRefresh = false, targetLimit = sampleSize) => {
+  const loadData = useCallback(async (forceRefresh = false, range = timeRange) => {
     try {
       if (forceRefresh) setRefreshing(true);
       else setLoading(true);
@@ -130,7 +131,7 @@ export default function LeadPipelinePage() {
 
       // Load both in parallel
       const [crmRes, internalRes] = await Promise.allSettled([
-        api.crm.getPipelineSummary({ force_refresh: forceRefresh, limit: targetLimit }),
+        api.crm.getPipelineSummary({ force_refresh: forceRefresh, time_range: range }),
         api.leadWorkflow.getPipelineSummary(),
       ]);
 
@@ -150,7 +151,7 @@ export default function LeadPipelinePage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [sampleSize]);
+  }, [timeRange]);
 
   // Start Full 53,000+ CRM Lead Sync
   const handleStartFullSync = async () => {
@@ -272,16 +273,18 @@ export default function LeadPipelinePage() {
     }
   };
 
-  // Inspect CRM executive leads
+  // Inspect CRM executive leads (Executive Drilldown)
   const handleInspectCrmExecutive = (exec: CrmPipelineExecutive) => {
     setDrawerTitle(exec.name);
-    setDrawerSubtitle(`Somikoron CRM Executive • ${exec.total_leads} Leads Analyzed (${exec.hp_count} HP, ${exec.p_count} P)`);
+    setDrawerSubtitle(`${exec.total_leads} Leads (${exec.hp_count} HP, ${exec.p_count} Potential)`);
     setDrawerOpen(true);
     setDrawerLoading(false);
     setDrawerSearch("");
+    setDrawerStatusFilter("all");
 
+    const leads = (exec.leads && exec.leads.length > 0) ? exec.leads : exec.lead_samples;
     setDrawerLeads(
-      exec.lead_samples.map((l) => ({
+      leads.map((l) => ({
         id: l.id,
         name: l.name,
         phone: l.phone,
@@ -291,7 +294,7 @@ export default function LeadPipelinePage() {
         created_at: l.created_at,
         badge: l.badge,
         lead_cat_id: l.lead_cat_id,
-        raw_keys: l.raw_keys,
+        crm_link: l.crm_link,
       }))
     );
   };
@@ -497,18 +500,23 @@ export default function LeadPipelinePage() {
     URL.revokeObjectURL(url);
   };
 
-  // Filtered Leads inside Drawer
+  // Filtered Leads inside Drawer (Search + Status Filter)
   const filteredDrawerLeads = useMemo(() => {
-    if (!drawerSearch.trim()) return drawerLeads;
+    let list = drawerLeads;
+    if (drawerStatusFilter !== "all") {
+      const sf = drawerStatusFilter.toLowerCase();
+      list = list.filter((l) => (l.status || "").toLowerCase().includes(sf));
+    }
+    if (!drawerSearch.trim()) return list;
     const q = drawerSearch.toLowerCase().trim();
-    return drawerLeads.filter(
+    return list.filter(
       (l) =>
         l.name.toLowerCase().includes(q) ||
         l.phone.includes(q) ||
         (l.project && l.project.toLowerCase().includes(q)) ||
         l.status.toLowerCase().includes(q)
     );
-  }, [drawerLeads, drawerSearch]);
+  }, [drawerLeads, drawerSearch, drawerStatusFilter]);
 
   return (
     <DashboardLayout
@@ -677,14 +685,10 @@ export default function LeadPipelinePage() {
           </div>
 
           <div className="text-[11px] text-slate-500 px-2 flex items-center gap-1.5 font-mono">
-            <span className={cn("w-2 h-2 rounded-full", crmData?.is_full_sync ? "bg-emerald-500" : "bg-indigo-400")} />
+            <span className={cn("w-2 h-2 rounded-full", crmData?.is_full_sync ? "bg-emerald-500" : "bg-indigo-500")} />
             <span>
               {activeTab === "crm"
-                ? crmData?.is_full_sync
-                  ? `53k Synced • ${crmData.synced_at || crmData.fetched_at || ""}`
-                  : crmData?.analyzed_count
-                  ? `Sampled ${crmData.analyzed_count.toLocaleString()} leads`
-                  : "Connecting..."
+                ? `${crmData?.analyzed_count?.toLocaleString() || 0} Leads • ${filteredCrmExecutives.length} Executives`
                 : `${internalData?.overview.total_executives || 0} Executives`}
             </span>
           </div>
@@ -697,22 +701,22 @@ export default function LeadPipelinePage() {
               <Card className="border-slate-200 shadow-2xs">
                 <CardContent className="p-3.5">
                   <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
-                    <span>Total Leads</span>
+                    <span>Active Leads</span>
                     <Database className="w-3.5 h-3.5 text-slate-400" />
                   </div>
                   <div className="mt-1 flex items-baseline gap-1.5">
                     <span className="text-2xl font-extrabold text-slate-900">
-                      {crmData?.total_crm_leads?.toLocaleString() || "—"}
+                      {crmData?.analyzed_count?.toLocaleString() || "—"}
                     </span>
-                    {crmData?.is_full_sync ? (
-                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded-full">
-                        Full Sync
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-slate-400 font-mono">
-                        ({crmData?.analyzed_count || 0})
-                      </span>
-                    )}
+                    <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded-full">
+                      {timeRange === "this_month"
+                        ? "This Month"
+                        : timeRange === "last_month"
+                        ? "Last Month"
+                        : timeRange === "last_90_days"
+                        ? "90 Days"
+                        : "All Time"}
+                    </span>
                   </div>
                 </CardContent>
               </Card>
@@ -1101,38 +1105,86 @@ export default function LeadPipelinePage() {
         {/* TAB 1: Somikoron CRM Pipeline Table */}
         {activeTab === "crm" && (
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
-            <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+            <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
               <div>
                 <h2 className="text-sm font-bold text-slate-900 tracking-tight">
                   CRM Executives Lead Breakdown
                 </h2>
                 <p className="text-[11px] text-slate-500">
-                  {crmData?.is_full_sync
-                    ? `Full database sync (${crmData.total_crm_leads?.toLocaleString()} leads aggregated)`
-                    : `Showing sample of ${crmData?.analyzed_count || 0} leads`}
+                  {crmData?.analyzed_count
+                    ? `${crmData.analyzed_count.toLocaleString()} leads aggregated • ${filteredCrmExecutives.length} active executives`
+                    : "Connecting to CRM..."}
                 </p>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
-                {!crmData?.is_full_sync && (
-                  <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-lg">
-                    <span className="font-semibold text-slate-500 text-[11px]">Sample:</span>
-                    <select
-                      value={sampleSize}
-                      onChange={(e) => {
-                        const sz = Number(e.target.value);
-                        setSampleSize(sz);
-                        loadData(true, sz);
-                      }}
-                      disabled={loading || refreshing}
-                      className="font-mono text-xs font-bold text-slate-800 bg-transparent focus:outline-none cursor-pointer"
-                    >
-                      <option value={1500}>1,500 Leads</option>
-                      <option value={3000}>3,000 Leads</option>
-                      <option value={5000}>5,000 Leads</option>
-                    </select>
-                  </div>
-                )}
-                <span className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-lg font-mono">
+                <div className="inline-flex items-center p-0.5 bg-slate-100 rounded-lg border border-slate-200 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTimeRange("this_month");
+                      loadData(false, "this_month");
+                    }}
+                    disabled={loading || refreshing}
+                    className={cn(
+                      "px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer",
+                      timeRange === "this_month"
+                        ? "bg-white text-indigo-700 shadow-2xs font-bold"
+                        : "text-slate-600 hover:text-slate-900"
+                    )}
+                  >
+                    ⚡ This Month
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTimeRange("last_month");
+                      loadData(false, "last_month");
+                    }}
+                    disabled={loading || refreshing}
+                    className={cn(
+                      "px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer",
+                      timeRange === "last_month"
+                        ? "bg-white text-indigo-700 shadow-2xs font-bold"
+                        : "text-slate-600 hover:text-slate-900"
+                    )}
+                  >
+                    Last Month
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTimeRange("last_90_days");
+                      loadData(false, "last_90_days");
+                    }}
+                    disabled={loading || refreshing}
+                    className={cn(
+                      "px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer",
+                      timeRange === "last_90_days"
+                        ? "bg-white text-indigo-700 shadow-2xs font-bold"
+                        : "text-slate-600 hover:text-slate-900"
+                    )}
+                  >
+                    90 Days
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTimeRange("all_time");
+                      loadData(false, "all_time");
+                    }}
+                    disabled={loading || refreshing}
+                    className={cn(
+                      "px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer",
+                      timeRange === "all_time"
+                        ? "bg-white text-indigo-700 shadow-2xs font-bold"
+                        : "text-slate-600 hover:text-slate-900"
+                    )}
+                  >
+                    All Time
+                  </button>
+                </div>
+
+                <span className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-lg font-mono">
                   {filteredCrmExecutives.length} Executives
                 </span>
               </div>
@@ -1370,9 +1422,9 @@ export default function LeadPipelinePage() {
                               variant="outline"
                               size="sm"
                               onClick={() => handleInspectCrmExecutive(exec)}
-                              className="text-[11px] h-6.5 px-2 text-indigo-700 hover:text-indigo-900 hover:bg-indigo-50 border-indigo-200"
+                              className="text-[11px] h-6.5 px-2.5 text-indigo-700 hover:text-indigo-900 hover:bg-indigo-50 border-indigo-200 font-semibold cursor-pointer"
                             >
-                              <span>Inspect</span>
+                              <span>View Leads</span>
                               <ChevronRight className="w-3 h-3 ml-0.5" />
                             </Button>
                           </td>
@@ -1604,17 +1656,70 @@ export default function LeadPipelinePage() {
                   </button>
                 </div>
 
-                {/* Drawer Search & Filter */}
-                <div className="p-3 border-b border-slate-200 bg-slate-50 flex items-center gap-2">
-                  <div className="relative flex-1">
+                {/* Drawer Search & Quick Filter */}
+                <div className="p-3 border-b border-slate-200 bg-slate-50 space-y-2">
+                  <div className="relative">
                     <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
-                      placeholder="Search within these leads (name, phone, stage)..."
+                      placeholder="Search leads (name, phone, stage, project)..."
                       value={drawerSearch}
                       onChange={(e) => setDrawerSearch(e.target.value)}
                       className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-white text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-600"
                     />
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1">Filter:</span>
+                    <button
+                      type="button"
+                      onClick={() => setDrawerStatusFilter("all")}
+                      className={cn(
+                        "text-[10px] font-semibold px-2 py-0.5 rounded-full border transition cursor-pointer",
+                        drawerStatusFilter === "all"
+                          ? "bg-slate-900 text-white border-slate-900 font-bold"
+                          : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
+                      )}
+                    >
+                      All ({drawerLeads.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDrawerStatusFilter("hp")}
+                      className={cn(
+                        "text-[10px] font-semibold px-2 py-0.5 rounded-full border transition cursor-pointer flex items-center gap-1",
+                        drawerStatusFilter === "hp"
+                          ? "bg-amber-600 text-white border-amber-700 font-bold"
+                          : "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100"
+                      )}
+                    >
+                      <Flame className="w-2.5 h-2.5" />
+                      <span>HP</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDrawerStatusFilter("potential")}
+                      className={cn(
+                        "text-[10px] font-semibold px-2 py-0.5 rounded-full border transition cursor-pointer flex items-center gap-1",
+                        drawerStatusFilter === "potential"
+                          ? "bg-indigo-600 text-white border-indigo-700 font-bold"
+                          : "bg-indigo-50 text-indigo-800 border-indigo-200 hover:bg-indigo-100"
+                      )}
+                    >
+                      <Target className="w-2.5 h-2.5" />
+                      <span>Potential</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDrawerStatusFilter("follow")}
+                      className={cn(
+                        "text-[10px] font-semibold px-2 py-0.5 rounded-full border transition cursor-pointer",
+                        drawerStatusFilter === "follow"
+                          ? "bg-sky-600 text-white border-sky-700 font-bold"
+                          : "bg-sky-50 text-sky-800 border-sky-200 hover:bg-sky-100"
+                      )}
+                    >
+                      Follow Up
+                    </button>
                   </div>
                 </div>
 

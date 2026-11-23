@@ -30,6 +30,8 @@ class CrmService:
 
     # Full 50,000+ Lead Pipeline Aggregation Cache & Live Background Task State
     _cached_full_pipeline: Optional[Dict[str, Any]] = None
+    _range_cache: Dict[str, Dict[str, Any]] = {}
+    _range_cache_ts: Dict[str, float] = {}
     _sync_state: Dict[str, Any] = {
         "running": False,
         "current": 0,
@@ -558,38 +560,97 @@ class CrmService:
                     "total": 0,
                 }
 
-    async def get_pipeline_summary(self, force_refresh: bool = False, limit: int = 1500) -> Dict[str, Any]:
+    async def get_pipeline_summary(
+        self,
+        force_refresh: bool = False,
+        limit: Optional[int] = None,
+        time_range: str = "this_month",
+        from_date: Optional[str] = None,
+        to_date: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
-        Aggregate leads from Somikoron CRM grouped by assigned executive:
-        - HP, Potential, Follow Up counts per executive
-        - Unassigned leads count and samples
-        - Total CRM leads
+        Aggregate leads from Somikoron CRM grouped by assigned executive for the specified time window:
+        - "this_month" (Default): 1st of current month to today (fast 100% complete live scan)
+        - "last_month": 1st of last month to end of last month
+        - "last_90_days": Past 90 days
+        - "all_time": Full 54,000+ lead sync (loads from background cache if available)
         """
-        # If full sync cache exists on disk or in memory and not forcing a fresh live sample
-        # If forcing refresh, purge existing cached pipeline
-        if force_refresh:
-            self._clear_pipeline_cache()
+        import datetime
+        today = datetime.date.today()
 
-        cached = self._load_pipeline_cache()
-        if cached and not force_refresh:
-            return cached
+        if time_range == "this_month":
+            effective_from = today.replace(day=1).strftime("%Y-%m-%d")
+            effective_to = today.strftime("%Y-%m-%d")
+        elif time_range == "last_month":
+            first_this_month = today.replace(day=1)
+            last_last_month = first_this_month - datetime.timedelta(days=1)
+            first_last_month = last_last_month.replace(day=1)
+            effective_from = first_last_month.strftime("%Y-%m-%d")
+            effective_to = last_last_month.strftime("%Y-%m-%d")
+        elif time_range == "last_90_days":
+            effective_from = (today - datetime.timedelta(days=90)).strftime("%Y-%m-%d")
+            effective_to = today.strftime("%Y-%m-%d")
+        elif time_range == "all_time":
+            effective_from = "1971-01-01"
+            effective_to = today.strftime("%Y-%m-%d")
+        else:
+            effective_from = from_date or today.replace(day=1).strftime("%Y-%m-%d")
+            effective_to = to_date or today.strftime("%Y-%m-%d")
 
-        fetch_len = min(limit, 5000)
-        res = await self.fetch_leads(
+        # 1. If all_time requested and full background cache exists
+        if time_range == "all_time":
+            if force_refresh:
+                self._clear_pipeline_cache()
+            cached = self._load_pipeline_cache()
+            if cached and not force_refresh:
+                cached["time_range"] = "all_time"
+                return cached
+
+        # 2. Check in-memory range cache (5-minute TTL)
+        cache_key = f"{time_range}_{effective_from}_{effective_to}"
+        now = time.time()
+        if not force_refresh and cache_key in CrmService._range_cache:
+            if (now - CrmService._range_cache_ts.get(cache_key, 0)) < 300:
+                return CrmService._range_cache[cache_key]
+
+        # 3. Live fetch leads for the specified date range
+        # Probe first batch (up to 2,000 leads)
+        probe_res = await self.fetch_leads(
             force_refresh=force_refresh,
-            length=fetch_len,
+            length=2000,
             start=0,
-            from_date="1971-01-01",
+            from_date=effective_from,
+            to_date=effective_to,
             active_status="Active",
         )
-        if not res.get("success", False):
-            # If fetch failed but we have cached data, return cached
-            if cached:
-                return cached
-            return res
+        if not probe_res.get("success", False):
+            if cache_key in CrmService._range_cache:
+                return CrmService._range_cache[cache_key]
+            return probe_res
 
-        leads = res.get("leads", [])
-        records_total = res.get("records_total") or len(leads)
+        total_records = probe_res.get("records_total") or probe_res.get("records_filtered") or len(probe_res.get("leads", []))
+        all_leads = list(probe_res.get("leads", []))
+
+        # If there are more leads in this range (and not all_time which has a dedicated full sync worker)
+        # Fetch remaining in parallel batches of 2,000 (up to 10,000 to keep responses under 5s)
+        if total_records > 2000 and len(all_leads) < total_records and time_range != "all_time":
+            needed_starts = list(range(2000, min(total_records, 10000), 2000))
+            if needed_starts:
+                tasks = [
+                    self.fetch_leads(
+                        force_refresh=False,
+                        length=2000,
+                        start=s,
+                        from_date=effective_from,
+                        to_date=effective_to,
+                        active_status="Active",
+                    )
+                    for s in needed_starts
+                ]
+                batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+                for br in batch_results:
+                    if isinstance(br, dict) and br.get("leads"):
+                        all_leads.extend(br["leads"])
 
         exec_map: Dict[str, Dict[str, Any]] = {}
         unassigned_leads: List[Dict[str, Any]] = []
@@ -603,7 +664,7 @@ class CrmService:
         total_fup = 0
         total_other = 0
 
-        for lead in leads:
+        for lead in all_leads:
             assigned = (lead.get("assigned_to") or "").strip()
             status_val = (lead.get("status") or "").strip()
             badge_val = (lead.get("badge") or "").strip()
@@ -667,15 +728,16 @@ class CrmService:
             )
 
             if is_unassigned:
-                unassigned_leads.append({
-                    "id": lead.get("id"),
-                    "name": lead.get("name"),
-                    "phone": lead.get("phone"),
-                    "project": lead.get("project"),
-                    "status": raw_status,
-                    "created_at": lead.get("created_at"),
-                    "crm_link": lead.get("crm_link"),
-                })
+                if len(unassigned_leads) < 100:
+                    unassigned_leads.append({
+                        "id": lead.get("id"),
+                        "name": lead.get("name"),
+                        "phone": lead.get("phone"),
+                        "project": lead.get("project"),
+                        "status": raw_status,
+                        "created_at": lead.get("created_at"),
+                        "crm_link": lead.get("crm_link"),
+                    })
                 continue
 
             source_val = (lead.get("source") or "").strip()
@@ -696,6 +758,7 @@ class CrmService:
                     "source_breakdown": {},
                     "projects": set(),
                     "lead_samples": [],
+                    "leads": [],
                 }
 
             exec_map[assigned]["total_leads"] += 1
@@ -718,21 +781,25 @@ class CrmService:
             if proj and proj not in ("—", "-"):
                 exec_map[assigned]["projects"].add(proj)
 
+            lead_info = {
+                "id": lead.get("id"),
+                "name": lead.get("name"),
+                "phone": lead.get("phone"),
+                "project": proj,
+                "status": raw_status,
+                "source": source_val,
+                "badge": lead.get("badge"),
+                "lead_cat_id": lead.get("lead_cat_id"),
+                "created_at": lead.get("created_at"),
+                "crm_link": lead.get("crm_link"),
+            }
+
             if len(exec_map[assigned]["lead_samples"]) < 5:
-                raw_obj = lead.get("raw")
-                raw_keys = list(raw_obj.keys()) if isinstance(raw_obj, dict) else (f"array_{len(raw_obj)}" if isinstance(raw_obj, (list, tuple)) else str(type(raw_obj)))
-                exec_map[assigned]["lead_samples"].append({
-                    "id": lead.get("id"),
-                    "name": lead.get("name"),
-                    "phone": lead.get("phone"),
-                    "project": proj,
-                    "status": raw_status,
-                    "source": source_val,
-                    "badge": lead.get("badge"),
-                    "lead_cat_id": lead.get("lead_cat_id"),
-                    "created_at": lead.get("created_at"),
-                    "raw_keys": raw_keys,
-                })
+                exec_map[assigned]["lead_samples"].append(lead_info)
+
+            # Store up to 200 leads for complete Executive Drilldown
+            if len(exec_map[assigned]["leads"]) < 200:
+                exec_map[assigned]["leads"].append(lead_info)
 
         executives = []
         for name, data in exec_map.items():
@@ -747,14 +814,19 @@ class CrmService:
                 "source_breakdown": data.get("source_breakdown", {}),
                 "projects": sorted(list(data["projects"]))[:6],
                 "lead_samples": data["lead_samples"],
+                "leads": data["leads"],
             })
 
         executives.sort(key=lambda x: (x["total_leads"], x["hp_count"]), reverse=True)
 
         summary_result = {
             "success": True,
-            "total_crm_leads": records_total,
-            "analyzed_count": len(leads),
+            "time_range": time_range,
+            "from_date": effective_from,
+            "to_date": effective_to,
+            "total_crm_leads": total_records,
+            "analyzed_count": len(all_leads),
+            "is_complete_range": len(all_leads) >= total_records or total_records <= len(all_leads),
             "total_hp": total_hp,
             "total_p": total_p,
             "total_fup": total_fup,
@@ -763,16 +835,76 @@ class CrmService:
             "source_counts": source_counts,
             "sources_found": sorted(list(sources_found)),
             "unassigned_count": len(unassigned_leads),
-            "unassigned_leads": unassigned_leads[:50],
+            "unassigned_leads": unassigned_leads[:100],
             "executives": executives,
             "statuses_found": sorted(list(statuses_found)),
-            "fetched_at": res.get("fetched_at"),
-            "from_cache": res.get("from_cache", False),
-            "is_full_sync": bool(cached and cached.get("is_full_sync")),
+            "fetched_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "from_cache": False,
+            "is_full_sync": time_range == "all_time",
         }
-        if not cached:
-            self._save_pipeline_cache(summary_result)
+
+        # Cache in memory
+        CrmService._range_cache[cache_key] = summary_result
+        CrmService._range_cache_ts[cache_key] = time.time()
+
         return summary_result
+
+    async def get_executive_leads(
+        self,
+        executive_name: str,
+        time_range: str = "this_month",
+        status: Optional[str] = None,
+        query: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Executive-Wise Live Drilldown: Return leads for a specific executive in the specified time window.
+        """
+        summary = await self.get_pipeline_summary(force_refresh=False, time_range=time_range)
+        if not summary.get("success"):
+            return {"success": False, "executive": executive_name, "total": 0, "leads": []}
+
+        exec_name_clean = executive_name.strip().lower()
+        matched_exec = None
+        for ex in summary.get("executives", []):
+            if ex.get("name", "").strip().lower() == exec_name_clean:
+                matched_exec = ex
+                break
+
+        if not matched_exec:
+            return {
+                "success": True,
+                "executive": executive_name,
+                "total": 0,
+                "leads": [],
+                "time_range": time_range,
+            }
+
+        leads = matched_exec.get("leads") or matched_exec.get("lead_samples") or []
+
+        if status and status.lower() != "all":
+            st_clean = status.strip().lower()
+            leads = [l for l in leads if st_clean in (l.get("status") or "").lower()]
+
+        if query:
+            q_clean = query.strip().lower()
+            leads = [
+                l for l in leads
+                if q_clean in (l.get("name") or "").lower()
+                or q_clean in (l.get("phone") or "").lower()
+                or q_clean in (l.get("project") or "").lower()
+            ]
+
+        return {
+            "success": True,
+            "executive": matched_exec.get("name"),
+            "total": len(leads),
+            "total_executive_leads": matched_exec.get("total_leads", len(leads)),
+            "hp_count": matched_exec.get("hp_count", 0),
+            "p_count": matched_exec.get("p_count", 0),
+            "fup_count": matched_exec.get("fup_count", 0),
+            "leads": leads,
+            "time_range": time_range,
+        }
 
     async def start_full_sync(self, batch_size: int = 1000) -> Dict[str, Any]:
         """Start full CRM lead aggregation in the background across all 50k+ leads."""

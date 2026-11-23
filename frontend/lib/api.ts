@@ -1070,12 +1070,40 @@ export const api = {
     getPipelineSummary: async (params?: {
       force_refresh?: boolean;
       limit?: number;
+      time_range?: string;
+      from_date?: string;
+      to_date?: string;
     }): Promise<CrmPipelineSummaryResponse> => {
       const q = new URLSearchParams();
       if (params?.force_refresh) q.set("force_refresh", "true");
       if (params?.limit) q.set("limit", params.limit.toString());
+      if (params?.time_range) q.set("time_range", params.time_range);
+      if (params?.from_date) q.set("from_date", params.from_date);
+      if (params?.to_date) q.set("to_date", params.to_date);
       const queryStr = q.toString() ? `?${q.toString()}` : "";
       return request(`/crm/pipeline-summary${queryStr}`);
+    },
+    getExecutiveLeads: async (executiveName: string, params?: {
+      time_range?: string;
+      status?: string;
+      query?: string;
+    }): Promise<{
+      success: boolean;
+      executive: string;
+      total: number;
+      total_executive_leads: number;
+      hp_count: number;
+      p_count: number;
+      fup_count: number;
+      leads: any[];
+      time_range: string;
+    }> => {
+      const q = new URLSearchParams();
+      if (params?.time_range) q.set("time_range", params.time_range);
+      if (params?.status) q.set("status", params.status);
+      if (params?.query) q.set("query", params.query);
+      const queryStr = q.toString() ? `?${q.toString()}` : "";
+      return request(`/crm/executives/${encodeURIComponent(executiveName)}/leads${queryStr}`);
     },
     startFullSync: async (batchSize = 1000): Promise<{ started: boolean; message: string; status: any }> => {
       return request(`/crm/full-sync/start?batch_size=${batchSize}`, { method: "POST" });

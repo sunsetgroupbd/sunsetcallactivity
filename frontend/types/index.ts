@@ -997,12 +997,29 @@ export interface CrmPipelineExecutive {
     badge?: string;
     lead_cat_id?: string | number;
     raw_keys?: any;
+    crm_link?: string;
+  }>;
+  leads?: Array<{
+    id: string | number;
+    name: string;
+    phone: string;
+    project?: string;
+    status: string;
+    source?: string;
+    created_at?: string;
+    badge?: string;
+    lead_cat_id?: string | number;
+    crm_link?: string;
   }>;
 }
 
 export interface CrmPipelineSummaryResponse {
   success: boolean;
   error?: string;
+  time_range?: string;
+  from_date?: string;
+  to_date?: string;
+  is_complete_range?: boolean;
   total_crm_leads?: number;
   analyzed_count: number;
   total_hp: number;

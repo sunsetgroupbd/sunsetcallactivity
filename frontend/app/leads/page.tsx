@@ -1671,23 +1671,14 @@ export default function CrmLeadsPage() {
         >
           <div className="space-y-4 py-1 max-h-[80vh] overflow-y-auto pr-1">
             {/* Live Real-Time Verification Header Card */}
-            <div className="p-3.5 bg-gradient-to-r from-emerald-50 via-teal-50 to-indigo-50 border border-emerald-200/80 rounded-xl flex items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-emerald-600/10 border border-emerald-600/20 flex items-center justify-center shrink-0">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                </div>
-                <div>
-                  <div className="font-bold text-slate-900 flex items-center gap-2">
-                    <span>100% Live Somikoron CRM Verification</span>
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">
-                      Real-time Direct
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-slate-500">
-                    Scans directly across all 54,000+ leads in Somikoron CRM in real time. Zero waiting, zero database download needed — newly added leads are detected instantly.
-                  </div>
-                </div>
+            <div className="px-3.5 py-2.5 bg-emerald-50/70 border border-emerald-200/80 rounded-xl flex items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2 font-bold text-slate-900">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Live CRM Verification</span>
               </div>
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 font-mono">
+                54,000+ Leads Active
+              </span>
             </div>
 
             {/* Input Selection Tabs */}
@@ -1792,7 +1783,7 @@ export default function CrmLeadsPage() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 bg-emerald-50/80 border border-emerald-200 rounded-xl text-xs">
                   <div className="flex items-center gap-1.5 font-semibold text-emerald-900">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>Live Verification: Checked directly against all 54,000+ Somikoron CRM leads</span>
+                    <span>Live CRM Verification Complete</span>
                   </div>
                   {dedupResult.time_taken_seconds !== undefined && (
                     <span className="text-[11px] font-mono text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-md self-start sm:self-center">

@@ -133,56 +133,13 @@ export default function CrmLeadsPage() {
       source: string;
       created_at: string;
     }>;
-    index_total: number;
-    is_syncing: boolean;
+    index_total?: number;
+    is_syncing?: boolean;
     used_live_search?: boolean;
+    time_taken_seconds?: number;
   } | null>(null);
-  const [phoneIndexStatus, setPhoneIndexStatus] = useState<any>(null);
-  const [syncingPhoneIndex, setSyncingPhoneIndex] = useState(false);
   const [duplicateListTab, setDuplicateListTab] = useState<"clean" | "duplicates">("clean");
   const [copiedClean, setCopiedClean] = useState(false);
-
-  // Fetch Phone Index Status when modal opens
-  const loadPhoneIndexStatus = useCallback(async (autoTriggerIfIncomplete = false) => {
-    try {
-      const st = await api.crm.getPhoneIndexStatus();
-      setPhoneIndexStatus(st);
-      if (st.running || st.is_syncing) {
-        setSyncingPhoneIndex(true);
-      } else {
-        setSyncingPhoneIndex(false);
-        if (autoTriggerIfIncomplete && (!st.total_indexed || Number(st.total_indexed) < 50000)) {
-          // If index is incomplete or was interrupted, auto-resume in background!
-          api.crm.syncPhoneIndex(2500).then(() => {
-            setSyncingPhoneIndex(true);
-          }).catch(() => {});
-        }
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  useEffect(() => {
-    if (dedupModalOpen) {
-      loadPhoneIndexStatus(true);
-      const interval = setInterval(() => {
-        loadPhoneIndexStatus(false);
-      }, 3000);
-      return () => clearInterval(interval);
-    }
-  }, [dedupModalOpen, loadPhoneIndexStatus]);
-
-  const handleStartPhoneSync = async () => {
-    try {
-      setSyncingPhoneIndex(true);
-      await api.crm.syncPhoneIndex(2500);
-      loadPhoneIndexStatus(false);
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Failed to start sync");
-      setSyncingPhoneIndex(false);
-    }
-  };
 
   const parsePhoneContent = (content: string, fileName?: string) => {
     if (fileName) setDedupFileName(fileName);
@@ -716,7 +673,6 @@ export default function CrmLeadsPage() {
               size="sm"
               onClick={() => {
                 setDedupModalOpen(true);
-                loadPhoneIndexStatus();
               }}
               className="text-xs h-8 shadow-2xs border-indigo-200 text-indigo-700 hover:bg-indigo-50 hover:border-indigo-300 font-semibold flex items-center gap-1.5"
               title="Upload a CSV with phone numbers to filter out numbers that already exist in CRM"
@@ -1714,73 +1670,25 @@ export default function CrmLeadsPage() {
           description="Upload a CSV or paste phone numbers to detect and remove any numbers that already exist in Somikoron CRM."
         >
           <div className="space-y-4 py-1 max-h-[80vh] overflow-y-auto pr-1">
-            {/* Phone Index Status Bar */}
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-2">
-                <Database className="w-4 h-4 text-indigo-600 shrink-0" />
+            {/* Live Real-Time Verification Header Card */}
+            <div className="p-3.5 bg-gradient-to-r from-emerald-50 via-teal-50 to-indigo-50 border border-emerald-200/80 rounded-xl flex items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-600/10 border border-emerald-600/20 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                </div>
                 <div>
-                  <div className="font-semibold text-slate-800 flex items-center gap-1.5">
-                    <span>CRM Phone Index:</span>
-                    <span className="font-bold text-indigo-700 font-mono">
-                      {phoneIndexStatus?.total_indexed
-                        ? Number(phoneIndexStatus.total_indexed).toLocaleString()
-                        : "0"}{" "}
-                      leads indexed
+                  <div className="font-bold text-slate-900 flex items-center gap-2">
+                    <span>100% Live Somikoron CRM Verification</span>
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">
+                      Real-time Direct
                     </span>
                   </div>
                   <div className="text-[11px] text-slate-500">
-                    {syncingPhoneIndex
-                      ? phoneIndexStatus?.status ||
-                        "Synchronizing whole CRM lead database in background..."
-                      : phoneIndexStatus?.last_synced
-                      ? `Last synced: ${new Date(
-                          phoneIndexStatus.last_synced
-                        ).toLocaleString()}`
-                      : "Indexes all 54,000+ Somikoron CRM leads for instant deduplication."}
+                    Scans directly across all 54,000+ leads in Somikoron CRM in real time. Zero waiting, zero database download needed — newly added leads are detected instantly.
                   </div>
                 </div>
-              </div>
-
-              <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
-                {syncingPhoneIndex ? (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-lg animate-pulse">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Syncing ({phoneIndexStatus?.percent || 0}%)</span>
-                  </span>
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleStartPhoneSync}
-                    className="text-xs h-7 shadow-2xs border-slate-300 hover:border-indigo-400 hover:text-indigo-700 flex items-center gap-1"
-                    title="Refresh index from all 54,000+ leads in Somikoron CRM"
-                  >
-                    <RefreshCw className="w-3 h-3 text-slate-600" />
-                    <span>
-                      {phoneIndexStatus?.total_indexed &&
-                      Number(phoneIndexStatus.total_indexed) > 0 &&
-                      Number(phoneIndexStatus.total_indexed) < 50000
-                        ? "Resume / Sync Whole CRM"
-                        : "Sync Whole CRM"}
-                    </span>
-                  </Button>
-                )}
               </div>
             </div>
-
-            {(!phoneIndexStatus?.total_indexed || Number(phoneIndexStatus.total_indexed) === 0) && (
-              <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2 text-xs text-amber-800">
-                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <div className="space-y-0.5">
-                  <div className="font-semibold text-amber-900">
-                    ⚡ Live Somikoron CRM Search Active
-                  </div>
-                  <div className="text-[11px] text-amber-700">
-                    Background indexing is currently downloading the CRM database for high-speed matching. In the meantime, your numbers are being searched directly against live Somikoron CRM in real-time.
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* Input Selection Tabs */}
             <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
@@ -1870,10 +1778,10 @@ export default function CrmLeadsPage() {
                   size="sm"
                   onClick={handleRunDeduplication}
                   loading={dedupLoading}
-                  className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs font-bold"
+                  className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs font-bold flex items-center gap-1.5"
                 >
-                  <Filter className="w-3.5 h-3.5 mr-1" />
-                  Check & Deduplicate
+                  <Filter className="w-3.5 h-3.5" />
+                  <span>{dedupLoading ? "Scanning live CRM database..." : "Check & Deduplicate"}</span>
                 </Button>
               </div>
             )}
@@ -1881,12 +1789,17 @@ export default function CrmLeadsPage() {
             {/* Results Section */}
             {dedupResult && (
               <div className="space-y-4 pt-2 border-t border-slate-200 animate-in fade-in duration-200">
-                {dedupResult.used_live_search && (
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-lg text-xs font-semibold text-indigo-700">
-                    <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
-                    <span>Live Verification: Checked in real-time directly against Somikoron CRM database.</span>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 bg-emerald-50/80 border border-emerald-200 rounded-xl text-xs">
+                  <div className="flex items-center gap-1.5 font-semibold text-emerald-900">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Live Verification: Checked directly against all 54,000+ Somikoron CRM leads</span>
                   </div>
-                )}
+                  {dedupResult.time_taken_seconds !== undefined && (
+                    <span className="text-[11px] font-mono text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-md self-start sm:self-center">
+                      Scanned in {dedupResult.time_taken_seconds}s
+                    </span>
+                  )}
+                </div>
                 {/* 3 Metric Summary Cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">

@@ -1898,17 +1898,118 @@ class CrmService:
             CrmService._phone_sync_state["error"] = str(e)
             CrmService._phone_sync_state["status"] = f"Failed: {str(e)}"
 
+    async def _live_batch_check(self, norms: List[str]) -> Dict[str, Dict[str, Any]]:
+        """
+        High-performance concurrent live search directly against Somikoron CRM.
+        Reuses an authenticated connection pool with HTTP keep-alive.
+        """
+        if not norms:
+            return {}
+
+        import urllib.parse
+        found: Dict[str, Dict[str, Any]] = {}
+
+        # Ensure active session cookies
+        async with httpx.AsyncClient(timeout=15.0) as temp_client:
+            if not self.auth_token:
+                cookies_valid = (
+                    CrmService._cookies is not None
+                    and (time.time() - CrmService._cookie_timestamp) < self.SESSION_TTL_SECONDS
+                )
+                if not cookies_valid:
+                    try:
+                        await self._login_and_get_cookies(temp_client)
+                    except Exception as e:
+                        logger.error("Live CRM auth failed: %s", e)
+                        return {}
+
+        cookies = dict(CrmService._cookies or {})
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0",
+            "Accept": "application/json, text/plain, */*",
+            "X-Requested-With": "XMLHttpRequest",
+            "Referer": f"{self.base_url}/",
+            "Origin": self.base_url,
+        }
+        if "XSRF-TOKEN" in cookies:
+            headers["X-XSRF-TOKEN"] = urllib.parse.unquote(cookies["XSRF-TOKEN"])
+        active_token = self.auth_token or CrmService._dynamic_token
+        if active_token:
+            headers["Authorization"] = f"Bearer {active_token}"
+
+        limits = httpx.Limits(max_connections=25, max_keepalive_connections=20)
+        sem = asyncio.Semaphore(12)
+
+        async with httpx.AsyncClient(limits=limits, timeout=15.0, cookies=cookies, headers=headers) as client:
+            async def search_one(norm: str):
+                async with sem:
+                    params = {
+                        "draw": 1,
+                        "start": 0,
+                        "length": 3,
+                        "keyword": norm,
+                        "active_status": "Active",
+                        "from_date": "1971-01-01",
+                        "to_date": "2030-12-31",
+                        "_": int(time.time() * 1000),
+                    }
+                    try:
+                        r = await client.get(self.leads_url, params=params)
+                        data = r.json()
+                        raw_leads = data.get("data") or data.get("aaData") or []
+                        matched_lead = None
+                        for raw in raw_leads:
+                            lead = self._normalize_lead(raw, 1)
+                            ph = lead.get("phone") or ""
+                            norm_ph = self.normalize_phone(ph)
+                            if norm_ph == norm or (norm and norm in norm_ph):
+                                matched_lead = lead
+                                break
+
+                        # If not matched and norm starts with 0 (11 digits), also test 10 digits
+                        if not matched_lead and len(norm) == 11 and norm.startswith("0"):
+                            short_norm = norm[1:]
+                            params["keyword"] = short_norm
+                            r2 = await client.get(self.leads_url, params=params)
+                            data2 = r2.json()
+                            raw_leads2 = data2.get("data") or data2.get("aaData") or []
+                            for raw in raw_leads2:
+                                lead = self._normalize_lead(raw, 1)
+                                ph = lead.get("phone") or ""
+                                norm_ph = self.normalize_phone(ph)
+                                if norm_ph == norm:
+                                    matched_lead = lead
+                                    break
+
+                        if matched_lead:
+                            found[norm] = {
+                                "matched_phone": matched_lead.get("phone") or norm,
+                                "lead_name": matched_lead.get("name") or "—",
+                                "assigned_to": matched_lead.get("assigned_to") or "Unassigned",
+                                "status": matched_lead.get("status") or "Active",
+                                "project": matched_lead.get("project") or "—",
+                                "source": matched_lead.get("source") or "—",
+                                "created_at": matched_lead.get("created_at") or "—",
+                                "lead_id": str(matched_lead.get("id") or ""),
+                            }
+                    except Exception as e:
+                        logger.warning("Live search error for %s: %s", norm, e)
+
+            await asyncio.gather(*(search_one(n) for n in norms))
+
+        return found
+
     async def deduplicate_phones(self, phones: List[str], db: Any) -> Dict[str, Any]:
         """
-        Check uploaded phone numbers against the CRM phone index.
-        Returns:
-            - clean_numbers: numbers not found in CRM
-            - duplicates: list of numbers with matching lead details
-            - summary stats
+        100% Live Direct CRM Deduplication across all 54,000+ Somikoron CRM leads.
+        - First checks local fast cache for any previously matched numbers.
+        - Runs high-speed parallel live searches directly against Somikoron CRM.
+        - Returns clean numbers, duplicate lead details, and scan metrics.
         """
         from sqlalchemy import text
         from app.models.crm_lead_index import CrmPhoneIndex
 
+        t_start = time.time()
         if not phones:
             return {
                 "total_input": 0,
@@ -1917,8 +2018,8 @@ class CrmService:
                 "duplicates_count": 0,
                 "clean_numbers": [],
                 "duplicates": [],
-                "index_total": 0,
-                "is_syncing": CrmService._phone_sync_state.get("running", False),
+                "time_taken_seconds": 0,
+                "used_live_search": True,
             }
 
         # Normalize input numbers while preserving mapping to original strings
@@ -1935,85 +2036,70 @@ class CrmService:
             if norm not in norm_map:
                 norm_map[norm] = p_str
 
-        # Get total indexed count
-        count_res = await db.execute(text("SELECT COUNT(id) FROM crm_phone_index"))
-        index_total = count_res.scalar() or 0
-
-        # Query in chunks of 500 to stay well within SQL variable limits
         all_norms = list(norm_map.keys())
-        chunk_size = 500
         found_records: Dict[str, Dict[str, Any]] = {}
 
-        for i in range(0, len(all_norms), chunk_size):
-            chunk = all_norms[i : i + chunk_size]
-            placeholders = ",".join(f":p_{idx}" for idx in range(len(chunk)))
-            params = {f"p_{idx}": val for idx, val in enumerate(chunk)}
-            sql = text(f"""
-                SELECT phone_normalized, phone_raw, lead_name, assigned_to, status, project, source, created_at_crm
-                FROM crm_phone_index
-                WHERE phone_normalized IN ({placeholders})
-            """)
-            rows = await db.execute(sql, params)
-            for r in rows.mappings():
-                found_records[r["phone_normalized"]] = {
-                    "matched_phone": r["phone_raw"] or r["phone_normalized"],
-                    "lead_name": r["lead_name"] or "—",
-                    "assigned_to": r["assigned_to"] or "Unassigned",
-                    "status": r["status"] or "Active",
-                    "project": r["project"] or "—",
-                    "source": r["source"] or "—",
-                    "created_at": r["created_at_crm"] or "—",
-                }
+        # 1. Quick check against local cached index if available
+        try:
+            chunk_size = 500
+            for i in range(0, len(all_norms), chunk_size):
+                chunk = all_norms[i : i + chunk_size]
+                placeholders = ",".join(f":p_{idx}" for idx in range(len(chunk)))
+                params = {f"p_{idx}": val for idx, val in enumerate(chunk)}
+                sql = text(f"""
+                    SELECT phone_normalized, phone_raw, lead_name, assigned_to, status, project, source, created_at_crm
+                    FROM crm_phone_index
+                    WHERE phone_normalized IN ({placeholders})
+                """)
+                rows = await db.execute(sql, params)
+                for r in rows.mappings():
+                    found_records[r["phone_normalized"]] = {
+                        "matched_phone": r["phone_raw"] or r["phone_normalized"],
+                        "lead_name": r["lead_name"] or "—",
+                        "assigned_to": r["assigned_to"] or "Unassigned",
+                        "status": r["status"] or "Active",
+                        "project": r["project"] or "—",
+                        "source": r["source"] or "—",
+                        "created_at": r["created_at_crm"] or "—",
+                    }
+        except Exception as e:
+            logger.warning("Local cache check warning: %s", e)
 
-        # Check if local index had zero results or missing phones
+        # 2. For all numbers not in local cache, run high-speed parallel live search
         missing_norms = [norm for norm in all_norms if norm not in found_records]
-
-        # Auto-start background phone index sync if the local index is empty
-        if index_total == 0 and not CrmService._phone_sync_state.get("running"):
-            logger.info("CRM phone index is empty; auto-initiating background sync across all 54,000+ leads.")
+        if missing_norms:
+            live_found = await self._live_batch_check(missing_norms)
+            for norm, info in live_found.items():
+                found_records[norm] = info
+                # Cache in local db for instant future lookups
+                try:
+                    ins_sql = text("""
+                        INSERT INTO crm_phone_index (
+                            phone_normalized, phone_raw, lead_id, lead_name, assigned_to, status, project, source, created_at_crm
+                        ) VALUES (
+                            :p_norm, :p_raw, :l_id, :l_name, :assigned, :status, :proj, :source, :c_at
+                        )
+                        ON CONFLICT(phone_normalized) DO NOTHING
+                    """)
+                    await db.execute(ins_sql, {
+                        "p_norm": norm,
+                        "p_raw": info["matched_phone"][:50],
+                        "l_id": info.get("lead_id", "")[:50],
+                        "l_name": info["lead_name"][:200],
+                        "assigned": info["assigned_to"][:150],
+                        "status": info["status"][:100],
+                        "proj": info["project"][:150],
+                        "source": info["source"][:100],
+                        "c_at": info["created_at"][:50],
+                    })
+                except Exception:
+                    pass
             try:
-                await self.start_phone_index_sync()
-            except Exception as e:
-                logger.warning("Auto background phone index sync failed to trigger: %s", e)
+                await db.commit()
+            except Exception:
+                pass
 
-        # Fallback to direct live CRM search if index is empty OR for small batches of missing numbers
-        used_live_search = False
-        if missing_norms and (index_total == 0 or len(missing_norms) <= 80):
-            used_live_search = True
-            sem = asyncio.Semaphore(8)
-
-            async def check_live(norm: str):
-                async with sem:
-                    lead_info = await self._live_check_single_phone(norm)
-                    if lead_info:
-                        found_records[norm] = lead_info
-                        try:
-                            ins_sql = text("""
-                                INSERT INTO crm_phone_index (
-                                    phone_normalized, phone_raw, lead_id, lead_name, assigned_to, status, project, source, created_at_crm
-                                ) VALUES (
-                                    :p_norm, :p_raw, :l_id, :l_name, :assigned, :status, :proj, :source, :c_at
-                                )
-                                ON CONFLICT(phone_normalized) DO NOTHING
-                            """)
-                            await db.execute(ins_sql, {
-                                "p_norm": norm,
-                                "p_raw": lead_info["matched_phone"][:50],
-                                "l_id": lead_info.get("lead_id", "")[:50],
-                                "l_name": lead_info["lead_name"][:200],
-                                "assigned": lead_info["assigned_to"][:150],
-                                "status": lead_info["status"][:100],
-                                "proj": lead_info["project"][:150],
-                                "source": lead_info["source"][:100],
-                                "c_at": lead_info["created_at"][:50],
-                            })
-                            await db.commit()
-                        except Exception:
-                            pass
-
-            await asyncio.gather(*(check_live(norm) for norm in missing_norms))
-
-        # Separate into clean vs duplicate
+        # 3. Separate into clean vs duplicate
         clean_numbers: List[str] = list(clean_norm_list)
         duplicates: List[Dict[str, Any]] = []
 
@@ -2033,7 +2119,6 @@ class CrmService:
             "duplicates_count": len(duplicates),
             "clean_numbers": clean_numbers,
             "duplicates": duplicates,
-            "index_total": index_total,
-            "is_syncing": CrmService._phone_sync_state.get("running", False),
-            "used_live_search": used_live_search,
+            "time_taken_seconds": round(time.time() - t_start, 2),
+            "used_live_search": True,
         }

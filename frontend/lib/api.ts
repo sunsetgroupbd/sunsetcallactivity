@@ -1158,9 +1158,10 @@ export const api = {
         source: string;
         created_at: string;
       }>;
-      index_total: number;
-      is_syncing: boolean;
+      index_total?: number;
+      is_syncing?: boolean;
       used_live_search?: boolean;
+      time_taken_seconds?: number;
     }> => {
       return request("/crm/deduplicate", {
         method: "POST",

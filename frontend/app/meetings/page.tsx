@@ -2355,34 +2355,34 @@ function MeetingTimeDailyContent() {
                     type="button"
                     onClick={() => setFairMode("live")}
                     className={cn(
-                      "inline-flex items-center justify-center gap-1.5 flex-1 py-1.5 text-xs font-bold rounded-md transition text-center cursor-pointer",
+                      "inline-flex items-center justify-center gap-1.5 flex-1 py-1.5 px-2 text-xs font-bold rounded-md transition text-center cursor-pointer whitespace-nowrap",
                       fairMode === "live"
                         ? "bg-white text-emerald-800 shadow-xs font-extrabold"
                         : "text-slate-600 hover:text-slate-900"
                     )}
                   >
-                    <Send className="w-3.5 h-3.5" />
-                    <span>Leaving Now (Going to Fair)</span>
+                    <Send className="w-3.5 h-3.5 shrink-0" />
+                    <span>Leaving Now</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setFairMode("manual")}
                     className={cn(
-                      "inline-flex items-center justify-center gap-1.5 flex-1 py-1.5 text-xs font-bold rounded-md transition text-center cursor-pointer",
+                      "inline-flex items-center justify-center gap-1.5 flex-1 py-1.5 px-2 text-xs font-bold rounded-md transition text-center cursor-pointer whitespace-nowrap",
                       fairMode === "manual"
                         ? "bg-white text-emerald-800 shadow-xs font-extrabold"
                         : "text-slate-600 hover:text-slate-900"
                     )}
                   >
-                    <FileText className="w-3.5 h-3.5" />
-                    <span>Completed (Enter Times)</span>
+                    <FileText className="w-3.5 h-3.5 shrink-0" />
+                    <span>Completed</span>
                   </button>
                 </div>
 
                 {fairMode === "live" ? (
                   <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
                     <p className="text-xs text-amber-900 leading-relaxed">
-                      Leaving for the fair right now? Tap below to record your departure. When you get back to the office, just press the <strong>"I am Back (Mark Present)"</strong> button!
+                      Tap below to record departure. When back at office, tap <strong>"I am Back"</strong> to mark attendance.
                     </p>
                     <div className="flex items-center justify-between pt-1">
                       <span className="text-xs text-slate-600 font-semibold">Departure Time:</span>
@@ -2399,7 +2399,7 @@ function MeetingTimeDailyContent() {
                     <div className="grid grid-cols-2 gap-2.5">
                       <div>
                         <label className="text-[11px] font-bold text-slate-600 block mb-1">
-                          When did you go? (Departure)
+                          Departure Time
                         </label>
                         <input
                           type="text"
@@ -2411,7 +2411,7 @@ function MeetingTimeDailyContent() {
                       </div>
                       <div>
                         <label className="text-[11px] font-bold text-slate-600 block mb-1">
-                          When did you get back? (Return)
+                          Return Time
                         </label>
                         <input
                           type="text"

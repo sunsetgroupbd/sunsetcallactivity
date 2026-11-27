@@ -1252,7 +1252,7 @@ function MeetingTimeDailyContent() {
                   className="w-full sm:w-auto font-bold bg-white text-emerald-900 hover:bg-emerald-50 shadow-xs text-xs sm:text-sm py-2 px-3.5 shrink-0 rounded-xl"
                 >
                   <Plus className="w-4 h-4 mr-1.5 stroke-[2.5]" />
-                  Log Visit / Meeting
+                  Meeting
                 </Button>
               </div>
             </div>
@@ -1485,7 +1485,7 @@ function MeetingTimeDailyContent() {
                     className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl px-3.5 py-1.5"
                   >
                     <Plus className="w-3.5 h-3.5 mr-1 stroke-[2.5]" />
-                    Log Meeting / Visit
+                    Meeting
                   </Button>
                 </div>
               ) : (

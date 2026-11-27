@@ -60,14 +60,14 @@ class DashboardService:
         """
         Fetch configurable call credit settings from AppSettings (namespace="kpi_rules").
         Defaults:
-            indoor_cx_call_credit: 35 (calls credited once per day)
-            outdoor_visit_call_credit: 70 (calls credited once per day)
+            indoor_cx_call_credit: 30 (calls credited per meeting)
+            outdoor_visit_call_credit: 60 (calls credited per visit)
         """
         indoor_setting = await self.settings_repo.get("kpi_rules", "indoor_cx_call_credit")
         outdoor_setting = await self.settings_repo.get("kpi_rules", "outdoor_visit_call_credit")
 
-        indoor_credit = 35
-        outdoor_credit = 70
+        indoor_credit = 30
+        outdoor_credit = 60
         if indoor_setting and indoor_setting.value:
             try:
                 indoor_credit = max(0, int(indoor_setting.value))
@@ -266,18 +266,14 @@ class DashboardService:
             report.report_date, report.employee_id
         )
 
-        # Call Quota Credit rule (Once-Per-Day, configurable by Admin):
-        # Having outdoor visits reduces calls by outdoor_credit ONCE per day.
-        # Having indoor CX meetings reduces calls by indoor_credit ONCE per day.
+        # Call Quota Credit rule (Multiplied by visit/meeting count, configurable by Admin):
+        # Each outdoor visit reduces calls by outdoor_credit (e.g. 60 calls per visit).
+        # Each indoor CX meeting reduces calls by indoor_credit (e.g. 30 calls per meeting).
         credits = await self.get_call_credit_settings()
         credit_indoor = credits["indoor_credit"]
         credit_outdoor = credits["outdoor_credit"]
 
-        call_reduction = 0
-        if total_outdoor_visits > 0:
-            call_reduction += credit_outdoor
-        if total_indoor_cx > 0:
-            call_reduction += credit_indoor
+        call_reduction = (total_outdoor_visits * credit_outdoor) + (total_indoor_cx * credit_indoor)
 
         raw_dialed_target = target_info["dialed_target"]
         if raw_dialed_target is not None:
@@ -707,11 +703,8 @@ class DashboardService:
             meet_dur = summary.total_meeting_time_minutes
             colls = float(summary.actual_collection_bdt)
 
-            # Meeting Call Quota Credit (Once-Per-Day rule, configurable by Admin):
-            # Capped to 1 credit per day that had meetings
-            outdoor_days = summary.days_with_outdoor
-            indoor_days = summary.days_with_indoor
-            call_reduction = (outdoor_days * credit_outdoor) + (indoor_days * credit_indoor)
+            # Meeting Call Quota Credit (Multiplied per visit & indoor meeting count, configurable by Admin):
+            call_reduction = (visits * credit_outdoor) + (indoor_cx * credit_indoor)
             base_dialed_target = dialed_tgt
             adjusted_dialed_tgt = max(0, dialed_tgt - call_reduction)
 

@@ -56,9 +56,9 @@ function SettingsContent() {
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
   const [deletingTarget, setDeletingTarget] = useState(false);
 
-  // KPI Credit Rules State (Once-Per-Day)
-  const [indoorCredit, setIndoorCredit] = useState<string>("35");
-  const [outdoorCredit, setOutdoorCredit] = useState<string>("70");
+  // KPI Credit Rules State (Per-Meeting / Visit)
+  const [indoorCredit, setIndoorCredit] = useState<string>("30");
+  const [outdoorCredit, setOutdoorCredit] = useState<string>("60");
   const [savingKpiRules, setSavingKpiRules] = useState(false);
 
   const [statusMessage, setStatusMessage] = useState<{
@@ -234,19 +234,19 @@ function SettingsContent() {
         api.settings.updateSystemSetting({
           namespace: "kpi_rules",
           key: "indoor_cx_call_credit",
-          value: indoorCredit || "35",
-          description: "Calls deducted from target per day with indoor CX meeting (Once-Per-Day)",
+          value: indoorCredit || "30",
+          description: "Calls deducted from target per indoor CX meeting",
         }),
         api.settings.updateSystemSetting({
           namespace: "kpi_rules",
           key: "outdoor_visit_call_credit",
-          value: outdoorCredit || "70",
-          description: "Calls deducted from target per day with outdoor visit (Once-Per-Day)",
+          value: outdoorCredit || "60",
+          description: "Calls deducted from target per outdoor visit",
         }),
       ]);
       setStatusMessage({
         type: "success",
-        text: "KPI Call Quota Credit rules updated successfully (Once-Per-Day active).",
+        text: "KPI Call Quota Credit rules updated successfully (Per-Visit/Meeting active).",
       });
     } catch (err: unknown) {
       if (err instanceof ApiError) {
@@ -604,7 +604,7 @@ function SettingsContent() {
                 </p>
               </div>
               <Badge variant="success" className="text-[10px] w-fit">
-                Once-Per-Day Rule Enforced
+                Per-Visit/Meeting Active
               </Badge>
             </div>
           </CardHeader>
@@ -614,7 +614,7 @@ function SettingsContent() {
                 <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="font-semibold text-slate-900">Indoor CX Meeting Credit</label>
-                    <span className="text-[10px] text-slate-500">calls deducted / day</span>
+                    <span className="text-[10px] text-slate-500">calls deducted / meeting</span>
                   </div>
                   <input
                     type="number"
@@ -622,18 +622,18 @@ function SettingsContent() {
                     max="500"
                     value={indoorCredit}
                     onChange={(e) => setIndoorCredit(e.target.value)}
-                    placeholder="35"
+                    placeholder="30"
                     className="w-full border border-slate-300 rounded px-3 py-2 text-xs font-semibold font-mono text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none"
                   />
                   <p className="text-[11px] text-slate-500">
-                    Granted once per day if the salesperson conducts one or more Indoor CX customer meetings.
+                    Deducts calls per Indoor CX meeting conducted (e.g. 2 meetings = 60 calls deducted).
                   </p>
                 </div>
 
                 <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="font-semibold text-slate-900">Outdoor Visit Credit</label>
-                    <span className="text-[10px] text-slate-500">calls deducted / day</span>
+                    <span className="text-[10px] text-slate-500">calls deducted / visit</span>
                   </div>
                   <input
                     type="number"
@@ -641,11 +641,11 @@ function SettingsContent() {
                     max="500"
                     value={outdoorCredit}
                     onChange={(e) => setOutdoorCredit(e.target.value)}
-                    placeholder="70"
+                    placeholder="60"
                     className="w-full border border-slate-300 rounded px-3 py-2 text-xs font-semibold font-mono text-slate-800 focus:ring-1 focus:ring-green-600 focus:outline-none"
                   />
                   <p className="text-[11px] text-slate-500">
-                    Granted once per day if the salesperson conducts one or more Outdoor site visits.
+                    Deducts calls per Outdoor site/fair visit conducted (e.g. 2 visits = 120 calls deducted).
                   </p>
                 </div>
               </div>

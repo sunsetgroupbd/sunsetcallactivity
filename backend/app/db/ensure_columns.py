@@ -356,8 +356,8 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
     try:
         async with engine.begin() as conn:
             for key, val, desc in [
-                ("indoor_cx_call_credit", "35", "Calls deducted from target per day with indoor CX meeting (Once-Per-Day)"),
-                ("outdoor_visit_call_credit", "70", "Calls deducted from target per day with outdoor visit (Once-Per-Day)"),
+                ("indoor_cx_call_credit", "30", "Calls deducted from target per indoor CX meeting"),
+                ("outdoor_visit_call_credit", "60", "Calls deducted from target per outdoor visit"),
             ]:
                 check_stmt = text("SELECT id FROM app_settings WHERE namespace = 'kpi_rules' AND key = :key")
                 res = await conn.execute(check_stmt, {"key": key})
@@ -368,6 +368,16 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
                     """)
                     await conn.execute(ins_stmt, {"key": key, "value": val, "desc": desc})
                     logger.info("Initialized default KPI rule: %s = %s", key, val)
+
+            # Auto-update legacy defaults (35 -> 30, 70 -> 60)
+            await conn.execute(text("""
+                UPDATE app_settings SET value = '30', description = 'Calls deducted from target per indoor CX meeting'
+                WHERE namespace = 'kpi_rules' AND key = 'indoor_cx_call_credit' AND value = '35'
+            """))
+            await conn.execute(text("""
+                UPDATE app_settings SET value = '60', description = 'Calls deducted from target per outdoor visit'
+                WHERE namespace = 'kpi_rules' AND key = 'outdoor_visit_call_credit' AND value = '70'
+            """))
     except Exception as e:
         logger.warning("Could not seed app_settings kpi_rules: %s", e)
 

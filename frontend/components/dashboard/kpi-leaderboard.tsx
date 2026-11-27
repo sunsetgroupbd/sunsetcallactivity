@@ -687,7 +687,7 @@ export function KPILeaderboard({
                         <div className="mt-1 flex items-center justify-end">
                           <span
                             className="text-[9px] font-bold text-amber-700 bg-amber-50 px-1 py-0.2 rounded border border-amber-200 cursor-help"
-                            title={`Base target: ${emp.base_dialed_target ?? (emp.dialed_target + emp.call_reduction)} calls. Credited -${emp.call_reduction} calls (-70 per outdoor, -35 per indoor CX).`}
+                            title={`Base target: ${emp.base_dialed_target ?? (emp.dialed_target + emp.call_reduction)} calls. Credited -${emp.call_reduction} calls for customer meetings/visits.`}
                           >
                             -{emp.call_reduction} credit
                           </span>

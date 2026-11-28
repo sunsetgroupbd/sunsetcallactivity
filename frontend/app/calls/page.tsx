@@ -882,20 +882,21 @@ function DailyCallActivityContent() {
           />
         )}
 
-        {/* ── Main View Mode Switcher: Lead Dialing Workflow vs Daily Sheet ── */}
-        <div className="flex items-center gap-2 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-2xs">
+        {/* ── Main View Mode Switcher: Lead Dialing Workflow vs Daily Sheet vs Onboarded Leads ── */}
+        <div className="flex items-center gap-1.5 sm:gap-2 bg-white p-1.5 rounded-2xl border border-slate-200">
           <button
             type="button"
             onClick={() => setActiveWorkflowTab("lead_dialing")}
             className={cn(
-              "flex-1 flex items-center justify-center gap-2 py-2.5 px-3 sm:px-4 rounded-xl text-xs sm:text-sm font-bold transition-all",
+              "flex-1 flex items-center justify-center gap-1.5 sm:gap-2 py-2 sm:py-2.5 px-1.5 sm:px-4 rounded-xl text-xs sm:text-sm font-bold transition-all text-center",
               activeWorkflowTab === "lead_dialing"
                 ? "bg-emerald-700 text-white shadow-sm"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
             )}
           >
-            <PhoneCall className="w-4 h-4" />
-            <span>Lead Dialing Workflow</span>
+            <PhoneCall className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+            <span className="sm:hidden">Calling</span>
+            <span className="hidden sm:inline">Lead Dialing Workflow</span>
             <span
               className={cn(
                 "hidden sm:inline-block text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-semibold transition-colors",
@@ -912,14 +913,15 @@ function DailyCallActivityContent() {
             type="button"
             onClick={() => setActiveWorkflowTab("daily_sheet")}
             className={cn(
-              "flex-1 flex items-center justify-center gap-2 py-2.5 px-3 sm:px-4 rounded-xl text-xs sm:text-sm font-bold transition-all",
+              "flex-1 flex items-center justify-center gap-1.5 sm:gap-2 py-2 sm:py-2.5 px-1.5 sm:px-4 rounded-xl text-xs sm:text-sm font-bold transition-all text-center",
               activeWorkflowTab === "daily_sheet"
                 ? "bg-slate-900 text-white shadow-sm"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
             )}
           >
-            <FileSpreadsheet className="w-4 h-4" />
-            <span>Daily Call Activity Sheet</span>
+            <FileSpreadsheet className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+            <span className="sm:hidden">Call Sheet</span>
+            <span className="hidden sm:inline">Daily Call Activity Sheet</span>
             <span
               className={cn(
                 "hidden sm:inline-block text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-semibold transition-colors",
@@ -936,14 +938,15 @@ function DailyCallActivityContent() {
             type="button"
             onClick={() => setActiveWorkflowTab("onboarded_leads")}
             className={cn(
-              "flex-1 flex items-center justify-center gap-1.5 sm:gap-2 py-2 sm:py-2.5 px-2 sm:px-4 rounded-xl text-xs sm:text-sm font-bold transition-all",
+              "flex-1 flex items-center justify-center gap-1.5 sm:gap-2 py-2 sm:py-2.5 px-1.5 sm:px-4 rounded-xl text-xs sm:text-sm font-bold transition-all text-center",
               activeWorkflowTab === "onboarded_leads"
                 ? "bg-indigo-600 text-white shadow-sm"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
             )}
           >
-            <UserPlus className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
-            <span className="truncate">Onboarded Leads</span>
+            <UserPlus className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+            <span className="sm:hidden">Onboarded</span>
+            <span className="hidden sm:inline">Onboarded Leads</span>
             <span
               className={cn(
                 "hidden sm:inline-block text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-semibold transition-colors",

@@ -29,6 +29,7 @@ import {
   Cloud,
   RefreshCw,
   FileSpreadsheet,
+  Rocket,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import {
@@ -46,6 +47,7 @@ import { useAuth } from "@/lib/auth-context";
 import { api, ApiError } from "@/lib/api";
 import { SupervisorBar } from "@/components/supervisor-bar";
 import { LeadDialingDashboard } from "@/components/leads/lead-dialing-dashboard";
+import { OnboardedLeadsView } from "@/components/leads/onboarded-leads-view";
 import {
   LEAD_CATEGORIES,
   LeadCategory,
@@ -182,8 +184,8 @@ function DailyCallActivityContent() {
     router.replace(`/calls?date=${reportDate}&employee_id=${empId}`);
   }, [reportDate, router]);
 
-  // Lead Dialing Workflow vs Daily Activity Sheet Tab
-  const [activeWorkflowTab, setActiveWorkflowTab] = useState<"lead_dialing" | "daily_sheet">("lead_dialing");
+  // Lead Dialing Workflow vs Daily Activity Sheet vs Onboarded Leads Tab
+  const [activeWorkflowTab, setActiveWorkflowTab] = useState<"lead_dialing" | "daily_sheet" | "onboarded_leads">("lead_dialing");
 
   // Report state
   const [report, setReport] = useState<Report | null>(null);
@@ -929,12 +931,40 @@ function DailyCallActivityContent() {
               Slots &amp; Report
             </span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveWorkflowTab("onboarded_leads")}
+            className={cn(
+              "flex-1 flex items-center justify-center gap-1.5 sm:gap-2 py-2 sm:py-2.5 px-2 sm:px-4 rounded-xl text-xs sm:text-sm font-bold transition-all",
+              activeWorkflowTab === "onboarded_leads"
+                ? "bg-indigo-600 text-white shadow-sm"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+            )}
+          >
+            <Rocket className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
+            <span className="truncate">Onboarded Leads</span>
+            <span
+              className={cn(
+                "hidden sm:inline-block text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-semibold transition-colors",
+                activeWorkflowTab === "onboarded_leads"
+                  ? "bg-white/20 text-white"
+                  : "bg-indigo-100 text-indigo-700"
+              )}
+            >
+              Synced
+            </span>
+          </button>
         </div>
 
         {activeWorkflowTab === "lead_dialing" ? (
           <LeadDialingDashboard
             selectedEmployeeId={isSupervisor ? selectedEmpId : undefined}
             onCallLogged={() => loadReport(reportDate, isSupervisor ? selectedEmpId : undefined)}
+          />
+        ) : activeWorkflowTab === "onboarded_leads" ? (
+          <OnboardedLeadsView
+            initialEmployeeId={isSupervisor ? selectedEmpId : undefined}
           />
         ) : (
           <>

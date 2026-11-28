@@ -22,6 +22,7 @@ class LeadRepository:
                 selectinload(Lead.assigned_to),
                 selectinload(Lead.created_by),
                 selectinload(Lead.delegated_to),
+                selectinload(Lead.onboarded_by),
                 selectinload(Lead.call_logs),
             )
         )
@@ -89,6 +90,7 @@ class LeadRepository:
                 selectinload(Lead.assigned_to),
                 selectinload(Lead.created_by),
                 selectinload(Lead.delegated_to),
+                selectinload(Lead.onboarded_by),
                 selectinload(Lead.call_logs),
             )
             .order_by(
@@ -101,6 +103,83 @@ class LeadRepository:
 
         res = await self.db.execute(stmt)
         return list(res.scalars().all()), total
+
+    async def list_onboarded_leads(
+        self,
+        assigned_to_id: Optional[int] = None,
+        search: Optional[str] = None,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Tuple[List[Lead], int, int, int, int]:
+        """
+        List onboarded leads (is_onboarded == True) with metrics.
+        Returns: (leads, filtered_total, total_all_time, total_today, total_this_month)
+        """
+        from datetime import timedelta
+        dhaka_now = datetime.now(timezone.utc) + timedelta(hours=6)
+        dhaka_today = dhaka_now.date()
+        month_start = dhaka_today.replace(day=1)
+
+        base_stmt = select(Lead).where(Lead.is_onboarded == True)
+        if assigned_to_id is not None:
+            base_stmt = base_stmt.where(
+                or_(
+                    Lead.assigned_to_id == assigned_to_id,
+                    Lead.onboarded_by_id == assigned_to_id,
+                )
+            )
+
+        # 1. Total all-time onboarded for scope
+        tot_all_stmt = select(func.count(Lead.id)).select_from(base_stmt.subquery())
+        res_tot = await self.db.execute(tot_all_stmt)
+        total_all_time = res_tot.scalar_one() or 0
+
+        # 2. Total today
+        tot_today_stmt = select(func.count(Lead.id)).select_from(
+            base_stmt.where(func.date(Lead.onboarded_at) == dhaka_today).subquery()
+        )
+        res_today = await self.db.execute(tot_today_stmt)
+        total_today = res_today.scalar_one() or 0
+
+        # 3. Total this month
+        tot_month_stmt = select(func.count(Lead.id)).select_from(
+            base_stmt.where(func.date(Lead.onboarded_at) >= month_start).subquery()
+        )
+        res_month = await self.db.execute(tot_month_stmt)
+        total_this_month = res_month.scalar_one() or 0
+
+        # 4. Filtered query
+        query_stmt = base_stmt
+        if search and search.strip():
+            term = f"%{search.strip()}%"
+            query_stmt = query_stmt.where(or_(Lead.name.ilike(term), Lead.phone.ilike(term)))
+        if date_from:
+            query_stmt = query_stmt.where(func.date(Lead.onboarded_at) >= date_from)
+        if date_to:
+            query_stmt = query_stmt.where(func.date(Lead.onboarded_at) <= date_to)
+
+        count_stmt = select(func.count(Lead.id)).select_from(query_stmt.subquery())
+        res_count = await self.db.execute(count_stmt)
+        filtered_total = res_count.scalar_one() or 0
+
+        paged_stmt = (
+            query_stmt.options(
+                selectinload(Lead.assigned_to),
+                selectinload(Lead.created_by),
+                selectinload(Lead.delegated_to),
+                selectinload(Lead.onboarded_by),
+                selectinload(Lead.call_logs),
+            )
+            .order_by(Lead.onboarded_at.desc().nullslast(), Lead.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        res_paged = await self.db.execute(paged_stmt)
+        leads = list(res_paged.scalars().all())
+
+        return leads, filtered_total, total_all_time, total_today, total_this_month
 
     async def get_summary_counts(self, assigned_to_id: Optional[int] = None) -> dict:
         """

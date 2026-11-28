@@ -70,9 +70,37 @@ class LeadRead(BaseModel):
     delegation_notes: Optional[str] = None
     is_delegated_to_me: Optional[bool] = None
     is_delegated_by_me: Optional[bool] = None
+    is_onboarded: bool = False
+    onboarded_at: Optional[datetime] = None
+    onboarded_by_id: Optional[int] = None
+    onboarded_by_name: Optional[str] = None
+    onboard_response: Optional[str] = None
 
     class Config:
         from_attributes = True
+
+
+class LeadOnboardResponse(BaseModel):
+    success: bool
+    message: str
+    lead: LeadRead
+    webhook_dispatched: bool = False
+    webhook_status_code: Optional[int] = None
+    webhook_error: Optional[str] = None
+
+
+class OnboardedLeadsSummary(BaseModel):
+    total_onboarded: int = 0
+    onboarded_today: int = 0
+    onboarded_this_month: int = 0
+
+
+class OnboardedLeadsListResponse(BaseModel):
+    items: List[LeadRead]
+    total: int
+    limit: int
+    offset: int
+    summary: OnboardedLeadsSummary
 
 
 class LeadDelegatePayload(BaseModel):

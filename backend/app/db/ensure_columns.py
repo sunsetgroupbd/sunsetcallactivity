@@ -423,7 +423,7 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_lead_call_logs_lead_id ON lead_call_logs(lead_id);"))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_lead_call_logs_caller_id ON lead_call_logs(caller_id);"))
 
-                # Ensure delegation columns exist on leads (SQLite)
+                # Ensure delegation & onboarding columns exist on leads (SQLite)
                 res_lead_cols = await conn.execute(text("PRAGMA table_info(leads)"))
                 lead_cols = {row[1] for row in res_lead_cols.fetchall()}
                 if lead_cols:
@@ -434,6 +434,16 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
                         await conn.execute(text("ALTER TABLE leads ADD COLUMN delegated_at TIMESTAMP;"))
                     if "delegation_notes" not in lead_cols:
                         await conn.execute(text("ALTER TABLE leads ADD COLUMN delegation_notes VARCHAR(255);"))
+                    if "is_onboarded" not in lead_cols:
+                        await conn.execute(text("ALTER TABLE leads ADD COLUMN is_onboarded BOOLEAN NOT NULL DEFAULT 0;"))
+                        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_leads_is_onboarded ON leads(is_onboarded);"))
+                    if "onboarded_at" not in lead_cols:
+                        await conn.execute(text("ALTER TABLE leads ADD COLUMN onboarded_at TIMESTAMP;"))
+                    if "onboarded_by_id" not in lead_cols:
+                        await conn.execute(text("ALTER TABLE leads ADD COLUMN onboarded_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL;"))
+                        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_leads_onboarded_by_id ON leads(onboarded_by_id);"))
+                    if "onboard_response" not in lead_cols:
+                        await conn.execute(text("ALTER TABLE leads ADD COLUMN onboard_response TEXT;"))
             else:
                 await conn.execute(text("""
                     CREATE TABLE IF NOT EXISTS leads (
@@ -447,6 +457,10 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
                         delegated_to_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
                         delegated_at TIMESTAMP WITH TIME ZONE,
                         delegation_notes VARCHAR(255),
+                        is_onboarded BOOLEAN NOT NULL DEFAULT FALSE,
+                        onboarded_at TIMESTAMP WITH TIME ZONE,
+                        onboarded_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                        onboard_response TEXT,
                         lead_date DATE NOT NULL,
                         last_called_at TIMESTAMP WITH TIME ZONE,
                         total_calls_count INTEGER NOT NULL DEFAULT 0,
@@ -456,16 +470,22 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
                         updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
                     );
                 """))
-                # Ensure delegation columns exist on already-created leads table (Postgres) FIRST before creating indexes
+                # Ensure delegation & onboarding columns exist on already-created leads table (Postgres) FIRST before creating indexes
                 await conn.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS delegated_to_id INTEGER REFERENCES users(id) ON DELETE SET NULL;"))
                 await conn.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS delegated_at TIMESTAMP WITH TIME ZONE;"))
                 await conn.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS delegation_notes VARCHAR(255);"))
+                await conn.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS is_onboarded BOOLEAN NOT NULL DEFAULT FALSE;"))
+                await conn.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS onboarded_at TIMESTAMP WITH TIME ZONE;"))
+                await conn.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS onboarded_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL;"))
+                await conn.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS onboard_response TEXT;"))
 
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_leads_assigned_to_id ON leads(assigned_to_id);"))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_leads_source ON leads(source);"))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_leads_status ON leads(status);"))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_leads_lead_date ON leads(lead_date);"))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_leads_delegated_to_id ON leads(delegated_to_id);"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_leads_is_onboarded ON leads(is_onboarded);"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_leads_onboarded_by_id ON leads(onboarded_by_id);"))
 
                 await conn.execute(text("""
                     CREATE TABLE IF NOT EXISTS lead_call_logs (

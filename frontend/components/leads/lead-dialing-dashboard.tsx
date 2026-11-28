@@ -36,6 +36,8 @@ import {
   UserPlus,
   Undo2,
   ArrowRightLeft,
+  Send,
+  Rocket,
 } from "lucide-react";
 import {
   WorkflowLead,
@@ -246,6 +248,58 @@ export function LeadDialingDashboard({
   const [transferHistoryModalOpen, setTransferHistoryModalOpen] = useState(false);
   const [transferHistoryLogs, setTransferHistoryLogs] = useState<LeadTransferLog[]>([]);
   const [loadingTransferHistory, setLoadingTransferHistory] = useState(false);
+
+  // Lead Onboarding states
+  const [onboardModalOpen, setOnboardModalOpen] = useState(false);
+  const [leadToOnboard, setLeadToOnboard] = useState<WorkflowLead | null>(null);
+  const [onboardingLead, setOnboardingLead] = useState(false);
+  const [onboardMessage, setOnboardMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const handleOpenOnboardModal = (lead: WorkflowLead) => {
+    setLeadToOnboard(lead);
+    setOnboardMessage(null);
+    setOnboardModalOpen(true);
+  };
+
+  const handleConfirmOnboard = async () => {
+    if (!leadToOnboard) return;
+    setOnboardingLead(true);
+    setOnboardMessage(null);
+    try {
+      const res = await api.leadWorkflow.onboardLead(leadToOnboard.id);
+      // Immediately mark as onboarded in state
+      setLeads((prev) =>
+        prev.map((l) =>
+          l.id === leadToOnboard.id
+            ? {
+                ...l,
+                is_onboarded: true,
+                onboarded_at: res.lead.onboarded_at,
+                onboarded_by_name: res.lead.onboarded_by_name,
+                onboard_response: res.lead.onboard_response,
+              }
+            : l
+        )
+      );
+      setOnboardMessage({
+        type: "success",
+        text: res.message || "Lead onboarded successfully and permanently locked!",
+      });
+      setTimeout(() => {
+        setOnboardModalOpen(false);
+        setLeadToOnboard(null);
+        setOnboardMessage(null);
+      }, 1400);
+      if (onCallLogged) onCallLogged();
+    } catch (err: any) {
+      setOnboardMessage({
+        type: "error",
+        text: err?.message || "Failed to onboard lead. Please try again.",
+      });
+    } finally {
+      setOnboardingLead(false);
+    }
+  };
 
   // Track pending native phone call
   const pendingCallRef = useRef<{
@@ -1216,6 +1270,27 @@ export function LeadDialingDashboard({
                       >
                         <Share2 className="w-3.5 h-3.5 text-slate-500" />
                         <span>Share Lead</span>
+                      </button>
+                    )}
+
+                    {/* Onboard Button / Permanent Badge */}
+                    {lead.is_onboarded ? (
+                      <div
+                        className="px-2.5 py-1.5 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold flex items-center gap-1 cursor-default select-none shadow-2xs"
+                        title={`Onboarded${lead.onboarded_at ? ` on ${formatReadableDate(lead.onboarded_at)}` : ""}${lead.onboarded_by_name ? ` by ${lead.onboarded_by_name}` : ""}`}
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span>Onboarded</span>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenOnboardModal(lead)}
+                        className="px-2.5 py-1.5 text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 active:scale-95 rounded-xl transition text-xs font-bold flex items-center gap-1 shadow-2xs"
+                        title="Onboard this lead to external platform"
+                      >
+                        <Rocket className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        <span>Onboard</span>
                       </button>
                     )}
 
@@ -2499,6 +2574,124 @@ export function LeadDialingDashboard({
                 className="px-4 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-slate-100 rounded-xl transition"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 9. Onboard Lead Confirmation Modal (Mobile Optimized) ──────────── */}
+      {onboardModalOpen && leadToOnboard && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-200 space-y-4 text-slate-900">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center shrink-0">
+                  <Rocket className="w-5 h-5 text-indigo-600" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Confirm Lead Onboarding
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Send lead to external web app platform
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={onboardingLead}
+                onClick={() => setOnboardModalOpen(false)}
+                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg transition disabled:opacity-50"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Lead Details Card */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2 text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-slate-500 font-medium">Customer Name:</span>
+                <span className="font-bold text-slate-900 text-sm">{leadToOnboard.name}</span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-slate-500 font-medium">Phone Number:</span>
+                <span className="font-mono font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200">
+                  {leadToOnboard.phone}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-slate-500 font-medium">Current Stage:</span>
+                <span className="font-bold uppercase px-2 py-0.5 rounded bg-blue-100 text-blue-800">
+                  {leadToOnboard.status}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-slate-500 font-medium">Lead Owner:</span>
+                <span className="font-semibold text-slate-700">
+                  {leadToOnboard.assigned_to_name || `User #${leadToOnboard.assigned_to_id}`}
+                </span>
+              </div>
+            </div>
+
+            {/* Irreversible Warning Box */}
+            <div className="p-3 bg-amber-50/90 border border-amber-200/80 rounded-xl text-amber-900 space-y-1">
+              <div className="flex items-center gap-1.5 font-bold text-xs">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Permanent & Irreversible Action</span>
+              </div>
+              <p className="text-[11.5px] leading-relaxed text-amber-800">
+                Are you sure you want to onboard this lead? Once confirmed, it will be pushed via API to your other web app platform and <strong>cannot be canceled or undone</strong>.
+              </p>
+            </div>
+
+            {/* Status Feedback Toast/Message */}
+            {onboardMessage && (
+              <div
+                className={cn(
+                  "p-3 rounded-xl text-xs font-semibold flex items-center gap-2",
+                  onboardMessage.type === "success"
+                    ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                    : "bg-rose-50 text-rose-800 border border-rose-200"
+                )}
+              >
+                {onboardMessage.type === "success" ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                ) : (
+                  <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" />
+                )}
+                <span>{onboardMessage.text}</span>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                disabled={onboardingLead}
+                onClick={() => setOnboardModalOpen(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={onboardingLead}
+                onClick={handleConfirmOnboard}
+                className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 active:scale-95 rounded-xl transition shadow-sm flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {onboardingLead ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Onboarding...</span>
+                  </>
+                ) : (
+                  <>
+                    <Rocket className="w-3.5 h-3.5" />
+                    <span>Confirm & Onboard</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

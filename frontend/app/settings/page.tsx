@@ -12,6 +12,9 @@ import {
   Calendar,
   PhoneCall,
   Banknote,
+  Rocket,
+  Globe,
+  Key,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import {
@@ -61,6 +64,11 @@ function SettingsContent() {
   const [outdoorCredit, setOutdoorCredit] = useState<string>("60");
   const [savingKpiRules, setSavingKpiRules] = useState(false);
 
+  // External Integration Webhook State (Lead Onboarding)
+  const [onboardWebhookUrl, setOnboardWebhookUrl] = useState<string>("");
+  const [onboardApiKey, setOnboardApiKey] = useState<string>("");
+  const [savingWebhook, setSavingWebhook] = useState(false);
+
   const [statusMessage, setStatusMessage] = useState<{
     type: "success" | "error" | "info";
     text: string;
@@ -70,10 +78,11 @@ function SettingsContent() {
     setLoading(true);
     setStatusMessage(null);
     try {
-      const [targetsData, employeesData, kpiRules] = await Promise.all([
+      const [targetsData, employeesData, kpiRules, integrations] = await Promise.all([
         api.settings.getTargets(),
         api.employees.list({ is_active: true, limit: 500 }),
         api.settings.getSystemSettings("kpi_rules").catch(() => []),
+        api.settings.getSystemSettings("integrations").catch(() => []),
       ]);
       setTargets(Array.isArray(targetsData) ? targetsData : []);
       setEmployees(Array.isArray(employeesData) ? employeesData : []);
@@ -82,6 +91,12 @@ function SettingsContent() {
         const outdoor = kpiRules.find((r) => r.key === "outdoor_visit_call_credit");
         if (indoor?.value) setIndoorCredit(indoor.value);
         if (outdoor?.value) setOutdoorCredit(outdoor.value);
+      }
+      if (Array.isArray(integrations)) {
+        const webhookUrl = integrations.find((r) => r.key === "onboard_webhook_url");
+        const apiKey = integrations.find((r) => r.key === "onboard_api_key");
+        if (webhookUrl?.value) setOnboardWebhookUrl(webhookUrl.value);
+        if (apiKey?.value) setOnboardApiKey(apiKey.value);
       }
     } catch (err: unknown) {
       if (err instanceof ApiError) {
@@ -256,6 +271,40 @@ function SettingsContent() {
       }
     } finally {
       setSavingKpiRules(false);
+    }
+  };
+
+  const handleSaveWebhook = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingWebhook(true);
+    setStatusMessage(null);
+    try {
+      await Promise.all([
+        api.settings.updateSystemSetting({
+          namespace: "integrations",
+          key: "onboard_webhook_url",
+          value: onboardWebhookUrl.trim(),
+          description: "Target URL on external platform to receive onboarded leads via HTTP POST",
+        }),
+        api.settings.updateSystemSetting({
+          namespace: "integrations",
+          key: "onboard_api_key",
+          value: onboardApiKey.trim(),
+          description: "Secret API token sent in Bearer and X-API-Key headers to authenticate webhook",
+        }),
+      ]);
+      setStatusMessage({
+        type: "success",
+        text: "External Web App Onboarding integration settings saved successfully.",
+      });
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
+        setStatusMessage({ type: "error", text: err.message });
+      } else {
+        setStatusMessage({ type: "error", text: "Failed to save webhook settings." });
+      }
+    } finally {
+      setSavingWebhook(false);
     }
   };
 
@@ -662,6 +711,85 @@ function SettingsContent() {
                   disabled={savingKpiRules}
                 >
                   Save Credit Rules
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+
+        {/* ── External Web App Integration (Lead Onboarding Webhook) ───────── */}
+        <Card>
+          <CardHeader>
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Rocket className="w-4 h-4 text-indigo-600" />
+                External Web App Integration (Lead Onboarding API)
+              </CardTitle>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Automatically push lead details to your other web application platform when a salesperson clicks &quot;Onboard&quot;.
+              </p>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSaveWebhook} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Webhook Endpoint URL */}
+                <div className="space-y-1.5 md:col-span-2">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <Globe className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>External Webhook / Target API URL</span>
+                  </label>
+                  <input
+                    type="url"
+                    value={onboardWebhookUrl}
+                    onChange={(e) => setOnboardWebhookUrl(e.target.value)}
+                    placeholder="https://your-other-webapp.com/api/v1/leads/onboard"
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  />
+                  <p className="text-[11px] text-slate-500">
+                    HTTP POST endpoint that will receive the lead JSON payload when an employee confirms onboarding.
+                  </p>
+                </div>
+
+                {/* Secret API Key / Bearer Token */}
+                <div className="space-y-1.5 md:col-span-2">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <Key className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Secret API Key / Authorization Header (Optional)</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={onboardApiKey}
+                    onChange={(e) => setOnboardApiKey(e.target.value)}
+                    placeholder="e.g. sk_live_your_secret_token_here"
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  />
+                  <p className="text-[11px] text-slate-500">
+                    If provided, Sunset Dashboard will include this in the <code>Authorization: Bearer &lt;key&gt;</code> and <code>X-API-Key: &lt;key&gt;</code> headers.
+                  </p>
+                </div>
+              </div>
+
+              {/* JSON Payload Spec helper box */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-1">
+                <span className="font-bold text-slate-700 block">Payload Format Sent to External App:</span>
+                <p className="text-[11px] text-slate-500">
+                  Data sent: <code>event: &quot;lead.onboarded&quot;</code>, <code>lead.id</code>, <code>lead.name</code>, <code>lead.phone</code>, <code>lead.status</code>, <code>lead.source</code>, <code>lead.owner</code>, <code>lead.onboarded_by</code>, <code>lead.onboarded_at</code>, and call history.
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
+                <p className="text-[11px] text-slate-500">
+                  Changes take effect immediately for all subsequent lead onboarding clicks.
+                </p>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  loading={savingWebhook}
+                  disabled={savingWebhook}
+                >
+                  Save Integration Settings
                 </Button>
               </div>
             </form>

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import List, Optional
+from datetime import date
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,11 +24,55 @@ from app.schemas.lead import (
     LeadTransferResponse,
     LeadTransferLogRead,
     LeadPipelineSummaryResponse,
+    LeadOnboardResponse,
+    OnboardedLeadsListResponse,
 )
 from app.schemas.user import UserRead
 from app.services.lead_service import LeadService
 
 router = APIRouter(tags=["Lead Workflow"])
+
+
+@router.get("/onboarded", response_model=OnboardedLeadsListResponse)
+async def list_onboarded_leads(
+    employee_id: Optional[int] = Query(None, description="Filter by executive (Admin only)"),
+    search: Optional[str] = Query(None, description="Search by name or phone"),
+    date_from: Optional[date] = Query(None, description="From onboard date (YYYY-MM-DD)"),
+    date_to: Optional[date] = Query(None, description="To onboard date (YYYY-MM-DD)"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    List onboarded leads.
+    Admins can see all or filter by executive.
+    Employees see their own onboarded leads.
+    """
+    svc = LeadService(db)
+    return await svc.list_onboarded_leads(
+        current_user=current_user,
+        filter_employee_id=employee_id,
+        search=search,
+        date_from=date_from,
+        date_to=date_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.post("/{lead_id}/onboard", response_model=LeadOnboardResponse)
+async def onboard_lead(
+    lead_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Permanently onboard a lead and dispatch lead data to the external web app platform.
+    Once onboarded, employees cannot cancel or reverse this action.
+    """
+    svc = LeadService(db)
+    return await svc.onboard_lead(lead_id, current_user)
 
 
 @router.get("/summary", response_model=LeadSummaryResponse)

@@ -833,6 +833,34 @@ export interface WorkflowLead {
   delegation_notes?: string | null;
   is_delegated_to_me?: boolean | null;
   is_delegated_by_me?: boolean | null;
+  is_onboarded?: boolean;
+  onboarded_at?: string | null;
+  onboarded_by_id?: number | null;
+  onboarded_by_name?: string | null;
+  onboard_response?: string | null;
+}
+
+export interface LeadOnboardResponse {
+  success: boolean;
+  message: string;
+  lead: WorkflowLead;
+  webhook_dispatched?: boolean;
+  webhook_status_code?: number | null;
+  webhook_error?: string | null;
+}
+
+export interface OnboardedLeadsSummary {
+  total_onboarded: number;
+  onboarded_today: number;
+  onboarded_this_month: number;
+}
+
+export interface OnboardedLeadsListResponse {
+  items: WorkflowLead[];
+  total: number;
+  limit: number;
+  offset: number;
+  summary: OnboardedLeadsSummary;
 }
 
 export interface LeadDelegatePayload {

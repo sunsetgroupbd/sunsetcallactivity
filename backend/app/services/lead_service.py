@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 from typing import List, Optional, Tuple
+import logging
+import httpx
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -15,6 +17,7 @@ from app.models.user import User, UserRole
 from app.repositories.call_repo import CallActivityRepository
 from app.repositories.lead_repo import LeadRepository
 from app.repositories.report_repo import ReportRepository
+from app.repositories.settings_repo import SettingsRepository
 from app.schemas.lead import (
     LeadCallLogRead,
     LeadCallOutcome,
@@ -27,8 +30,13 @@ from app.schemas.lead import (
     LeadTransferResponse,
     LeadTransferLogRead,
     LeadPipelineSummaryResponse,
+    LeadOnboardResponse,
+    OnboardedLeadsListResponse,
+    OnboardedLeadsSummary,
 )
 from app.schemas.user import UserRead
+
+logger = logging.getLogger(__name__)
 
 
 def get_dhaka_date_and_time() -> Tuple[date, datetime, int]:
@@ -96,6 +104,8 @@ class LeadService:
         is_delegated_to_me = bool(current_user_id and l.delegated_to_id == current_user_id)
         is_delegated_by_me = bool(current_user_id and l.assigned_to_id == current_user_id and l.delegated_to_id is not None)
 
+        onboarded_by_name = l.onboarded_by.full_name if getattr(l, "onboarded_by", None) else None
+
         return LeadRead(
             id=l.id,
             name=l.name,
@@ -120,6 +130,11 @@ class LeadService:
             delegation_notes=l.delegation_notes,
             is_delegated_to_me=is_delegated_to_me,
             is_delegated_by_me=is_delegated_by_me,
+            is_onboarded=bool(getattr(l, "is_onboarded", False)),
+            onboarded_at=getattr(l, "onboarded_at", None),
+            onboarded_by_id=getattr(l, "onboarded_by_id", None),
+            onboarded_by_name=onboarded_by_name,
+            onboard_response=getattr(l, "onboard_response", None),
         )
 
     async def list_leads(
@@ -731,4 +746,175 @@ class LeadService:
 
         data = await self.lead_repo.get_pipeline_summary()
         return LeadPipelineSummaryResponse(**data)
+
+    async def onboard_lead(
+        self,
+        lead_id: int,
+        current_user: User,
+    ) -> LeadOnboardResponse:
+        """
+        Onboard a lead and push its details to the external web app platform via Webhook/API.
+        Once an employee onboards a lead, this action is permanent and cannot be canceled or reverted.
+        """
+        lead = await self.lead_repo.get_by_id(lead_id)
+        if not lead:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found")
+
+        is_admin = current_user.role in (UserRole.ADMIN, UserRole.SUB_ADMIN)
+        is_owner = lead.assigned_to_id == current_user.id
+        is_delegated = lead.delegated_to_id == current_user.id
+
+        if not (is_admin or is_owner or is_delegated):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to onboard this lead. Only the lead owner or an administrator can onboard it.",
+            )
+
+        # Irreversible check: Once onboarded, employee or supervisor cannot cancel or redo
+        if lead.is_onboarded:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This lead has already been onboarded. Once onboarded, this action cannot be repeated or canceled.",
+            )
+
+        # Mark lead as onboarded
+        now_utc = datetime.now(timezone.utc)
+        lead.is_onboarded = True
+        lead.onboarded_at = now_utc
+        lead.onboarded_by_id = current_user.id
+
+        webhook_dispatched = False
+        webhook_status_code = None
+        webhook_error = None
+        dispatch_log = None
+
+        # Fetch external webhook URL & API key from AppSettings
+        try:
+            settings_repo = SettingsRepository(self.db)
+            url_setting = await settings_repo.get("integrations", "onboard_webhook_url")
+            key_setting = await settings_repo.get("integrations", "onboard_api_key")
+            webhook_url = url_setting.value.strip() if (url_setting and url_setting.value) else None
+            api_key = key_setting.value.strip() if (key_setting and key_setting.value) else None
+
+            if webhook_url:
+                owner_name = lead.assigned_to.full_name if lead.assigned_to else f"User #{lead.assigned_to_id}"
+                owner_email = lead.assigned_to.email if lead.assigned_to else None
+                owner_phone = getattr(lead.assigned_to, "phone", None) if lead.assigned_to else None
+
+                recent_remarks = []
+                for log in (lead.call_logs or [])[:10]:
+                    recent_remarks.append({
+                        "to_status": log.to_status,
+                        "called_at": log.called_at.isoformat() if log.called_at else None,
+                        "caller_name": log.caller.full_name if log.caller else None,
+                        "notes": log.notes,
+                    })
+
+                payload = {
+                    "event": "lead.onboarded",
+                    "timestamp": now_utc.isoformat(),
+                    "lead": {
+                        "id": lead.id,
+                        "name": lead.name,
+                        "phone": lead.phone,
+                        "status": lead.status,
+                        "source": lead.source,
+                        "lead_date": str(lead.lead_date),
+                        "last_called_at": lead.last_called_at.isoformat() if lead.last_called_at else None,
+                        "total_calls_count": lead.total_calls_count,
+                        "notes": lead.notes,
+                        "owner": {
+                            "id": lead.assigned_to_id,
+                            "name": owner_name,
+                            "email": owner_email,
+                            "phone": owner_phone,
+                        },
+                        "onboarded_by": {
+                            "id": current_user.id,
+                            "name": current_user.full_name or current_user.username,
+                            "email": current_user.email,
+                        },
+                        "onboarded_at": now_utc.isoformat(),
+                        "call_history": recent_remarks,
+                    },
+                }
+
+                headers = {
+                    "Content-Type": "application/json",
+                    "User-Agent": "Sunset-Dashboard-Onboard-Hook/1.0",
+                }
+                if api_key:
+                    headers["Authorization"] = f"Bearer {api_key}"
+                    headers["X-API-Key"] = api_key
+
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.post(webhook_url, json=payload, headers=headers)
+                    webhook_dispatched = True
+                    webhook_status_code = resp.status_code
+                    resp_text = resp.text[:1000]
+                    dispatch_log = f"HTTP {resp.status_code}: {resp_text}"
+                    if resp.status_code >= 400:
+                        webhook_error = f"External API returned HTTP {resp.status_code}"
+            else:
+                dispatch_log = "Saved locally. External Webhook URL not configured in Settings."
+        except Exception as e:
+            logger.warning("Error dispatching lead onboard webhook: %s", e)
+            webhook_error = str(e)
+            dispatch_log = f"Webhook dispatch error: {e}"
+
+        lead.onboard_response = dispatch_log
+        await self.lead_repo.update(lead)
+        await self.db.commit()
+        await self.db.refresh(lead)
+
+        return LeadOnboardResponse(
+            success=True,
+            message="Lead onboarded successfully and permanently locked.",
+            lead=self._to_lead_read(lead, current_user.id),
+            webhook_dispatched=webhook_dispatched,
+            webhook_status_code=webhook_status_code,
+            webhook_error=webhook_error,
+        )
+
+    async def list_onboarded_leads(
+        self,
+        current_user: User,
+        filter_employee_id: Optional[int] = None,
+        search: Optional[str] = None,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> OnboardedLeadsListResponse:
+        """
+        List all onboarded leads.
+        Admins/Sub-admins can view all executives or filter by executive.
+        Regular sales executives only see their own onboarded leads.
+        """
+        is_supervisor = current_user.role in (UserRole.ADMIN, UserRole.SUB_ADMIN)
+        target_emp_id = filter_employee_id if (is_supervisor and filter_employee_id) else (
+            None if is_supervisor and not filter_employee_id else current_user.id
+        )
+
+        leads, total, total_all_time, total_today, total_this_month = await self.lead_repo.list_onboarded_leads(
+            assigned_to_id=target_emp_id,
+            search=search,
+            date_from=date_from,
+            date_to=date_to,
+            limit=limit,
+            offset=offset,
+        )
+
+        items = [self._to_lead_read(l, current_user.id) for l in leads]
+        return OnboardedLeadsListResponse(
+            items=items,
+            total=total,
+            limit=limit,
+            offset=offset,
+            summary=OnboardedLeadsSummary(
+                total_onboarded=total_all_time,
+                onboarded_today=total_today,
+                onboarded_this_month=total_this_month,
+            ),
+        )
 

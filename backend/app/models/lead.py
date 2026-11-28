@@ -61,6 +61,14 @@ class Lead(Base):
     delegated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     delegation_notes: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
+    # Lead Onboarding status & audit
+    is_onboarded: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    onboarded_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    onboarded_by_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    onboard_response: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     # Automatically recorded lead creation date (Dhaka timezone)
     lead_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
 
@@ -88,6 +96,9 @@ class Lead(Base):
     )
     delegated_to: Mapped[Optional[User]] = relationship(
         "User", foreign_keys=[delegated_to_id], lazy="selectin"
+    )
+    onboarded_by: Mapped[Optional[User]] = relationship(
+        "User", foreign_keys=[onboarded_by_id], lazy="selectin"
     )
     call_logs: Mapped[List[LeadCallLog]] = relationship(
         "LeadCallLog",

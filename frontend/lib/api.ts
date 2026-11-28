@@ -42,6 +42,8 @@ import {
   LeadTransferResponse,
   LeadTransferLog,
   LeadPipelineSummaryResponse,
+  LeadOnboardResponse,
+  OnboardedLeadsListResponse,
   CrmPipelineSummaryResponse,
   OutdoorVisitLog,
   FairStartPayload,
@@ -1309,6 +1311,29 @@ export const api = {
     },
     getPipelineSummary: async (): Promise<LeadPipelineSummaryResponse> => {
       return request("/leads-workflow/pipeline-summary");
+    },
+    onboardLead: async (leadId: number): Promise<LeadOnboardResponse> => {
+      return request(`/leads-workflow/${leadId}/onboard`, {
+        method: "POST",
+      });
+    },
+    getOnboardedLeads: async (params?: {
+      employee_id?: number;
+      search?: string;
+      date_from?: string;
+      date_to?: string;
+      limit?: number;
+      offset?: number;
+    }): Promise<OnboardedLeadsListResponse> => {
+      const q = new URLSearchParams();
+      if (params?.employee_id) q.set("employee_id", params.employee_id.toString());
+      if (params?.search) q.set("search", params.search);
+      if (params?.date_from) q.set("date_from", params.date_from);
+      if (params?.date_to) q.set("date_to", params.date_to);
+      if (params?.limit) q.set("limit", params.limit.toString());
+      if (params?.offset) q.set("offset", params.offset.toString());
+      const queryStr = q.toString() ? `?${q.toString()}` : "";
+      return request(`/leads-workflow/onboarded${queryStr}`);
     },
   },
   get leads() {

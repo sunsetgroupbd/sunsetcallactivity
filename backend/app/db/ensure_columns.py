@@ -88,17 +88,44 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
                 """))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_teams_name ON teams(name)"))
 
-                # Seed default teams if empty
+                # Seed default teams ONLY if table is completely empty
                 res_teams = await conn.execute(text("SELECT COUNT(*) FROM teams"))
                 team_count = res_teams.scalar() or 0
                 if team_count == 0:
                     await conn.execute(text("""
                         INSERT INTO teams (name, director_name, display_order, is_active)
                         VALUES 
-                            ('Gazi Sir Team', 'Gazi Sir', 1, 1),
-                            ('Hasib Sir Team', 'Hasib Sir', 2, 1)
+                            ('Gazi Sir Group', 'Gazi Sir', 1, 1),
+                            ('Hasib Sir Group', 'Hasib Sir', 2, 1)
                     """))
-                    logger.info("Seeded default teams: Gazi Sir Team and Hasib Sir Team")
+                    logger.info("Seeded default teams into empty teams table")
+                else:
+                    # Safe cleanup of duplicate 'Gazi Sir Team' if 'Gazi Sir Group' exists
+                    try:
+                        await conn.execute(text("""
+                            UPDATE users SET team_id = (SELECT id FROM teams WHERE name = 'Gazi Sir Group' LIMIT 1)
+                            WHERE team_id = (SELECT id FROM teams WHERE name = 'Gazi Sir Team' LIMIT 1)
+                            AND EXISTS (SELECT 1 FROM teams WHERE name = 'Gazi Sir Group')
+                            AND EXISTS (SELECT 1 FROM teams WHERE name = 'Gazi Sir Team');
+                        """))
+                        await conn.execute(text("""
+                            DELETE FROM teams 
+                            WHERE name = 'Gazi Sir Team' 
+                            AND EXISTS (SELECT 1 FROM teams WHERE name = 'Gazi Sir Group');
+                        """))
+                        await conn.execute(text("""
+                            UPDATE users SET team_id = (SELECT id FROM teams WHERE name = 'Hasib Sir Group' LIMIT 1)
+                            WHERE team_id = (SELECT id FROM teams WHERE name = 'Hasib Sir Team' LIMIT 1)
+                            AND EXISTS (SELECT 1 FROM teams WHERE name = 'Hasib Sir Group')
+                            AND EXISTS (SELECT 1 FROM teams WHERE name = 'Hasib Sir Team');
+                        """))
+                        await conn.execute(text("""
+                            DELETE FROM teams 
+                            WHERE name = 'Hasib Sir Team' 
+                            AND EXISTS (SELECT 1 FROM teams WHERE name = 'Hasib Sir Group');
+                        """))
+                    except Exception as e_clean:
+                        logger.warning("Teams cleanup check: %s", e_clean)
 
                 # Ensure daily_targets.emi_target exists
                 result_targets = await conn.execute(text("PRAGMA table_info(daily_targets)"))
@@ -230,11 +257,37 @@ async def ensure_schema_updates(engine: AsyncEngine, is_sqlite: bool) -> None:
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS client_count INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS client_share_count INTEGER NOT NULL DEFAULT 0",
             """
-            INSERT INTO teams (name, director_name, display_order, is_active)
-            VALUES 
-                ('Gazi Sir Team', 'Gazi Sir', 1, TRUE),
-                ('Hasib Sir Team', 'Hasib Sir', 2, TRUE)
-            ON CONFLICT (name) DO NOTHING
+            DO $$
+            DECLARE
+                v_gazi_group_id INTEGER;
+                v_gazi_team_id INTEGER;
+                v_hasib_group_id INTEGER;
+                v_hasib_team_id INTEGER;
+            BEGIN
+                -- 1. Only seed default teams if teams table is completely empty
+                IF NOT EXISTS (SELECT 1 FROM teams) THEN
+                    INSERT INTO teams (name, director_name, display_order, is_active)
+                    VALUES 
+                        ('Gazi Sir Group', 'Gazi Sir', 1, TRUE),
+                        ('Hasib Sir Group', 'Hasib Sir', 2, TRUE);
+                END IF;
+
+                -- 2. Safe auto-cleanup: If 'Gazi Sir Group' exists and duplicate 'Gazi Sir Team' exists
+                SELECT id INTO v_gazi_group_id FROM teams WHERE name = 'Gazi Sir Group' LIMIT 1;
+                SELECT id INTO v_gazi_team_id FROM teams WHERE name = 'Gazi Sir Team' LIMIT 1;
+                IF v_gazi_group_id IS NOT NULL AND v_gazi_team_id IS NOT NULL THEN
+                    UPDATE users SET team_id = v_gazi_group_id WHERE team_id = v_gazi_team_id;
+                    DELETE FROM teams WHERE id = v_gazi_team_id;
+                END IF;
+
+                -- 3. Safe auto-cleanup: If 'Hasib Sir Group' exists and duplicate 'Hasib Sir Team' exists
+                SELECT id INTO v_hasib_group_id FROM teams WHERE name = 'Hasib Sir Group' LIMIT 1;
+                SELECT id INTO v_hasib_team_id FROM teams WHERE name = 'Hasib Sir Team' LIMIT 1;
+                IF v_hasib_group_id IS NOT NULL AND v_hasib_team_id IS NOT NULL THEN
+                    UPDATE users SET team_id = v_hasib_group_id WHERE team_id = v_hasib_team_id;
+                    DELETE FROM teams WHERE id = v_hasib_team_id;
+                END IF;
+            END $$;
             """,
             "ALTER TABLE daily_targets ADD COLUMN IF NOT EXISTS emi_target NUMERIC(15, 2)",
             """

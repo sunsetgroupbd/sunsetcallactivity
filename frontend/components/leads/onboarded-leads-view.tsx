@@ -161,7 +161,7 @@ export function OnboardedLeadsView({ initialEmployeeId }: OnboardedLeadsViewProp
               {isSupervisor ? "Across company" : "Your lifetime onboarded"}
             </p>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-600/20">
+          <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center">
             <UserPlus className="w-6 h-6" />
           </div>
         </div>
@@ -177,7 +177,7 @@ export function OnboardedLeadsView({ initialEmployeeId }: OnboardedLeadsViewProp
             </p>
             <p className="text-[11px] text-slate-500 mt-0.5">Today&apos;s new achievements</p>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-600/20">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center">
             <CheckCircle2 className="w-6 h-6" />
           </div>
         </div>
@@ -193,14 +193,14 @@ export function OnboardedLeadsView({ initialEmployeeId }: OnboardedLeadsViewProp
             </p>
             <p className="text-[11px] text-slate-500 mt-0.5">Current month achievements</p>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-md shadow-blue-600/20">
+          <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center">
             <Calendar className="w-6 h-6" />
           </div>
         </div>
       </div>
 
       {/* ── 2. Filters & Controls Bar (Mobile Optimized) ──────────────────── */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-4 shadow-2xs space-y-3">
+      <div className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-4 space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           {/* Search Input */}
           <div className="relative flex-1">
@@ -228,7 +228,7 @@ export function OnboardedLeadsView({ initialEmployeeId }: OnboardedLeadsViewProp
               className={cn(
                 "px-3 py-1.5 rounded-xl text-xs font-bold transition shrink-0",
                 dateRange === "all"
-                  ? "bg-slate-900 text-white shadow-xs"
+                  ? "bg-slate-900 text-white"
                   : "bg-slate-100 text-slate-600 hover:bg-slate-200"
               )}
             >
@@ -243,7 +243,7 @@ export function OnboardedLeadsView({ initialEmployeeId }: OnboardedLeadsViewProp
               className={cn(
                 "px-3 py-1.5 rounded-xl text-xs font-bold transition shrink-0",
                 dateRange === "today"
-                  ? "bg-emerald-700 text-white shadow-xs"
+                  ? "bg-emerald-700 text-white"
                   : "bg-slate-100 text-slate-600 hover:bg-slate-200"
               )}
             >
@@ -258,7 +258,7 @@ export function OnboardedLeadsView({ initialEmployeeId }: OnboardedLeadsViewProp
               className={cn(
                 "px-3 py-1.5 rounded-xl text-xs font-bold transition shrink-0",
                 dateRange === "this_month"
-                  ? "bg-blue-700 text-white shadow-xs"
+                  ? "bg-blue-700 text-white"
                   : "bg-slate-100 text-slate-600 hover:bg-slate-200"
               )}
             >
@@ -344,7 +344,7 @@ export function OnboardedLeadsView({ initialEmployeeId }: OnboardedLeadsViewProp
             {leads.map((lead) => (
               <div
                 key={lead.id}
-                className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs space-y-3 relative overflow-hidden"
+                className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3 relative overflow-hidden"
               >
                 {/* Status bar top indicator */}
                 <div className="flex items-start justify-between gap-2">
@@ -411,7 +411,7 @@ export function OnboardedLeadsView({ initialEmployeeId }: OnboardedLeadsViewProp
           </div>
 
           {/* ── Desktop View: Professional Table ───────────────────────────── */}
-          <div className="hidden sm:block bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+          <div className="hidden sm:block bg-white border border-slate-200 rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[10.5px]">

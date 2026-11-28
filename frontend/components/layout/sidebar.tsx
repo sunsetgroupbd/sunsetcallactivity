@@ -48,9 +48,9 @@ export function Sidebar({
   const navigation = [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
     { name: "Daily Call Activity", href: "/calls", icon: PhoneCall },
-    { name: "Onboarded Leads", href: "/onboarded-leads", icon: UserPlus },
     { name: "Meeting Activity", href: "/meetings", icon: Users },
     { name: "Sales & Collection", href: "/sales", icon: Banknote },
+    { name: "Onboarded Leads", href: "/onboarded-leads", icon: UserPlus },
     { name: "Reports", href: "/reports", icon: FileSpreadsheet },
     { name: "Notice Board", href: "/notices", icon: BellRing },
     ...(isAdmin || isSubAdmin

@@ -942,7 +942,7 @@ function DailyCallActivityContent() {
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
             )}
           >
-            <Rocket className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
+            <UserPlus className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
             <span className="truncate">Onboarded Leads</span>
             <span
               className={cn(

@@ -1273,23 +1273,23 @@ export function LeadDialingDashboard({
                       </button>
                     )}
 
-                    {/* Onboard Button / Permanent Badge */}
+                    {/* Onboard Button / Permanent Badge (Solid Colored) */}
                     {lead.is_onboarded ? (
                       <div
-                        className="px-2.5 py-1.5 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold flex items-center gap-1 cursor-default select-none shadow-2xs"
+                        className="px-3 py-1.5 bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-default select-none shadow-xs border border-emerald-700/20"
                         title={`Onboarded${lead.onboarded_at ? ` on ${formatReadableDate(lead.onboarded_at)}` : ""}${lead.onboarded_by_name ? ` by ${lead.onboarded_by_name}` : ""}`}
                       >
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <CheckCircle2 className="w-3.5 h-3.5 text-white shrink-0" />
                         <span>Onboarded</span>
                       </div>
                     ) : (
                       <button
                         type="button"
                         onClick={() => handleOpenOnboardModal(lead)}
-                        className="px-2.5 py-1.5 text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 active:scale-95 rounded-xl transition text-xs font-bold flex items-center gap-1 shadow-2xs"
+                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-xl transition text-xs font-bold flex items-center gap-1.5 shadow-xs border border-indigo-700/20"
                         title="Onboard this lead to external platform"
                       >
-                        <Rocket className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        <UserPlus className="w-3.5 h-3.5 text-indigo-100 shrink-0" />
                         <span>Onboard</span>
                       </button>
                     )}
@@ -2588,7 +2588,7 @@ export function LeadDialingDashboard({
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center shrink-0">
-                  <Rocket className="w-5 h-5 text-indigo-600" />
+                  <UserPlus className="w-5 h-5 text-indigo-600" />
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-slate-900">
@@ -2688,7 +2688,7 @@ export function LeadDialingDashboard({
                   </>
                 ) : (
                   <>
-                    <Rocket className="w-3.5 h-3.5" />
+                    <UserPlus className="w-3.5 h-3.5" />
                     <span>Confirm & Onboard</span>
                   </>
                 )}

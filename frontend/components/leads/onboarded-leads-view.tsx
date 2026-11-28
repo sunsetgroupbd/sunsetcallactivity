@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import {
-  Rocket,
+  UserPlus,
   Search,
   RefreshCw,
   Phone,
@@ -162,7 +162,7 @@ export function OnboardedLeadsView({ initialEmployeeId }: OnboardedLeadsViewProp
             </p>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-600/20">
-            <Rocket className="w-6 h-6" />
+            <UserPlus className="w-6 h-6" />
           </div>
         </div>
 
@@ -328,7 +328,7 @@ export function OnboardedLeadsView({ initialEmployeeId }: OnboardedLeadsViewProp
       ) : leads.length === 0 ? (
         <div className="py-16 text-center bg-white rounded-2xl border border-dashed border-slate-200 space-y-3">
           <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
-            <Rocket className="w-6 h-6" />
+            <UserPlus className="w-6 h-6" />
           </div>
           <p className="text-sm font-bold text-slate-700">No Onboarded Leads Found</p>
           <p className="text-xs text-slate-400 max-w-sm mx-auto">
